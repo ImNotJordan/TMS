@@ -16,6 +16,7 @@ import { Route as RiskRouteImport } from './routes/risk'
 import { Route as RfpsRouteImport } from './routes/rfps'
 import { Route as QuotesRouteImport } from './routes/quotes'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoadsRouteImport } from './routes/loads'
 import { Route as CrmRouteImport } from './routes/crm'
 import { Route as CommunicationsRouteImport } from './routes/communications'
@@ -59,6 +60,11 @@ const QuotesRoute = QuotesRouteImport.update({
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoadsRoute = LoadsRouteImport.update({
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
   '/loads': typeof LoadsRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
   '/rfps': typeof RfpsRoute
@@ -135,6 +142,7 @@ export interface FileRoutesByTo {
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
   '/loads': typeof LoadsRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
   '/rfps': typeof RfpsRoute
@@ -154,6 +162,7 @@ export interface FileRoutesById {
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
   '/loads': typeof LoadsRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
   '/rfps': typeof RfpsRoute
@@ -174,6 +183,7 @@ export interface FileRouteTypes {
     | '/communications'
     | '/crm'
     | '/loads'
+    | '/login'
     | '/profile'
     | '/quotes'
     | '/rfps'
@@ -192,6 +202,7 @@ export interface FileRouteTypes {
     | '/communications'
     | '/crm'
     | '/loads'
+    | '/login'
     | '/profile'
     | '/quotes'
     | '/rfps'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/communications'
     | '/crm'
     | '/loads'
+    | '/login'
     | '/profile'
     | '/quotes'
     | '/rfps'
@@ -229,6 +241,7 @@ export interface RootRouteChildren {
   CommunicationsRoute: typeof CommunicationsRoute
   CrmRoute: typeof CrmRoute
   LoadsRoute: typeof LoadsRoute
+  LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
   QuotesRoute: typeof QuotesRoute
   RfpsRoute: typeof RfpsRoute
@@ -287,6 +300,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/loads': {
@@ -365,6 +385,7 @@ const rootRouteChildren: RootRouteChildren = {
   CommunicationsRoute: CommunicationsRoute,
   CrmRoute: CrmRoute,
   LoadsRoute: LoadsRoute,
+  LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
   QuotesRoute: QuotesRoute,
   RfpsRoute: RfpsRoute,
@@ -376,3 +397,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
