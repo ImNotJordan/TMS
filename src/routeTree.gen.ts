@@ -9,8 +9,98 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TruckboardRouteImport } from './routes/truckboard'
+import { Route as TrackingRouteImport } from './routes/tracking'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as RiskRouteImport } from './routes/risk'
+import { Route as RfpsRouteImport } from './routes/rfps'
+import { Route as QuotesRouteImport } from './routes/quotes'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as LoadsRouteImport } from './routes/loads'
+import { Route as CrmRouteImport } from './routes/crm'
+import { Route as CommunicationsRouteImport } from './routes/communications'
+import { Route as CarriersRouteImport } from './routes/carriers'
+import { Route as BiddingRouteImport } from './routes/bidding'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AccountingRouteImport } from './routes/accounting'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TruckboardRoute = TruckboardRouteImport.update({
+  id: '/truckboard',
+  path: '/truckboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrackingRoute = TrackingRouteImport.update({
+  id: '/tracking',
+  path: '/tracking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RiskRoute = RiskRouteImport.update({
+  id: '/risk',
+  path: '/risk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RfpsRoute = RfpsRouteImport.update({
+  id: '/rfps',
+  path: '/rfps',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuotesRoute = QuotesRouteImport.update({
+  id: '/quotes',
+  path: '/quotes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoadsRoute = LoadsRouteImport.update({
+  id: '/loads',
+  path: '/loads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmRoute = CrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CommunicationsRoute = CommunicationsRouteImport.update({
+  id: '/communications',
+  path: '/communications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CarriersRoute = CarriersRouteImport.update({
+  id: '/carriers',
+  path: '/carriers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BiddingRoute = BiddingRouteImport.update({
+  id: '/bidding',
+  path: '/bidding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountingRoute = AccountingRouteImport.update({
+  id: '/accounting',
+  path: '/accounting',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +109,242 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/accounting': typeof AccountingRoute
+  '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
+  '/bidding': typeof BiddingRoute
+  '/carriers': typeof CarriersRoute
+  '/communications': typeof CommunicationsRoute
+  '/crm': typeof CrmRoute
+  '/loads': typeof LoadsRoute
+  '/profile': typeof ProfileRoute
+  '/quotes': typeof QuotesRoute
+  '/rfps': typeof RfpsRoute
+  '/risk': typeof RiskRoute
+  '/settings': typeof SettingsRoute
+  '/tracking': typeof TrackingRoute
+  '/truckboard': typeof TruckboardRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/accounting': typeof AccountingRoute
+  '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
+  '/bidding': typeof BiddingRoute
+  '/carriers': typeof CarriersRoute
+  '/communications': typeof CommunicationsRoute
+  '/crm': typeof CrmRoute
+  '/loads': typeof LoadsRoute
+  '/profile': typeof ProfileRoute
+  '/quotes': typeof QuotesRoute
+  '/rfps': typeof RfpsRoute
+  '/risk': typeof RiskRoute
+  '/settings': typeof SettingsRoute
+  '/tracking': typeof TrackingRoute
+  '/truckboard': typeof TruckboardRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/accounting': typeof AccountingRoute
+  '/admin': typeof AdminRoute
+  '/analytics': typeof AnalyticsRoute
+  '/bidding': typeof BiddingRoute
+  '/carriers': typeof CarriersRoute
+  '/communications': typeof CommunicationsRoute
+  '/crm': typeof CrmRoute
+  '/loads': typeof LoadsRoute
+  '/profile': typeof ProfileRoute
+  '/quotes': typeof QuotesRoute
+  '/rfps': typeof RfpsRoute
+  '/risk': typeof RiskRoute
+  '/settings': typeof SettingsRoute
+  '/tracking': typeof TrackingRoute
+  '/truckboard': typeof TruckboardRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/accounting'
+    | '/admin'
+    | '/analytics'
+    | '/bidding'
+    | '/carriers'
+    | '/communications'
+    | '/crm'
+    | '/loads'
+    | '/profile'
+    | '/quotes'
+    | '/rfps'
+    | '/risk'
+    | '/settings'
+    | '/tracking'
+    | '/truckboard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/accounting'
+    | '/admin'
+    | '/analytics'
+    | '/bidding'
+    | '/carriers'
+    | '/communications'
+    | '/crm'
+    | '/loads'
+    | '/profile'
+    | '/quotes'
+    | '/rfps'
+    | '/risk'
+    | '/settings'
+    | '/tracking'
+    | '/truckboard'
+  id:
+    | '__root__'
+    | '/'
+    | '/accounting'
+    | '/admin'
+    | '/analytics'
+    | '/bidding'
+    | '/carriers'
+    | '/communications'
+    | '/crm'
+    | '/loads'
+    | '/profile'
+    | '/quotes'
+    | '/rfps'
+    | '/risk'
+    | '/settings'
+    | '/tracking'
+    | '/truckboard'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountingRoute: typeof AccountingRoute
+  AdminRoute: typeof AdminRoute
+  AnalyticsRoute: typeof AnalyticsRoute
+  BiddingRoute: typeof BiddingRoute
+  CarriersRoute: typeof CarriersRoute
+  CommunicationsRoute: typeof CommunicationsRoute
+  CrmRoute: typeof CrmRoute
+  LoadsRoute: typeof LoadsRoute
+  ProfileRoute: typeof ProfileRoute
+  QuotesRoute: typeof QuotesRoute
+  RfpsRoute: typeof RfpsRoute
+  RiskRoute: typeof RiskRoute
+  SettingsRoute: typeof SettingsRoute
+  TrackingRoute: typeof TrackingRoute
+  TruckboardRoute: typeof TruckboardRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/truckboard': {
+      id: '/truckboard'
+      path: '/truckboard'
+      fullPath: '/truckboard'
+      preLoaderRoute: typeof TruckboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tracking': {
+      id: '/tracking'
+      path: '/tracking'
+      fullPath: '/tracking'
+      preLoaderRoute: typeof TrackingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/risk': {
+      id: '/risk'
+      path: '/risk'
+      fullPath: '/risk'
+      preLoaderRoute: typeof RiskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rfps': {
+      id: '/rfps'
+      path: '/rfps'
+      fullPath: '/rfps'
+      preLoaderRoute: typeof RfpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quotes': {
+      id: '/quotes'
+      path: '/quotes'
+      fullPath: '/quotes'
+      preLoaderRoute: typeof QuotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/loads': {
+      id: '/loads'
+      path: '/loads'
+      fullPath: '/loads'
+      preLoaderRoute: typeof LoadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm': {
+      id: '/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof CrmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/communications': {
+      id: '/communications'
+      path: '/communications'
+      fullPath: '/communications'
+      preLoaderRoute: typeof CommunicationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/carriers': {
+      id: '/carriers'
+      path: '/carriers'
+      fullPath: '/carriers'
+      preLoaderRoute: typeof CarriersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bidding': {
+      id: '/bidding'
+      path: '/bidding'
+      fullPath: '/bidding'
+      preLoaderRoute: typeof BiddingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/accounting': {
+      id: '/accounting'
+      path: '/accounting'
+      fullPath: '/accounting'
+      preLoaderRoute: typeof AccountingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +357,21 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountingRoute: AccountingRoute,
+  AdminRoute: AdminRoute,
+  AnalyticsRoute: AnalyticsRoute,
+  BiddingRoute: BiddingRoute,
+  CarriersRoute: CarriersRoute,
+  CommunicationsRoute: CommunicationsRoute,
+  CrmRoute: CrmRoute,
+  LoadsRoute: LoadsRoute,
+  ProfileRoute: ProfileRoute,
+  QuotesRoute: QuotesRoute,
+  RfpsRoute: RfpsRoute,
+  RiskRoute: RiskRoute,
+  SettingsRoute: SettingsRoute,
+  TrackingRoute: TrackingRoute,
+  TruckboardRoute: TruckboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

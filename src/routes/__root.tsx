@@ -9,6 +9,10 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { Topbar } from "@/components/topbar";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -72,11 +76,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "Logistics Software — Operations Console" },
+      { name: "description", content: "Premium logistics operating system for dispatch, brokerage, tracking, analytics, and accounting." },
+      { name: "author", content: "Logistics Software" },
+      { property: "og:title", content: "Logistics Software — Operations Console" },
+      { property: "og:description", content: "Premium logistics operating system for dispatch, brokerage, tracking, analytics, and accounting." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -113,7 +117,16 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="bg-background">
+          <Topbar />
+          <main className="flex-1">
+            <Outlet />
+          </main>
+        </SidebarInset>
+        <Toaster />
+      </SidebarProvider>
     </QueryClientProvider>
   );
 }
