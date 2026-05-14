@@ -9,6 +9,10 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { Topbar } from "@/components/topbar";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -113,7 +117,16 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="bg-background">
+          <Topbar />
+          <main className="flex-1">
+            <Outlet />
+          </main>
+        </SidebarInset>
+        <Toaster />
+      </SidebarProvider>
     </QueryClientProvider>
   );
 }
