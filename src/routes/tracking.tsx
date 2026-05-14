@@ -22,7 +22,7 @@ function Page() {
     { label: "In Transit", value: "248", tone: "info" },
     { label: "At Risk", value: "12", tone: "warning" },
     { label: "On Time", value: "96.8%", tone: "success" },
-    { label: "Delayed", value: "4", tone: "destructive" }
+    { label: "Delayed", value: "4", tone: "warning" }
       ]}
     />
   );
