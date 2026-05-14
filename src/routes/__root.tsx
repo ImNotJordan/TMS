@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -5,6 +6,7 @@ import {
   createRootRouteWithContext,
   useRouter,
   useLocation,
+  useNavigate,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -14,6 +16,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/lib/auth";
 
 function NotFoundComponent() {
   return (
@@ -115,30 +118,58 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+
+function AuthGate() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { status } = useAuth();
   const isAuthRoute = location.pathname === "/login";
+
+  useEffect(() => {
+    if (status === "unauthenticated" && !isAuthRoute) {
+      void navigate({ to: "/login", replace: true });
+    }
+    if (status === "authenticated" && isAuthRoute) {
+      void navigate({ to: "/", replace: true });
+    }
+  }, [status, isAuthRoute, navigate]);
 
   if (isAuthRoute) {
     return (
-      <QueryClientProvider client={queryClient}>
+      <>
         <Outlet />
         <Toaster />
-      </QueryClientProvider>
+      </>
+    );
+  }
+
+  if (status !== "authenticated") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
     );
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset className="bg-background">
-          <Topbar />
-          <main className="flex-1">
-            <Outlet />
-          </main>
-        </SidebarInset>
-        <Toaster />
-      </SidebarProvider>
-    </QueryClientProvider>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset className="bg-background">
+        <Topbar />
+        <main className="flex-1">
+          <Outlet />
+        </main>
+      </SidebarInset>
+      <Toaster />
+    </SidebarProvider>
   );
 }

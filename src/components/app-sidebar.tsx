@@ -17,6 +17,32 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NAV_ITEMS } from "@/lib/nav";
+import { useAuth } from "@/lib/auth";
+import { useProfileSection } from "@/hooks/use-profile-section";
+
+type PermissionsSnapshot = {
+  role?: string;
+  permissionGroup?: string;
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrator",
+  ops: "Operations Manager",
+  dispatch: "Dispatcher",
+  broker: "Broker",
+  driver: "Driver",
+};
+
+function computeInitials(value: string) {
+  const parts = value.split(/[\s@.]+/).filter(Boolean);
+  if (parts.length === 0) return "U";
+  return (
+    parts
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("") || "U"
+  );
+}
 
 const GROUPS = ["Operations", "Commercial", "Insights", "Workspace"] as const;
 
@@ -26,6 +52,25 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const isActive = (url: string) =>
     url === "/" ? pathname === "/" : pathname === url || pathname.startsWith(url + "/");
+
+  const { user, status } = useAuth();
+  const attrs = user?.attributes;
+  const permissions = useProfileSection<PermissionsSnapshot>("permissions", {});
+  const displayName =
+    [attrs?.given_name, attrs?.family_name].filter(Boolean).join(" ").trim() ||
+    user?.name ||
+    attrs?.nickname ||
+    attrs?.preferred_username ||
+    user?.email ||
+    (status === "loading" ? "Loading…" : "Signed in");
+
+  const dynamoRole = permissions.data.role;
+  const role =
+    (dynamoRole && (ROLE_LABELS[dynamoRole] ?? dynamoRole)) ||
+    attrs?.["custom:job_title"] ||
+    attrs?.["custom:department"] ||
+    (status === "loading" || permissions.loading ? "" : "Operations");
+  const initials = computeInitials(displayName === "Loading…" ? "U" : displayName);
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -89,23 +134,35 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
-        <div className="flex items-center gap-2 px-1.5 py-1">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-semibold">
-              MR
-            </AvatarFallback>
-          </Avatar>
-          {!collapsed && (
-            <div className="flex min-w-0 flex-col leading-tight">
-              <span className="truncate text-xs font-medium text-sidebar-foreground">
-                Maya Rodriguez
-              </span>
-              <span className="truncate text-[11px] text-sidebar-foreground/60">
-                Dispatch Manager
-              </span>
-            </div>
-          )}
-        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              tooltip={displayName}
+              className="h-auto py-1.5 hover:bg-sidebar-accent/60"
+            >
+              <Link to="/profile">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-semibold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                {!collapsed && (
+                  <div className="flex min-w-0 flex-col leading-tight">
+                    <span className="truncate text-xs font-medium text-sidebar-foreground">
+                      {displayName}
+                    </span>
+                    {role && (
+                      <span className="truncate text-[11px] text-sidebar-foreground/60">
+                        {role}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );

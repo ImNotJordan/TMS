@@ -1,12 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Truck, Mail, Lock, ArrowRight, ShieldCheck, Activity, Globe2 } from "lucide-react";
+import { confirmSignIn } from "aws-amplify/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -18,10 +20,16 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
+type Step = "signIn" | "newPassword";
+
 function LoginPage() {
   const navigate = useNavigate();
+  const { signIn, refresh } = useAuth();
+
+  const [step, setStep] = useState<Step>("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -31,12 +39,52 @@ function LoginPage() {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const result = await signIn(email, password);
+      if (result.isSignedIn) {
+        toast.success("Signed in successfully");
+        navigate({ to: "/" });
+        return;
+      }
+
+      const nextStep = result.nextStep?.signInStep;
+      if (nextStep === "CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED") {
+        setStep("newPassword");
+        toast.message("Set a new password to finish signing in.");
+        return;
+      }
+
+      toast.error(`Additional step required: ${nextStep ?? "unknown"}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign in failed";
+      toast.error(message);
+    } finally {
       setLoading(false);
-      sessionStorage.setItem("isAuthenticated", "true");
-      toast.success("Signed in successfully");
-      navigate({ to: "/" });
-    }, 700);
+    }
+  };
+
+  const onConfirmNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await confirmSignIn({ challengeResponse: newPassword });
+      if (result.isSignedIn) {
+        await refresh();
+        toast.success("Password updated. Signed in.");
+        navigate({ to: "/" });
+      } else {
+        toast.error(`Additional step required: ${result.nextStep?.signInStep ?? "unknown"}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not set new password";
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -54,79 +102,119 @@ function LoginPage() {
         </div>
 
         <div className="mx-auto w-full max-w-md py-12">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Welcome back</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            {step === "signIn" ? "Welcome back" : "Set a new password"}
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to manage loads, carriers, and shipments across your network.
+            {step === "signIn"
+              ? "Sign in to manage loads, carriers, and shipments across your network."
+              : "Your account requires a new password before continuing."}
           </p>
 
-          <form onSubmit={onSubmit} className="mt-8 space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="email">Work email</Label>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@company.com"
-                  className="pl-9 h-11"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+          {step === "signIn" ? (
+            <form onSubmit={onSubmit} className="mt-8 space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email">Work email</Label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    className="pl-9 h-11"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <a href="#" className="text-xs font-medium text-primary hover:underline">
-                  Forgot password?
-                </a>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <a href="#" className="text-xs font-medium text-primary hover:underline">
+                    Forgot password?
+                  </a>
+                </div>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    className="pl-9 h-11"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  className="pl-9 h-11"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+
+              <div className="flex items-center gap-2">
+                <Checkbox id="remember" />
+                <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">
+                  Keep me signed in for 30 days
+                </Label>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox id="remember" />
-              <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">
-                Keep me signed in for 30 days
-              </Label>
-            </div>
+              <Button type="submit" className="h-11 w-full text-sm font-medium" disabled={loading}>
+                {loading ? "Signing in…" : (<>Sign in<ArrowRight className="ml-1 h-4 w-4" /></>)}
+              </Button>
 
-            <Button type="submit" className="h-11 w-full text-sm font-medium" disabled={loading}>
-              {loading ? "Signing in…" : (<>Sign in<ArrowRight className="ml-1 h-4 w-4" /></>)}
-            </Button>
+              <div className="relative py-2">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs uppercase tracking-wider text-muted-foreground">
+                  or continue with
+                </span>
+              </div>
 
-            <div className="relative py-2">
-              <Separator />
-              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs uppercase tracking-wider text-muted-foreground">
-                or continue with
-              </span>
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Button type="button" variant="outline" className="h-11">SSO / SAML</Button>
+                <Button type="button" variant="outline" className="h-11">Google</Button>
+              </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Button type="button" variant="outline" className="h-11">SSO / SAML</Button>
-              <Button type="button" variant="outline" className="h-11">Google</Button>
-            </div>
+              <p className="pt-2 text-center text-sm text-muted-foreground">
+                New to the platform?{" "}
+                <Link to="/" className="font-medium text-primary hover:underline">
+                  Request access
+                </Link>
+              </p>
+            </form>
+          ) : (
+            <form onSubmit={onConfirmNewPassword} className="mt-8 space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="newPassword">New password</Label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="At least 8 characters"
+                    className="pl-9 h-11"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </div>
+              </div>
 
-            <p className="pt-2 text-center text-sm text-muted-foreground">
-              New to the platform?{" "}
-              <Link to="/" className="font-medium text-primary hover:underline">
-                Request access
-              </Link>
-            </p>
-          </form>
+              <Button type="submit" className="h-11 w-full text-sm font-medium" disabled={loading}>
+                {loading ? "Updating…" : (<>Set password & continue<ArrowRight className="ml-1 h-4 w-4" /></>)}
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-10 w-full text-sm"
+                onClick={() => {
+                  setStep("signIn");
+                  setNewPassword("");
+                }}
+              >
+                Back to sign in
+              </Button>
+            </form>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">

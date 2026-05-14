@@ -14,12 +14,30 @@ import {
   Receipt,
 } from "lucide-react";
 
+import { useNavigate } from "@tanstack/react-router";
+
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth";
+import { useProfileSection } from "@/hooks/use-profile-section";
+import { toast } from "sonner";
+
+type PermissionsSnapshot = {
+  role?: string;
+  permissionGroup?: string;
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrator",
+  ops: "Operations Manager",
+  dispatch: "Dispatcher",
+  broker: "Broker",
+  driver: "Driver",
+};
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,9 +58,44 @@ const QUICK_CREATE = [
 
 export function Topbar() {
   const [dark, setDark] = useState(false);
+  const { user, status, signOut } = useAuth();
+  const navigate = useNavigate();
+  const permissions = useProfileSection<PermissionsSnapshot>("permissions", {});
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
+
+  const attrs = user?.attributes;
+  const displayName =
+    [attrs?.given_name, attrs?.family_name].filter(Boolean).join(" ").trim() ||
+    user?.name ||
+    attrs?.nickname ||
+    attrs?.preferred_username ||
+    user?.email ||
+    "Account";
+  const dynamoRole = permissions.data.role;
+  const roleLine =
+    (dynamoRole && (ROLE_LABELS[dynamoRole] ?? dynamoRole)) ||
+    attrs?.["custom:job_title"] ||
+    attrs?.["custom:department"] ||
+    (status === "loading" || permissions.loading ? "" : "Signed in");
+  const initials = (displayName === "Account" ? "U" : displayName)
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("") || "U";
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success("Signed out");
+      navigate({ to: "/login", replace: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign out failed";
+      toast.error(message);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur-md sm:px-4">
@@ -112,12 +165,14 @@ export function Topbar() {
             <Button variant="ghost" className="h-9 gap-2 rounded-lg pl-1 pr-2">
               <Avatar className="h-7 w-7">
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                  MR
+                  {initials}
                 </AvatarFallback>
               </Avatar>
               <div className="hidden flex-col items-start leading-tight md:flex">
-                <span className="text-xs font-medium">Maya Rodriguez</span>
-                <span className="text-[10px] text-muted-foreground">Northwind Logistics</span>
+                <span className="text-xs font-medium">{displayName}</span>
+                {roleLine && (
+                  <span className="text-[10px] text-muted-foreground">{roleLine}</span>
+                )}
               </div>
             </Button>
           </DropdownMenuTrigger>
@@ -128,7 +183,9 @@ export function Topbar() {
             <DropdownMenuItem>Preferences</DropdownMenuItem>
             <DropdownMenuItem>Switch organization</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Sign out</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" onSelect={handleSignOut}>
+              Sign out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
