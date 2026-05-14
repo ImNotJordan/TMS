@@ -22,7 +22,7 @@ function Page() {
     { label: "Unread", value: "14", tone: "warning" },
     { label: "Active Threads", value: "62", tone: "info" },
     { label: "Avg Response", value: "8m", tone: "success" },
-    { label: "SLA Breach", value: "1", tone: "destructive" }
+    { label: "SLA Breach", value: "1", tone: "warning" }
       ]}
     />
   );
