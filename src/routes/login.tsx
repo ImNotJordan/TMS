@@ -33,6 +33,7 @@ function LoginPage() {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
+      sessionStorage.setItem("isAuthenticated", "true");
       toast.success("Signed in successfully");
       navigate({ to: "/" });
     }, 700);

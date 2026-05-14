@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import {
   Package,
   Gavel,
@@ -37,6 +37,11 @@ import { LaneVolumeChart } from "@/components/dashboard/lane-volume-chart";
 import { ShipmentMap } from "@/components/dashboard/shipment-map";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("isAuthenticated") !== "true") {
+      throw redirect({ to: "/login" });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Dashboard — Logistics Software" },
