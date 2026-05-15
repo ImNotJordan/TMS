@@ -1,4 +1,5 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import * as React from "react";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import {
   Package,
   Gavel,
@@ -15,6 +16,7 @@ import {
   CircleAlert,
   CircleDot,
   TrendingUp,
+  Inbox,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -35,11 +37,24 @@ import { KpiCard } from "@/components/dashboard/kpi-card";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { LaneVolumeChart } from "@/components/dashboard/lane-volume-chart";
 import { ShipmentMap } from "@/components/dashboard/shipment-map";
+import {
+  CARRIER_LABELS,
+  STATUS_LABELS,
+  toneBadge,
+  labelOrRaw,
+  formatLane,
+  formatStop,
+  formatRate,
+  isActiveLoad,
+  sortLoadsByUrgency,
+  type Tone,
+} from "@/lib/loads-display";
+import { listAllLoads, type LoadRecord } from "@/lib/loads-store";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => {
     if (typeof window !== "undefined" && sessionStorage.getItem("isAuthenticated") !== "true") {
-      throw redirect({ to: "/login" });
+      throw redirect({ to: "/landing" });
     }
   },
   head: () => ({
@@ -50,14 +65,6 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
-
-const LOADS = [
-  { id: "L-2841", lane: "Atlanta, GA → Dallas, TX", carrier: "Bluepeak Freight", eta: "Today · 4:20 PM", status: "On time", tone: "success", revenue: "$3,420" },
-  { id: "L-2839", lane: "Long Beach, CA → Phoenix, AZ", carrier: "Sundial Trucking", eta: "Tomorrow · 9:10 AM", status: "At risk", tone: "warning", revenue: "$2,180" },
-  { id: "L-2832", lane: "Chicago, IL → Indianapolis, IN", carrier: "Ironline Logistics", eta: "Today · 7:45 PM", status: "On time", tone: "success", revenue: "$1,640" },
-  { id: "L-2828", lane: "Newark, NJ → Boston, MA", carrier: "Northbay Carriers", eta: "Delayed · +3h 12m", status: "Delayed", tone: "destructive", revenue: "$2,910" },
-  { id: "L-2825", lane: "Miami, FL → Orlando, FL", carrier: "Gulfstream Express", eta: "Today · 6:00 PM", status: "On time", tone: "success", revenue: "$1,280" },
-] as const;
 
 const ACTIVITY = [
   { who: "Jordan T.", what: "Booked load L-2841 with Bluepeak Freight", when: "2m ago", icon: CircleCheck, tone: "text-success" },
@@ -79,14 +86,41 @@ const ALERTS = [
   { title: "Detention risk · L-2839", desc: "Receiver dwell trending 90+ minutes.", tone: "warning" as const },
 ] as const;
 
-const toneBadge = {
-  success: "bg-success/15 text-success border-success/20",
-  warning: "bg-warning/20 text-warning-foreground border-warning/30",
-  destructive: "bg-destructive/12 text-destructive border-destructive/20",
-  info: "bg-info/15 text-info border-info/20",
-} as const;
-
 function Index() {
+  const [loads, setLoads] = React.useState<LoadRecord[] | null>(null);
+  const [loadsLoading, setLoadsLoading] = React.useState(true);
+  const [loadsError, setLoadsError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoadsLoading(true);
+      setLoadsError(null);
+      try {
+        const items = await listAllLoads();
+        if (!cancelled) setLoads(items);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load loads.";
+        if (!cancelled) {
+          setLoadsError(message);
+          setLoads([]);
+        }
+      } finally {
+        if (!cancelled) setLoadsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activeLoads = React.useMemo(() => {
+    const list = loads ?? [];
+    return [...list.filter(isActiveLoad)].sort(sortLoadsByUrgency);
+  }, [loads]);
+
+  const activeCount = activeLoads.length;
+
   return (
     <div>
       <PageHeader
@@ -107,7 +141,12 @@ function Index() {
       <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
         {/* KPIs */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiCard label="Active Loads" value="248" delta="+12.4%" trend="up" icon={Package} accent="primary" />
+          <KpiCard
+            label="Active Loads"
+            value={loadsLoading ? "…" : activeCount.toString()}
+            icon={Package}
+            accent="primary"
+          />
           <KpiCard label="Open Bids" value="36" delta="+4.1%" trend="up" icon={Gavel} accent="info" />
           <KpiCard label="Pending Quotes" value="58" delta="-2.3%" trend="down" icon={FileSpreadsheet} accent="warning" />
           <KpiCard label="High-Risk Shipments" value="9" delta="+1.0%" trend="up" icon={ShieldAlert} accent="destructive" />
@@ -151,13 +190,30 @@ function Index() {
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
                 <CardTitle className="text-base">Active Loads</CardTitle>
-                <CardDescription>Most time-sensitive shipments first</CardDescription>
+                <CardDescription>
+                  {loadsLoading
+                    ? "Loading from DynamoDB…"
+                    : loadsError
+                      ? "Could not refresh — showing last error below"
+                      : `${activeCount} active · soonest delivery first`}
+                </CardDescription>
               </div>
-              <Button variant="ghost" size="sm" className="gap-1 text-primary">
-                View all <ArrowUpRight className="h-4 w-4" />
+              <Button variant="ghost" size="sm" className="gap-1 text-primary" asChild>
+                <Link to="/loads">
+                  View all <ArrowUpRight className="h-4 w-4" />
+                </Link>
               </Button>
             </CardHeader>
             <CardContent className="px-0 pb-0">
+              {loadsError && (
+                <div className="flex items-start gap-3 border-b border-destructive/30 bg-destructive/8 px-6 py-3 text-sm text-destructive">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="flex-1">
+                    <div className="font-semibold">Couldn't load loads</div>
+                    <div className="mt-0.5 text-xs text-destructive/90">{loadsError}</div>
+                  </div>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -165,26 +221,81 @@ function Index() {
                       <TableHead className="pl-6">Load</TableHead>
                       <TableHead>Lane</TableHead>
                       <TableHead>Carrier</TableHead>
-                      <TableHead>ETA</TableHead>
+                      <TableHead>Delivery</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="pr-6 text-right">Revenue</TableHead>
+                      <TableHead className="pr-6 text-right">Rate</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {LOADS.map((l) => (
-                      <TableRow key={l.id} className="border-border/60">
-                        <TableCell className="pl-6 font-medium">{l.id}</TableCell>
-                        <TableCell className="text-muted-foreground">{l.lane}</TableCell>
-                        <TableCell>{l.carrier}</TableCell>
-                        <TableCell className="text-muted-foreground">{l.eta}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={toneBadge[l.tone]}>
-                            {l.status}
-                          </Badge>
+                    {loadsLoading && (!loads || loads.length === 0) ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={`skel-${i}`} className="border-border/60">
+                          {Array.from({ length: 6 }).map((__, j) => (
+                            <TableCell
+                              key={j}
+                              className={j === 0 ? "pl-6" : j === 5 ? "pr-6 text-right" : ""}
+                            >
+                              <span className="inline-block h-4 w-full max-w-[140px] animate-pulse rounded bg-muted" />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : activeLoads.length === 0 ? (
+                      <TableRow className="border-border/60">
+                        <TableCell colSpan={6} className="py-12">
+                          <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                              <Inbox className="h-5 w-5" />
+                            </span>
+                            <div className="font-medium text-foreground">No active loads</div>
+                            <div className="text-xs">
+                              Active means booked, tendered, dispatched, or in transit — not draft or
+                              delivered.
+                            </div>
+                          </div>
                         </TableCell>
-                        <TableCell className="pr-6 text-right font-semibold">{l.revenue}</TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      activeLoads.slice(0, 12).map((l) => {
+                        const status = l.loadStatus
+                          ? (STATUS_LABELS[l.loadStatus] ?? {
+                              label: l.loadStatus,
+                              tone: "default" as Tone,
+                            })
+                          : { label: "—", tone: "default" as Tone };
+                        return (
+                          <TableRow key={l.loadId} className="border-border/60">
+                            <TableCell className="pl-6 font-medium">
+                              <Link
+                                to="/loads/$loadId"
+                                params={{ loadId: l.loadId }}
+                                className="text-primary underline-offset-4 hover:underline"
+                              >
+                                {l.loadId}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{formatLane(l)}</TableCell>
+                            <TableCell>{labelOrRaw(CARRIER_LABELS, l.assignedCarrier)}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {formatStop(
+                                l.deliveryDate,
+                                l.deliveryAppointmentTime,
+                                l.deliveryWindowStart,
+                                l.deliveryWindowEnd,
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={toneBadge[status.tone]}>
+                                {status.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="pr-6 text-right font-semibold tabular-nums">
+                              {formatRate(l.customerRate)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </div>

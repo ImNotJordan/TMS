@@ -1,6 +1,12 @@
 import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 import { getDynamoDocClient, getProfileTableName } from "./dynamodb";
+import { createRateLimitedExecutor } from "./rate-limit";
+
+const PROFILE_READ_RATE_LIMIT_MS = 300;
+const PROFILE_WRITE_RATE_LIMIT_MS = 1200;
+const runProfileReadLimited = createRateLimitedExecutor(PROFILE_READ_RATE_LIMIT_MS);
+const runProfileWriteLimited = createRateLimitedExecutor(PROFILE_WRITE_RATE_LIMIT_MS);
 
 export type SectionKey =
   | "personal"
@@ -28,11 +34,9 @@ function describeError(err: unknown, op: string): Error {
     const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
       .filter(Boolean)
       .join(" · ");
-    // eslint-disable-next-line no-console
     console.error(`[DynamoDB ${op}]`, err);
     return new Error(`DynamoDB ${op} failed: ${detail}`);
   }
-  // eslint-disable-next-line no-console
   console.error(`[DynamoDB ${op}]`, err);
   return new Error(`DynamoDB ${op} failed`);
 }
@@ -41,18 +45,20 @@ export async function getSection<T = Record<string, unknown>>(
   userId: string,
   section: SectionKey,
 ): Promise<T | null> {
-  try {
-    const client = await getDynamoDocClient();
-    const out = await client.send(
-      new GetCommand({
-        TableName: getProfileTableName(),
-        Key: { userId, section },
-      }),
-    );
-    return ((out.Item as ProfileItem<T> | undefined)?.data ?? null) as T | null;
-  } catch (err) {
-    throw describeError(err, "GetItem");
-  }
+  return runProfileReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(
+        new GetCommand({
+          TableName: getProfileTableName(),
+          Key: { userId, section },
+        }),
+      );
+      return ((out.Item as ProfileItem<T> | undefined)?.data ?? null) as T | null;
+    } catch (err) {
+      throw describeError(err, "GetItem");
+    }
+  });
 }
 
 export async function putSection<T = Record<string, unknown>>(
@@ -60,40 +66,46 @@ export async function putSection<T = Record<string, unknown>>(
   section: SectionKey,
   data: T,
 ): Promise<void> {
-  try {
-    const client = await getDynamoDocClient();
-    await client.send(
-      new PutCommand({
-        TableName: getProfileTableName(),
-        Item: {
-          userId,
-          section,
-          data,
-          updatedAt: new Date().toISOString(),
-        } satisfies ProfileItem<T>,
-      }),
-    );
-  } catch (err) {
-    throw describeError(err, "PutItem");
-  }
+  return runProfileWriteLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      await client.send(
+        new PutCommand({
+          TableName: getProfileTableName(),
+          Item: {
+            userId,
+            section,
+            data,
+            updatedAt: new Date().toISOString(),
+          } satisfies ProfileItem<T>,
+        }),
+      );
+    } catch (err) {
+      throw describeError(err, "PutItem");
+    }
+  });
 }
 
-export async function getAllSections(userId: string): Promise<Partial<Record<SectionKey, unknown>>> {
-  try {
-    const client = await getDynamoDocClient();
-    const out = await client.send(
-      new QueryCommand({
-        TableName: getProfileTableName(),
-        KeyConditionExpression: "userId = :u",
-        ExpressionAttributeValues: { ":u": userId },
-      }),
-    );
-    const map: Partial<Record<SectionKey, unknown>> = {};
-    for (const item of (out.Items as ProfileItem<unknown>[] | undefined) ?? []) {
-      map[item.section] = item.data;
+export async function getAllSections(
+  userId: string,
+): Promise<Partial<Record<SectionKey, unknown>>> {
+  return runProfileReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(
+        new QueryCommand({
+          TableName: getProfileTableName(),
+          KeyConditionExpression: "userId = :u",
+          ExpressionAttributeValues: { ":u": userId },
+        }),
+      );
+      const map: Partial<Record<SectionKey, unknown>> = {};
+      for (const item of (out.Items as ProfileItem<unknown>[] | undefined) ?? []) {
+        map[item.section] = item.data;
+      }
+      return map;
+    } catch (err) {
+      throw describeError(err, "Query");
     }
-    return map;
-  } catch (err) {
-    throw describeError(err, "Query");
-  }
+  });
 }

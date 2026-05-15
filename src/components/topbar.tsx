@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Bell,
+  Loader2,
   MessageSquare,
   Plus,
   Search,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
@@ -22,9 +24,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
 import { useProfileSection } from "@/hooks/use-profile-section";
 import { toast } from "sonner";
+import { CreateLoadDialog } from "@/components/loads/create-load-dialog";
+import { invalidateOperationalCounts } from "@/lib/sidebar-counts";
 
 type PermissionsSnapshot = {
   role?: string;
@@ -38,14 +59,6 @@ const ROLE_LABELS: Record<string, string> = {
   broker: "Broker",
   driver: "Driver",
 };
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 const QUICK_CREATE = [
   { label: "New Load", icon: Package },
@@ -58,8 +71,12 @@ const QUICK_CREATE = [
 
 export function Topbar() {
   const [dark, setDark] = useState(false);
+  const [createLoadOpen, setCreateLoadOpen] = useState(false);
+  const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
+  const [signOutBusy, setSignOutBusy] = useState(false);
   const { user, status, signOut } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const permissions = useProfileSection<PermissionsSnapshot>("permissions", {});
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -86,19 +103,24 @@ export function Topbar() {
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("") || "U";
 
-  const handleSignOut = async () => {
+  const performSignOut = async () => {
+    setSignOutBusy(true);
     try {
       await signOut();
       toast.success("Signed out");
+      setSignOutDialogOpen(false);
       navigate({ to: "/login", replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign out failed";
       toast.error(message);
+    } finally {
+      setSignOutBusy(false);
     }
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur-md sm:px-4">
+    <>
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur-md sm:px-4">
       <SidebarTrigger />
       <Separator orientation="vertical" className="h-6" />
 
@@ -127,7 +149,17 @@ export function Topbar() {
             {QUICK_CREATE.map((q) => {
               const Icon = q.icon;
               return (
-                <DropdownMenuItem key={q.label} className="gap-2">
+                <DropdownMenuItem
+                  key={q.label}
+                  className="gap-2"
+                  onSelect={() => {
+                    if (q.label === "New Load") {
+                      setCreateLoadOpen(true);
+                      return;
+                    }
+                    toast.info("Coming soon", { description: `${q.label} isn’t available yet.` });
+                  }}
+                >
                   <Icon className="h-4 w-4 text-muted-foreground" />
                   {q.label}
                 </DropdownMenuItem>
@@ -179,16 +211,67 @@ export function Topbar() {
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuLabel>My account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate({ to: "/profile" })}>
+              Profile
+            </DropdownMenuItem>
             <DropdownMenuItem>Preferences</DropdownMenuItem>
             <DropdownMenuItem>Switch organization</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive" onSelect={handleSignOut}>
+            <DropdownMenuItem
+              className="text-destructive"
+              onSelect={() => setSignOutDialogOpen(true)}
+            >
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </header>
+      </header>
+
+      <CreateLoadDialog
+        open={createLoadOpen}
+        onOpenChange={setCreateLoadOpen}
+        onCreated={(id) => {
+          invalidateOperationalCounts(queryClient);
+          toast.success("Load created", { description: id });
+          void navigate({ to: "/loads/$loadId", params: { loadId: id } });
+        }}
+      />
+
+      <AlertDialog
+        open={signOutDialogOpen}
+        onOpenChange={(open) => {
+          setSignOutDialogOpen(open);
+          if (!open) setSignOutBusy(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will need to sign in again to use Titan Freight.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={signOutBusy}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={signOutBusy}
+              onClick={() => void performSignOut()}
+              className="gap-2"
+            >
+              {signOutBusy ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Signing out…
+                </>
+              ) : (
+                "Sign out"
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

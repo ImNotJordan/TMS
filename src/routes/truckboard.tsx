@@ -1,5 +1,6 @@
 import * as React from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -34,6 +35,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { CreateTruckDialog } from "@/components/truckboard/create-truck-dialog";
 import { listAllTrucks, type TruckRecord } from "@/lib/trucks-store";
+import { invalidateOperationalCounts } from "@/lib/sidebar-counts";
 
 export const Route = createFileRoute("/truckboard")({
   head: () => ({
@@ -194,6 +196,10 @@ function initials(name?: string) {
 }
 
 function Page() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isTruckDetailPath = /^\/truckboard\/[^/]+$/.test(pathname);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [trucks, setTrucks] = React.useState<TruckRecord[] | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -218,8 +224,9 @@ function Page() {
   }, []);
 
   React.useEffect(() => {
+    if (isTruckDetailPath) return;
     void fetchTrucks("initial");
-  }, [fetchTrucks]);
+  }, [fetchTrucks, isTruckDetailPath]);
 
   const filtered = React.useMemo(() => {
     if (!trucks) return [];
@@ -283,6 +290,10 @@ function Page() {
     ];
   }, [trucks]);
 
+  if (isTruckDetailPath) {
+    return <Outlet />;
+  }
+
   return (
     <div>
       <PageHeader
@@ -311,7 +322,10 @@ function Page() {
               Refresh
             </Button>
             <CreateTruckDialog
-              onCreated={() => void fetchTrucks("refresh")}
+              onCreated={() => {
+                invalidateOperationalCounts(queryClient);
+                void fetchTrucks("refresh");
+              }}
               trigger={
                 <Button
                   size="sm"
@@ -474,7 +488,27 @@ function Page() {
                       const compliance = complianceForTruck(t);
                       const ratePerMile = formatRatePerMile(t);
                       return (
-                        <TableRow key={t.truckBoardId} className="border-border/60">
+                        <TableRow
+                          key={t.truckBoardId}
+                          role="link"
+                          tabIndex={0}
+                          className="cursor-pointer border-border/60 hover:bg-muted/35"
+                          onClick={() =>
+                            void navigate({
+                              to: "/truckboard/$truckBoardId",
+                              params: { truckBoardId: t.truckBoardId },
+                            })
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              void navigate({
+                                to: "/truckboard/$truckBoardId",
+                                params: { truckBoardId: t.truckBoardId },
+                              });
+                            }
+                          }}
+                        >
                           <TableCell className="pl-6">
                             <Badge variant="outline" className={toneBadge[status.tone]}>
                               {status.label}
@@ -494,7 +528,14 @@ function Page() {
                           </TableCell>
                           <TableCell>
                             <div className="font-medium text-foreground">
-                              {t.carrierName || "—"}
+                              <Link
+                                to="/truckboard/$truckBoardId"
+                                params={{ truckBoardId: t.truckBoardId }}
+                                className="text-primary underline-offset-4 hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {t.carrierName || t.truckBoardId}
+                              </Link>
                             </div>
                             <div className="text-[11px] text-muted-foreground">
                               {t.truckBoardId}
@@ -530,7 +571,7 @@ function Page() {
                           <TableCell className="tabular-nums text-muted-foreground">
                             {formatRelativeTime(t.updatedAt ?? t.createdAt)}
                           </TableCell>
-                          <TableCell className="pr-6 text-right">
+                          <TableCell className="pr-6 text-right" onClick={(e) => e.stopPropagation()}>
                             <Button
                               size="icon"
                               variant="ghost"

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -17,6 +17,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { GlobalLoader } from "@/components/global-loader";
 
 function NotFoundComponent() {
   return (
@@ -132,32 +133,32 @@ function AuthGate() {
   const location = useLocation();
   const navigate = useNavigate();
   const { status } = useAuth();
-  const isAuthRoute = location.pathname === "/login";
+  const isLoginRoute = location.pathname === "/login";
+  const isLandingRoute = location.pathname === "/landing";
+  const isPublicRoute = isLoginRoute || isLandingRoute;
 
   useEffect(() => {
-    if (status === "unauthenticated" && !isAuthRoute) {
-      void navigate({ to: "/login", replace: true });
+    if (status === "unauthenticated" && !isPublicRoute) {
+      void navigate({ to: "/landing", replace: true });
     }
-    if (status === "authenticated" && isAuthRoute) {
+    if (status === "authenticated" && isLoginRoute) {
       void navigate({ to: "/", replace: true });
     }
-  }, [status, isAuthRoute, navigate]);
+  }, [status, isPublicRoute, isLoginRoute, navigate]);
 
-  if (isAuthRoute) {
+  if (isPublicRoute) {
     return (
       <>
-        <Outlet />
+        <Suspense fallback={<GlobalLoader message="Loading…" />}>
+          <Outlet />
+        </Suspense>
         <Toaster />
       </>
     );
   }
 
   if (status !== "authenticated") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      </div>
-    );
+    return <GlobalLoader message="Signing you in…" />;
   }
 
   return (
@@ -166,7 +167,9 @@ function AuthGate() {
       <SidebarInset className="bg-background">
         <Topbar />
         <main className="flex-1">
-          <Outlet />
+          <Suspense fallback={<GlobalLoader variant="overlay" message="Loading…" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </SidebarInset>
       <Toaster />

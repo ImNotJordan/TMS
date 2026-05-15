@@ -1,4 +1,6 @@
+import * as React from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Truck } from "lucide-react";
 
 import {
@@ -17,6 +19,11 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NAV_ITEMS } from "@/lib/nav";
+import { SIDEBAR_OPERATIONAL_COUNTS_QUERY_KEY, fetchOperationalCounts } from "@/lib/sidebar-counts";
+import {
+  getTrackingSessionsSnapshot,
+  subscribeTrackingSessions,
+} from "@/lib/tracking-workflow-store";
 import { useAuth } from "@/lib/auth";
 import { useProfileSection } from "@/hooks/use-profile-section";
 
@@ -72,6 +79,38 @@ export function AppSidebar() {
     (status === "loading" || permissions.loading ? "" : "Operations");
   const initials = computeInitials(displayName === "Loading…" ? "U" : displayName);
 
+  const {
+    data: operationalCounts,
+    isPending: countsPending,
+    isError: countsError,
+  } = useQuery({
+    queryKey: SIDEBAR_OPERATIONAL_COUNTS_QUERY_KEY,
+    queryFn: fetchOperationalCounts,
+    staleTime: 45_000,
+  });
+  const trackingSessions = React.useSyncExternalStore(
+    subscribeTrackingSessions,
+    getTrackingSessionsSnapshot,
+    () => [],
+  );
+
+  const sidebarBadge = (item: (typeof NAV_ITEMS)[number]): string | undefined => {
+    if (item.liveCount === "loads") {
+      if (countsPending) return "…";
+      if (countsError || operationalCounts == null) return "—";
+      return operationalCounts.loads.toLocaleString();
+    }
+    if (item.liveCount === "trucks") {
+      if (countsPending) return "…";
+      if (countsError || operationalCounts == null) return "—";
+      return operationalCounts.trucks.toLocaleString();
+    }
+    if (item.liveCount === "tracking") {
+      return trackingSessions.length.toLocaleString();
+    }
+    return item.badge;
+  };
+
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border">
@@ -97,14 +136,13 @@ export function AppSidebar() {
           const items = NAV_ITEMS.filter((i) => i.group === group);
           return (
             <SidebarGroup key={group}>
-              <SidebarGroupLabel className="text-sidebar-foreground/50">
-                {group}
-              </SidebarGroupLabel>
+              <SidebarGroupLabel className="text-sidebar-foreground/50">{group}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {items.map((item) => {
                     const Icon = item.icon;
                     const active = isActive(item.url);
+                    const badge = sidebarBadge(item);
                     return (
                       <SidebarMenuItem key={item.url}>
                         <SidebarMenuButton
@@ -118,9 +156,9 @@ export function AppSidebar() {
                             <span>{item.title}</span>
                           </Link>
                         </SidebarMenuButton>
-                        {item.badge && !collapsed && (
+                        {badge != null && !collapsed && (
                           <SidebarMenuBadge className="bg-sidebar-primary/20 text-sidebar-foreground">
-                            {item.badge}
+                            {badge}
                           </SidebarMenuBadge>
                         )}
                       </SidebarMenuItem>

@@ -1,6 +1,12 @@
-import { PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 import { getDynamoDocClient, getTrucksTableName } from "./dynamodb";
+import { createRateLimitedExecutor } from "./rate-limit";
+
+const TRUCKS_READ_RATE_LIMIT_MS = 300;
+const TRUCKS_WRITE_RATE_LIMIT_MS = 1200;
+const runTrucksReadLimited = createRateLimitedExecutor(TRUCKS_READ_RATE_LIMIT_MS);
+const runTrucksWriteLimited = createRateLimitedExecutor(TRUCKS_WRITE_RATE_LIMIT_MS);
 
 export type TruckRecord = {
   truckBoardId: string;
@@ -114,11 +120,9 @@ function describeError(err: unknown, op: string): Error {
     const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
       .filter(Boolean)
       .join(" · ");
-    // eslint-disable-next-line no-console
     console.error(`[DynamoDB Trucks ${op}]`, err);
     return new Error(`DynamoDB ${op} failed: ${detail}`);
   }
-  // eslint-disable-next-line no-console
   console.error(`[DynamoDB Trucks ${op}]`, err);
   return new Error(`DynamoDB ${op} failed`);
 }
@@ -127,35 +131,85 @@ export async function createTruck(input: CreateTruckInput): Promise<TruckRecord>
   if (!input.truckBoardId) {
     throw new Error("truckBoardId is required to post a truck");
   }
-  try {
-    const client = await getDynamoDocClient();
-    const now = new Date().toISOString();
-    const item: TruckRecord = {
-      ...input,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await client.send(
-      new PutCommand({
-        TableName: getTrucksTableName(),
-        Item: item,
-        ConditionExpression: "attribute_not_exists(truckBoardId)",
-      }),
-    );
-    return item;
-  } catch (err) {
-    throw describeError(err, "PutItem");
-  }
+  return runTrucksWriteLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const now = new Date().toISOString();
+      const item: TruckRecord = {
+        ...input,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await client.send(
+        new PutCommand({
+          TableName: getTrucksTableName(),
+          Item: item,
+          ConditionExpression: "attribute_not_exists(truckBoardId)",
+        }),
+      );
+      return item;
+    } catch (err) {
+      throw describeError(err, "PutItem");
+    }
+  });
 }
 
 export async function listAllTrucks(): Promise<TruckRecord[]> {
-  try {
-    const client = await getDynamoDocClient();
-    const out = await client.send(
-      new ScanCommand({ TableName: getTrucksTableName() }),
-    );
-    return (out.Items as TruckRecord[] | undefined) ?? [];
-  } catch (err) {
-    throw describeError(err, "Scan");
+  return runTrucksReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(new ScanCommand({ TableName: getTrucksTableName() }));
+      return (out.Items as TruckRecord[] | undefined) ?? [];
+    } catch (err) {
+      throw describeError(err, "Scan");
+    }
+  });
+}
+
+export async function getTruckById(truckBoardId: string): Promise<TruckRecord | null> {
+  if (!truckBoardId?.trim()) {
+    throw new Error("truckBoardId is required");
   }
+  return runTrucksReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(
+        new GetCommand({
+          TableName: getTrucksTableName(),
+          Key: { truckBoardId: truckBoardId.trim() },
+        }),
+      );
+      const item = out.Item as TruckRecord | undefined;
+      return item ?? null;
+    } catch (err) {
+      throw describeError(err, "GetItem");
+    }
+  });
+}
+
+/** Replace an existing truck item (preserves `createdAt` / `createdBy` from `record`). */
+export async function updateTruck(record: TruckRecord): Promise<TruckRecord> {
+  if (!record.truckBoardId?.trim()) {
+    throw new Error("truckBoardId is required");
+  }
+  return runTrucksWriteLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const now = new Date().toISOString();
+      const item: TruckRecord = {
+        ...record,
+        updatedAt: now,
+      };
+      await client.send(
+        new PutCommand({
+          TableName: getTrucksTableName(),
+          Item: item,
+          ConditionExpression: "attribute_exists(truckBoardId)",
+        }),
+      );
+      return item;
+    } catch (err) {
+      throw describeError(err, "PutItem(update)");
+    }
+  });
 }

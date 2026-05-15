@@ -1,6 +1,10 @@
-import { PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 import { getDynamoDocClient, getLoadsTableName } from "./dynamodb";
+import { createRateLimitedExecutor } from "./rate-limit";
+
+const LOADS_READ_RATE_LIMIT_MS = 300;
+const LOADS_WRITE_RATE_LIMIT_MS = 1200;
 
 export type LoadRecord = {
   loadId: string;
@@ -94,14 +98,15 @@ function describeError(err: unknown, op: string): Error {
     const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
       .filter(Boolean)
       .join(" · ");
-    // eslint-disable-next-line no-console
     console.error(`[DynamoDB Loads ${op}]`, err);
     return new Error(`DynamoDB ${op} failed: ${detail}`);
   }
-  // eslint-disable-next-line no-console
   console.error(`[DynamoDB Loads ${op}]`, err);
   return new Error(`DynamoDB ${op} failed`);
 }
+
+const runReadLimited = createRateLimitedExecutor(LOADS_READ_RATE_LIMIT_MS);
+const runWriteLimited = createRateLimitedExecutor(LOADS_WRITE_RATE_LIMIT_MS);
 
 export type CreateLoadInput = Omit<LoadRecord, "createdAt" | "updatedAt">;
 
@@ -109,52 +114,104 @@ export async function createLoad(input: CreateLoadInput): Promise<LoadRecord> {
   if (!input.loadId) {
     throw new Error("loadId is required to create a load");
   }
-  try {
-    const client = await getDynamoDocClient();
-    const now = new Date().toISOString();
-    const item: LoadRecord = {
-      ...input,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await client.send(
-      new PutCommand({
-        TableName: getLoadsTableName(),
-        Item: item,
-        ConditionExpression: "attribute_not_exists(loadId)",
-      }),
-    );
-    return item;
-  } catch (err) {
-    throw describeError(err, "PutItem");
-  }
+  return runWriteLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const now = new Date().toISOString();
+      const item: LoadRecord = {
+        ...input,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await client.send(
+        new PutCommand({
+          TableName: getLoadsTableName(),
+          Item: item,
+          ConditionExpression: "attribute_not_exists(loadId)",
+        }),
+      );
+      return item;
+    } catch (err) {
+      throw describeError(err, "PutItem");
+    }
+  });
 }
 
 export async function listLoadsByUser(userId: string): Promise<LoadRecord[]> {
-  try {
-    const client = await getDynamoDocClient();
-    const out = await client.send(
-      new QueryCommand({
-        TableName: getLoadsTableName(),
-        IndexName: "createdBy-index",
-        KeyConditionExpression: "createdBy = :u",
-        ExpressionAttributeValues: { ":u": userId },
-      }),
-    );
-    return (out.Items as LoadRecord[] | undefined) ?? [];
-  } catch (err) {
-    throw describeError(err, "Query");
-  }
+  return runReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(
+        new QueryCommand({
+          TableName: getLoadsTableName(),
+          IndexName: "createdBy-index",
+          KeyConditionExpression: "createdBy = :u",
+          ExpressionAttributeValues: { ":u": userId },
+        }),
+      );
+      return (out.Items as LoadRecord[] | undefined) ?? [];
+    } catch (err) {
+      throw describeError(err, "Query");
+    }
+  });
 }
 
 export async function listAllLoads(): Promise<LoadRecord[]> {
-  try {
-    const client = await getDynamoDocClient();
-    const out = await client.send(
-      new ScanCommand({ TableName: getLoadsTableName() }),
-    );
-    return (out.Items as LoadRecord[] | undefined) ?? [];
-  } catch (err) {
-    throw describeError(err, "Scan");
+  return runReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(new ScanCommand({ TableName: getLoadsTableName() }));
+      return (out.Items as LoadRecord[] | undefined) ?? [];
+    } catch (err) {
+      throw describeError(err, "Scan");
+    }
+  });
+}
+
+export async function getLoadById(loadId: string): Promise<LoadRecord | null> {
+  if (!loadId?.trim()) {
+    throw new Error("loadId is required");
   }
+  return runReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(
+        new GetCommand({
+          TableName: getLoadsTableName(),
+          Key: { loadId: loadId.trim() },
+        }),
+      );
+      const item = out.Item as LoadRecord | undefined;
+      return item ?? null;
+    } catch (err) {
+      throw describeError(err, "GetItem");
+    }
+  });
+}
+
+/** Replace an existing load item (preserves `createdAt` / `createdBy` from `record`). */
+export async function updateLoad(record: LoadRecord): Promise<LoadRecord> {
+  if (!record.loadId?.trim()) {
+    throw new Error("loadId is required");
+  }
+  return runWriteLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const now = new Date().toISOString();
+      const item: LoadRecord = {
+        ...record,
+        updatedAt: now,
+      };
+      await client.send(
+        new PutCommand({
+          TableName: getLoadsTableName(),
+          Item: item,
+          ConditionExpression: "attribute_exists(loadId)",
+        }),
+      );
+      return item;
+    } catch (err) {
+      throw describeError(err, "PutItem(update)");
+    }
+  });
 }

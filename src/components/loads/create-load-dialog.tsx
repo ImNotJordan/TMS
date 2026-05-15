@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  BarChart3,
   Building2,
   Calendar,
   CheckCircle2,
@@ -15,19 +16,25 @@ import {
   Flag,
   Gauge,
   Hash,
+  Lightbulb,
   Loader2,
   MapPin,
+  Minus,
   Navigation,
   Package,
   Paperclip,
   Phone,
+  Radar,
   Route,
   Ruler,
   Shield,
   ShieldCheck,
   Snowflake,
   Sparkles,
+  Target,
   Thermometer,
+  TrendingDown,
+  TrendingUp,
   Truck,
   User,
   Users,
@@ -44,10 +51,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { FancySelect, type FancySelectOption } from "@/components/loads/fancy-select";
-import { createLoad, type CreateLoadInput } from "@/lib/loads-store";
+import { createLoad, type CreateLoadInput, type LoadRecord } from "@/lib/loads-store";
 import { useAuth } from "@/lib/auth";
+import {
+  normalizeLoadForDriverAssignment,
+  syncTrackingSessionForLoad,
+} from "@/lib/tracking-workflow-store";
 
-type LoadDraft = {
+export type LoadDraft = {
   // Step 1: basic
   loadId: string;
   loadType: string;
@@ -204,6 +215,117 @@ const INITIAL: LoadDraft = {
   highValueFlag: false,
 };
 
+/** Map DynamoDB record → wizard draft (safe defaults for missing fields). */
+export function recordToLoadDraft(r: LoadRecord): LoadDraft {
+  return {
+    ...INITIAL,
+    loadId: r.loadId ?? "",
+    loadType: r.loadType ?? "",
+    loadStatus: r.loadStatus ?? "draft",
+    customer: r.customer ?? "",
+    broker: r.broker ?? "",
+    dispatcher: r.dispatcher ?? "",
+    equipmentType: r.equipmentType ?? "",
+    trailerType: r.trailerType ?? "",
+    loadPriority: r.loadPriority ?? "standard",
+    internalNotes: r.internalNotes ?? "",
+    pickupFacility: r.pickupFacility ?? "",
+    pickupAddress: r.pickupAddress ?? "",
+    pickupCity: r.pickupCity ?? "",
+    pickupState: r.pickupState ?? "",
+    pickupZip: r.pickupZip ?? "",
+    pickupContactName: r.pickupContactName ?? "",
+    pickupContactPhone: r.pickupContactPhone ?? "",
+    pickupContactEmail: r.pickupContactEmail ?? "",
+    pickupDate: r.pickupDate ?? "",
+    pickupAppointmentTime: r.pickupAppointmentTime ?? "",
+    pickupWindowStart: r.pickupWindowStart ?? "",
+    pickupWindowEnd: r.pickupWindowEnd ?? "",
+    pickupInstructions: r.pickupInstructions ?? "",
+    pickupReference: r.pickupReference ?? "",
+    deliveryFacility: r.deliveryFacility ?? "",
+    deliveryAddress: r.deliveryAddress ?? "",
+    deliveryCity: r.deliveryCity ?? "",
+    deliveryState: r.deliveryState ?? "",
+    deliveryZip: r.deliveryZip ?? "",
+    deliveryContactName: r.deliveryContactName ?? "",
+    deliveryContactPhone: r.deliveryContactPhone ?? "",
+    deliveryContactEmail: r.deliveryContactEmail ?? "",
+    deliveryDate: r.deliveryDate ?? "",
+    deliveryAppointmentTime: r.deliveryAppointmentTime ?? "",
+    deliveryWindowStart: r.deliveryWindowStart ?? "",
+    deliveryWindowEnd: r.deliveryWindowEnd ?? "",
+    deliveryInstructions: r.deliveryInstructions ?? "",
+    deliveryReference: r.deliveryReference ?? "",
+    commodityDescription: r.commodityDescription ?? "",
+    freightClass: r.freightClass ?? "",
+    weight: r.weight ?? "",
+    weightUnit: r.weightUnit === "kg" ? "kg" : "lbs",
+    dimensions: r.dimensions ?? "",
+    palletCount: r.palletCount ?? "",
+    pieceCount: r.pieceCount ?? "",
+    packagingType: r.packagingType ?? "",
+    temperatureRequirement: r.temperatureRequirement ?? "",
+    hazmat: Boolean(r.hazmat),
+    hazmatUn: r.hazmatUn ?? "",
+    specialHandling: Array.isArray(r.specialHandling) ? [...r.specialHandling] : [],
+    sealNumber: r.sealNumber ?? "",
+    loadValue: r.loadValue ?? "",
+    customerRate: r.customerRate ?? "",
+    carrierRate: r.carrierRate ?? "",
+    linehaulRate: r.linehaulRate ?? "",
+    fuelSurcharge: r.fuelSurcharge ?? "",
+    accessorialCharges: r.accessorialCharges ?? "",
+    detentionRate: r.detentionRate ?? "",
+    lumperFee: r.lumperFee ?? "",
+    tonuFee: r.tonuFee ?? "",
+    layoverFee: r.layoverFee ?? "",
+    paymentTerms: r.paymentTerms ?? "",
+    assignedCarrier: r.assignedCarrier ?? "",
+    assignedDriver: r.assignedDriver ?? "",
+    trackingRequired: r.trackingRequired ?? false,
+    trackingMethod: r.trackingMethod ?? "",
+    checkInRequired: r.checkInRequired ?? false,
+    checkOutRequired: r.checkOutRequired ?? false,
+    documents: Array.isArray(r.documents) ? [...r.documents] : [],
+    insuranceVerified: Boolean(r.insuranceVerified),
+    authorityVerified: Boolean(r.authorityVerified),
+    highValueFlag: Boolean(r.highValueFlag),
+  };
+}
+
+/** Merge edited draft back into an existing record (keeps PK and audit fields stable). */
+export function loadDraftToRecord(draft: LoadDraft, existing: LoadRecord): LoadRecord {
+  return {
+    ...existing,
+    ...draft,
+    loadId: existing.loadId,
+    createdAt: existing.createdAt,
+    createdBy: existing.createdBy,
+  };
+}
+
+export function computeLoadWizardStepErrors(draft: LoadDraft): Record<number, string[]> {
+  const errs: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+  if (!draft.customer) errs[1].push("customer");
+  if (!draft.equipmentType) errs[1].push("equipmentType");
+  if (!draft.loadStatus) errs[1].push("loadStatus");
+  if (!draft.pickupAddress) errs[2].push("pickupAddress");
+  if (!draft.pickupDate) errs[2].push("pickupDate");
+  if (!draft.pickupAppointmentTime && !(draft.pickupWindowStart && draft.pickupWindowEnd))
+    errs[2].push("pickupTime");
+  if (!draft.deliveryAddress) errs[2].push("deliveryAddress");
+  if (!draft.deliveryDate) errs[2].push("deliveryDate");
+  if (!draft.deliveryAppointmentTime && !(draft.deliveryWindowStart && draft.deliveryWindowEnd))
+    errs[2].push("deliveryTime");
+  if (!draft.commodityDescription) errs[3].push("commodityDescription");
+  if (!draft.weight) errs[3].push("weight");
+  if (!draft.customerRate) errs[4].push("customerRate");
+  if (!draft.carrierRate) errs[4].push("carrierRate");
+  if (!draft.assignedCarrier && !draft.assignedDriver) errs[5].push("assignment");
+  return errs;
+}
+
 const CUSTOMER_OPTIONS: FancySelectOption[] = [
   {
     value: "acme-foods",
@@ -298,6 +420,18 @@ const LOAD_TYPE_OPTIONS: FancySelectOption[] = [
 
 const LOAD_STATUS_OPTIONS: FancySelectOption[] = [
   { value: "draft", label: "Draft", description: "Not yet booked or tendered", icon: FileText },
+  {
+    value: "driver-assigned",
+    label: "Driver Assigned",
+    description: "Driver has been assigned and notified",
+    icon: User,
+  },
+  {
+    value: "active",
+    label: "Active",
+    description: "Live load · in planning or execution",
+    icon: Activity,
+  },
   {
     value: "tendered",
     label: "Tendered",
@@ -689,7 +823,7 @@ const DOCUMENT_OPTIONS = [
   { id: "insurance", label: "Insurance Certificate", icon: ShieldCheck },
 ] as const;
 
-const STEPS = [
+export const LOAD_FORM_STEPS = [
   { id: 1, label: "Basic Info", description: "Customer & equipment", icon: Sparkles },
   { id: 2, label: "Pickup & Delivery", description: "Stops, times, contacts", icon: MapPin },
   { id: 3, label: "Freight Details", description: "Commodity, weight, hazmat", icon: Package },
@@ -707,12 +841,30 @@ function generateLoadId() {
 export function CreateLoadDialog({
   trigger,
   onCreated,
+  open: controlledOpen,
+  onOpenChange,
 }: {
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
   onCreated?: (loadId: string) => void;
+  /** Controlled mode — omit `trigger` and toggle from parent (e.g. top nav menu). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { user } = useAuth();
-  const [open, setOpen] = React.useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (isControlled) {
+        onOpenChange?.(next);
+      } else {
+        setUncontrolledOpen(next);
+      }
+    },
+    [isControlled, onOpenChange],
+  );
   const [step, setStep] = React.useState(1);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -740,26 +892,7 @@ export function CreateLoadDialog({
     }
   }, [open]);
 
-  const stepErrors = React.useMemo(() => {
-    const errs: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
-    if (!draft.customer) errs[1].push("customer");
-    if (!draft.equipmentType) errs[1].push("equipmentType");
-    if (!draft.loadStatus) errs[1].push("loadStatus");
-    if (!draft.pickupAddress) errs[2].push("pickupAddress");
-    if (!draft.pickupDate) errs[2].push("pickupDate");
-    if (!draft.pickupAppointmentTime && !(draft.pickupWindowStart && draft.pickupWindowEnd))
-      errs[2].push("pickupTime");
-    if (!draft.deliveryAddress) errs[2].push("deliveryAddress");
-    if (!draft.deliveryDate) errs[2].push("deliveryDate");
-    if (!draft.deliveryAppointmentTime && !(draft.deliveryWindowStart && draft.deliveryWindowEnd))
-      errs[2].push("deliveryTime");
-    if (!draft.commodityDescription) errs[3].push("commodityDescription");
-    if (!draft.weight) errs[3].push("weight");
-    if (!draft.customerRate) errs[4].push("customerRate");
-    if (!draft.carrierRate) errs[4].push("carrierRate");
-    if (!draft.assignedCarrier && !draft.assignedDriver) errs[5].push("assignment");
-    return errs;
-  }, [draft]);
+  const stepErrors = React.useMemo(() => computeLoadWizardStepErrors(draft), [draft]);
 
   const canAdvance = stepErrors[step].length === 0;
 
@@ -777,11 +910,12 @@ export function CreateLoadDialog({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const payload: CreateLoadInput = {
+      const payload: CreateLoadInput = normalizeLoadForDriverAssignment({
         ...draft,
         createdBy: user?.userId,
-      };
-      await createLoad(payload);
+      });
+      const saved = await createLoad(payload);
+      syncTrackingSessionForLoad(saved, user?.name ?? "Dispatcher");
       onCreated?.(draft.loadId);
       setOpen(false);
     } catch (err) {
@@ -796,8 +930,9 @@ export function CreateLoadDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
+        showCloseButton={false}
         className="!max-w-6xl w-[96vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl"
         onInteractOutside={(e) => e.preventDefault()}
       >
@@ -830,7 +965,7 @@ export function CreateLoadDialog({
               <div className="mt-2 text-xs text-sidebar-foreground/70">Step {step} of 7</div>
             </div>
             <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
-              {STEPS.map((s) => {
+              {LOAD_FORM_STEPS.map((s) => {
                 const Icon = s.icon;
                 const isActive = step === s.id;
                 const isComplete = step > s.id && (stepErrors[s.id]?.length ?? 0) === 0;
@@ -892,10 +1027,10 @@ export function CreateLoadDialog({
                     Step {step}
                   </span>
                   <span>·</span>
-                  <span className="truncate">{STEPS[step - 1].description}</span>
+                  <span className="truncate">{LOAD_FORM_STEPS[step - 1].description}</span>
                 </div>
                 <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-foreground">
-                  {STEPS[step - 1].label}
+                  {LOAD_FORM_STEPS[step - 1].label}
                 </h2>
               </div>
               <button
@@ -1126,16 +1261,18 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
 
 // ---------- Step 1: Basic ----------
 
-function StepBasic({
+export function StepBasic({
   draft,
   update,
   touched,
   errors,
+  immutableLoadId,
 }: {
   draft: LoadDraft;
   update: <K extends keyof LoadDraft>(k: K, v: LoadDraft[K]) => void;
   touched: boolean;
   errors: string[];
+  immutableLoadId?: boolean;
 }) {
   const isErr = (k: string) => touched && errors.includes(k);
   return (
@@ -1147,12 +1284,19 @@ function StepBasic({
           icon={Hash}
         />
         <GridSection cols={3}>
-          <FieldShell label="Load ID" hint="Auto-generated" htmlFor="loadId">
+          <FieldShell
+            label="Load ID"
+            hint={immutableLoadId ? "Primary key · cannot change" : "Auto-generated"}
+            htmlFor="loadId"
+          >
             <Input
               id="loadId"
               value={draft.loadId}
               onChange={(e) => update("loadId", e.target.value)}
               placeholder="L-0000"
+              readOnly={immutableLoadId}
+              disabled={immutableLoadId}
+              className={immutableLoadId ? "cursor-not-allowed bg-muted/60" : undefined}
             />
           </FieldShell>
           <FieldShell label="Load Type">
@@ -1310,7 +1454,7 @@ function StopBlock({
             accent === "primary" ? "bg-primary/10 text-primary" : "bg-info/12 text-info",
           )}
         >
-          Stop 1
+          {prefix === "pickup" ? "Stop 1" : "Stop 2"}
         </span>
       </div>
 
@@ -1462,7 +1606,7 @@ function StopBlock({
   );
 }
 
-function StepStops({
+export function StepStops({
   draft,
   update,
   touched,
@@ -1474,30 +1618,34 @@ function StepStops({
   errors: string[];
 }) {
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <StopBlock
-        prefix="pickup"
-        draft={draft}
-        update={update}
-        touched={touched}
-        errors={errors}
-        accent="primary"
-      />
-      <StopBlock
-        prefix="delivery"
-        draft={draft}
-        update={update}
-        touched={touched}
-        errors={errors}
-        accent="info"
-      />
+    <div className="mx-auto grid w-full max-w-4xl grid-cols-1 gap-6 lg:max-w-none lg:grid-cols-2 lg:items-start lg:gap-5">
+      <div className="min-w-0">
+        <StopBlock
+          prefix="pickup"
+          draft={draft}
+          update={update}
+          touched={touched}
+          errors={errors}
+          accent="primary"
+        />
+      </div>
+      <div className="min-w-0">
+        <StopBlock
+          prefix="delivery"
+          draft={draft}
+          update={update}
+          touched={touched}
+          errors={errors}
+          accent="info"
+        />
+      </div>
     </div>
   );
 }
 
 // ---------- Step 3: Freight ----------
 
-function StepFreight({
+export function StepFreight({
   draft,
   update,
   touched,
@@ -1746,7 +1894,7 @@ function toNumber(v: string) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function StepPricing({
+export function StepPricing({
   draft,
   update,
   touched,
@@ -1919,7 +2067,7 @@ function StepPricing({
 
 // ---------- Step 5: Assignment ----------
 
-function StepAssignment({
+export function StepAssignment({
   draft,
   update,
   touched,
@@ -2040,7 +2188,7 @@ function ToggleTile({
 
 // ---------- Step 6: Docs & Tracking ----------
 
-function StepDocsTracking({
+export function StepDocsTracking({
   draft,
   update,
 }: {
@@ -2182,14 +2330,16 @@ function lookup(opts: FancySelectOption[], v: string) {
   return opts.find((o) => o.value === v)?.label ?? v;
 }
 
-function StepReview({
+export function StepReview({
   draft,
   stepErrors,
   onJump,
+  variant = "create",
 }: {
   draft: LoadDraft;
   stepErrors: Record<number, string[]>;
   onJump: (s: number) => void;
+  variant?: "create" | "edit";
 }) {
   const customerRate = toNumber(draft.customerRate);
   const carrierRate = toNumber(draft.carrierRate);
@@ -2203,7 +2353,7 @@ function StepReview({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-              Ready to create
+              {variant === "edit" ? "Review & save" : "Ready to create"}
             </div>
             <h3 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
               {draft.loadId} · {lookup(CUSTOMER_OPTIONS, draft.customer) || "New load"}
@@ -2244,7 +2394,8 @@ function StepReview({
           <div className="flex-1">
             <div className="font-semibold text-destructive">Missing required information</div>
             <div className="mt-0.5 text-xs text-destructive/90">
-              The following steps still need attention before this load can be created.
+              The following steps still need attention before you can{" "}
+              {variant === "edit" ? "save changes to DynamoDB." : "create this load."}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {blocking.map((s) => (
@@ -2254,7 +2405,7 @@ function StepReview({
                   onClick={() => onJump(s)}
                   className="rounded-md border border-destructive/30 bg-card px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
                 >
-                  Step {s}: {STEPS[s - 1].label}
+                  Step {s}: {LOAD_FORM_STEPS[s - 1].label}
                 </button>
               ))}
             </div>
@@ -2357,6 +2508,752 @@ function StepReview({
           </div>
         </Card>
       </div>
+
+      <DatMarketPanel draft={draft} customerRate={customerRate} carrierRate={carrierRate} />
     </div>
+  );
+}
+
+// ---------- DAT Market Suggestions ----------
+
+const EQUIPMENT_RPM_BASE: Record<string, number> = {
+  "dry-van": 2.32,
+  reefer: 2.78,
+  flatbed: 2.69,
+  "step-deck": 2.84,
+  lowboy: 3.45,
+  tanker: 3.12,
+  "power-only": 2.05,
+  intermodal: 2.05,
+  drayage: 4.1,
+  expedite: 3.6,
+};
+
+const STATE_COORDS: Record<string, [number, number]> = {
+  AL: [32.7, -86.7],
+  AK: [64, -149],
+  AZ: [34.2, -111.7],
+  AR: [34.7, -92.4],
+  CA: [37, -119.5],
+  CO: [38.9, -105.5],
+  CT: [41.6, -72.7],
+  DE: [38.9, -75.5],
+  FL: [27.7, -81.5],
+  GA: [33, -83.6],
+  HI: [20.7, -157.5],
+  ID: [44, -114.5],
+  IL: [40, -89.2],
+  IN: [39.8, -86.3],
+  IA: [42, -93.5],
+  KS: [38.5, -98.4],
+  KY: [37.5, -85.3],
+  LA: [31, -91.8],
+  ME: [45.4, -69.4],
+  MD: [39, -76.7],
+  MA: [42.3, -71.6],
+  MI: [44.3, -85.6],
+  MN: [46.3, -94.3],
+  MS: [32.7, -89.7],
+  MO: [38.5, -92.5],
+  MT: [46.9, -110],
+  NE: [41.5, -99.8],
+  NV: [39.3, -116.6],
+  NH: [43.7, -71.6],
+  NJ: [40.2, -74.5],
+  NM: [34.4, -106.1],
+  NY: [42.9, -75.5],
+  NC: [35.5, -79.4],
+  ND: [47.5, -100.3],
+  OH: [40.3, -82.8],
+  OK: [35.5, -97.5],
+  OR: [44, -120.5],
+  PA: [40.9, -77.8],
+  RI: [41.7, -71.5],
+  SC: [33.9, -80.9],
+  SD: [44.4, -100.2],
+  TN: [35.9, -86.4],
+  TX: [31.5, -99.3],
+  UT: [39.3, -111.7],
+  VT: [44.1, -72.7],
+  VA: [37.5, -78.9],
+  WA: [47.4, -120.4],
+  WV: [38.6, -80.6],
+  WI: [44.6, -89.6],
+  WY: [42.9, -107.3],
+};
+
+function hashString(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h >>> 0);
+}
+
+function seedRng(seed: number) {
+  let s = (seed || 1) >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
+
+function estimateMiles(originState: string, destState: string, fallback: number) {
+  const a = STATE_COORDS[originState];
+  const b = STATE_COORDS[destState];
+  if (!a || !b) return fallback;
+  const dy = (a[0] - b[0]) * 69;
+  const dx = (a[1] - b[1]) * 53;
+  const direct = Math.sqrt(dx * dx + dy * dy);
+  return Math.max(80, Math.round(direct * 1.18));
+}
+
+type DatInsights = {
+  miles: number;
+  capacityScore: number;
+  trucksNearOrigin: number;
+  trl: number;
+  trend: number[];
+  trendDelta: number;
+  lowRate: number;
+  avgRate: number;
+  highRate: number;
+  lowRpm: number;
+  avgRpm: number;
+  highRpm: number;
+  suggestedCustomerRate: number;
+  suggestedCarrierRate: number;
+  estMargin: number;
+  estMarginPct: number;
+  diffVsAvg: number;
+  diffPct: number;
+  marketPosition: "below" | "at" | "above";
+  capacityBadge: "loose" | "moderate" | "tight";
+};
+
+function computeDatInsights(draft: LoadDraft, customerRate: number): DatInsights {
+  const seedKey = `${draft.pickupState}|${draft.pickupCity}|${draft.deliveryState}|${draft.deliveryCity}|${draft.equipmentType}|${draft.pickupDate}`;
+  const seed = hashString(seedKey || "default-lane");
+  const rng = seedRng(seed);
+
+  const fallbackMiles = 420 + Math.floor(rng() * 1100);
+  const miles = estimateMiles(draft.pickupState, draft.deliveryState, fallbackMiles);
+
+  const baseRpm = EQUIPMENT_RPM_BASE[draft.equipmentType] ?? 2.35;
+  const month = draft.pickupDate ? new Date(draft.pickupDate).getMonth() : new Date().getMonth();
+  const seasonalMap = [-0.05, -0.04, 0.02, 0.05, 0.07, 0.06, 0.04, 0.02, 0.0, -0.02, 0.06, 0.09];
+  const seasonalAdj = seasonalMap[month] ?? 0;
+
+  const weightNum = parseFloat((draft.weight || "").replace(/[^0-9.]/g, ""));
+  const weightAdj =
+    Number.isFinite(weightNum) && weightNum > 0
+      ? Math.min(0.08, Math.max(-0.04, (weightNum / 2000 - 20) * 0.005))
+      : 0;
+  const hazmatAdj = draft.hazmat ? 0.06 : 0;
+  const reeferAdj = draft.equipmentType === "reefer" ? 0.04 : 0;
+
+  const noise = (rng() - 0.5) * 0.16;
+  const avgRpm = Math.max(
+    1.05,
+    baseRpm * (1 + seasonalAdj + weightAdj + hazmatAdj + reeferAdj + noise),
+  );
+  const lowRpm = avgRpm * (0.82 + rng() * 0.05);
+  const highRpm = avgRpm * (1.13 + rng() * 0.06);
+
+  const lowRate = Math.round(lowRpm * miles);
+  const avgRate = Math.round(avgRpm * miles);
+  const highRate = Math.round(highRpm * miles);
+
+  const capacitySwing = (rng() - 0.5) * 60;
+  const seasonalCapacity = seasonalAdj < 0 ? 12 : seasonalAdj > 0.05 ? -14 : 0;
+  const capacityScore = Math.round(
+    Math.max(8, Math.min(95, 50 + capacitySwing + seasonalCapacity)),
+  );
+
+  const trucksNearOrigin = Math.max(8, Math.round(35 + capacityScore * 6.2 + (rng() - 0.5) * 90));
+  const trl = Number(((capacityScore / 50) * (0.7 + rng() * 0.6)).toFixed(2));
+
+  const trend: number[] = [];
+  let v = Math.max(15, Math.min(90, capacityScore - 14 + rng() * 14));
+  for (let i = 0; i < 6; i++) {
+    v += (rng() - 0.5) * 16;
+    v = Math.max(10, Math.min(95, v));
+    trend.push(Math.round(v));
+  }
+  trend.push(capacityScore);
+  const trendDelta = trend[6] - trend[0];
+
+  const tightnessPremium = capacityScore < 35 ? 0.05 : capacityScore < 50 ? 0.02 : 0;
+  const loosenessDiscount = capacityScore > 70 ? -0.03 : capacityScore > 55 ? -0.01 : 0;
+  const suggestedCustomerRate = Math.round(avgRate * (1.025 + tightnessPremium));
+  const suggestedCarrierRate = Math.round(avgRate * (0.86 + loosenessDiscount));
+  const estMargin = suggestedCustomerRate - suggestedCarrierRate;
+  const estMarginPct = suggestedCustomerRate ? (estMargin / suggestedCustomerRate) * 100 : 0;
+
+  const diffVsAvg = customerRate ? customerRate - avgRate : 0;
+  const diffPct = avgRate && customerRate ? (diffVsAvg / avgRate) * 100 : 0;
+  const marketPosition: "below" | "at" | "above" =
+    !customerRate || Math.abs(diffPct) < 3 ? "at" : diffPct > 0 ? "above" : "below";
+
+  const capacityBadge: "loose" | "moderate" | "tight" =
+    capacityScore >= 65 ? "loose" : capacityScore >= 35 ? "moderate" : "tight";
+
+  return {
+    miles,
+    capacityScore,
+    trucksNearOrigin,
+    trl,
+    trend,
+    trendDelta,
+    lowRate,
+    avgRate,
+    highRate,
+    lowRpm,
+    avgRpm,
+    highRpm,
+    suggestedCustomerRate,
+    suggestedCarrierRate,
+    estMargin,
+    estMarginPct,
+    diffVsAvg,
+    diffPct,
+    marketPosition,
+    capacityBadge,
+  };
+}
+
+function buildRecommendation(i: DatInsights, customerRate: number, carrierRate: number): string {
+  const haveCustomer = customerRate > 0;
+  const haveCarrier = carrierRate > 0;
+  const carrierVsSuggested =
+    haveCarrier && i.suggestedCarrierRate
+      ? ((carrierRate - i.suggestedCarrierRate) / i.suggestedCarrierRate) * 100
+      : 0;
+
+  if (!haveCustomer) {
+    if (i.capacityBadge === "tight") {
+      return `Capacity is tight on this lane — only ${i.trucksNearOrigin.toLocaleString()} trucks near origin. Quote toward the high band ($${i.highRate.toLocaleString()}) to secure coverage fast.`;
+    }
+    if (i.capacityBadge === "loose") {
+      return `Capacity is loose with a ${i.trl.toFixed(2)} truck-to-load ratio. You can win competitively at $${i.suggestedCustomerRate.toLocaleString()} and still keep ${i.estMarginPct.toFixed(1)}% margin.`;
+    }
+    return `Lane average is $${i.avgRate.toLocaleString()} ($${i.avgRpm.toFixed(2)}/mi). Suggested quote: $${i.suggestedCustomerRate.toLocaleString()} for a healthy ${i.estMarginPct.toFixed(1)}% margin.`;
+  }
+
+  if (i.marketPosition === "below") {
+    if (i.capacityBadge === "tight") {
+      return `You are ${Math.abs(i.diffPct).toFixed(1)}% below the 7-day DAT average in a tight market. Raise to at least $${i.avgRate.toLocaleString()} or expect coverage problems.`;
+    }
+    return `You are ${Math.abs(i.diffPct).toFixed(1)}% below DAT average ($${i.avgRate.toLocaleString()}). Consider a +$${Math.abs(i.diffVsAvg).toLocaleString()} adjustment to capture margin without losing the deal.`;
+  }
+
+  if (i.marketPosition === "above") {
+    if (i.capacityBadge === "loose") {
+      return `Premium pricing — ${i.diffPct.toFixed(1)}% above DAT average and capacity is loose. Strong revenue play; expect easy carrier coverage.`;
+    }
+    return `Priced ${i.diffPct.toFixed(1)}% above the 7-day DAT average. Margin looks excellent — be ready to defend the rate if shipper benchmarks.`;
+  }
+
+  if (haveCarrier && carrierVsSuggested > 6) {
+    return `Customer rate is at market, but carrier rate is ${carrierVsSuggested.toFixed(1)}% above the suggested $${i.suggestedCarrierRate.toLocaleString()}. Margin is being squeezed — re-negotiate or post for a backup carrier.`;
+  }
+
+  if (i.capacityBadge === "tight") {
+    return `At-market pricing with tight capacity. Post immediately and consider a 3-5% premium ($${Math.round(i.avgRate * 0.04).toLocaleString()}) to lock coverage.`;
+  }
+  return `Priced at the 7-day DAT lane average. Balanced market conditions — proceed with current quote and standard posting strategy.`;
+}
+
+function MarketBadge({ position }: { position: "below" | "at" | "above" }) {
+  const map = {
+    below: {
+      label: "Below Market",
+      cls: "bg-info/15 text-info border-info/30",
+      Icon: TrendingDown,
+    },
+    at: {
+      label: "At Market",
+      cls: "bg-muted text-foreground border-border",
+      Icon: Minus,
+    },
+    above: {
+      label: "Above Market",
+      cls: "bg-success/15 text-success border-success/30",
+      Icon: TrendingUp,
+    },
+  } as const;
+  const { label, cls, Icon } = map[position];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+        cls,
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </span>
+  );
+}
+
+function CapacityBadge({ level }: { level: "loose" | "moderate" | "tight" }) {
+  const map = {
+    loose: {
+      label: "Loose Capacity",
+      cls: "bg-success/15 text-success border-success/30",
+    },
+    moderate: {
+      label: "Moderate Capacity",
+      cls: "bg-warning/20 text-warning-foreground border-warning/40",
+    },
+    tight: {
+      label: "Tight Capacity",
+      cls: "bg-destructive/15 text-destructive border-destructive/30",
+    },
+  } as const;
+  const { label, cls } = map[level];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+        cls,
+      )}
+    >
+      <Radar className="h-3 w-3" />
+      {label}
+    </span>
+  );
+}
+
+function Sparkline({
+  data,
+  color = "var(--color-primary)",
+  width = 160,
+  height = 44,
+}: {
+  data: number[];
+  color?: string;
+  width?: number;
+  height?: number;
+}) {
+  const gradId = React.useId();
+  if (data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = Math.max(1, max - min);
+  const stepX = width / (data.length - 1);
+  const points = data.map((v, i) => {
+    const x = i * stepX;
+    const y = height - ((v - min) / range) * (height - 6) - 3;
+    return [x, y] as const;
+  });
+  const path = points
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
+    .join(" ");
+  const areaPath = `${path} L${width},${height} L0,${height} Z`;
+  const last = points[points.length - 1];
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <defs>
+        <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <path
+        d={path}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={last[0]} cy={last[1]} r={2.75} fill={color} />
+      <circle cx={last[0]} cy={last[1]} r={5} fill={color} fillOpacity={0.2} />
+    </svg>
+  );
+}
+
+function RateBand({
+  low,
+  avg,
+  high,
+  user,
+}: {
+  low: number;
+  avg: number;
+  high: number;
+  user: number;
+}) {
+  const range = Math.max(1, high - low);
+  const avgPos = ((avg - low) / range) * 100;
+  const userPos = user > 0 ? Math.max(-6, Math.min(106, ((user - low) / range) * 100)) : null;
+  return (
+    <div className="space-y-3">
+      <div className="relative h-9 rounded-full bg-gradient-to-r from-info/30 via-primary/30 to-success/30 ring-1 ring-inset ring-border/60">
+        <div
+          className="absolute top-0 bottom-0 w-[2px] -translate-x-1/2 bg-foreground/60"
+          style={{ left: `${avgPos}%` }}
+          title={`DAT Avg $${avg.toLocaleString()}`}
+        >
+          <div className="absolute -top-1.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rotate-45 bg-foreground/60" />
+        </div>
+        {userPos != null && (
+          <div
+            className="absolute -top-1 -bottom-1 z-10 w-3 -translate-x-1/2 rounded-full border-2 border-card bg-primary shadow-md shadow-primary/40"
+            style={{ left: `${userPos}%` }}
+            title={`Your rate $${user.toLocaleString()}`}
+          />
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-lg border border-border/70 bg-card px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-info">Low</div>
+          <div className="text-sm font-semibold tabular-nums text-foreground">
+            ${low.toLocaleString()}
+          </div>
+        </div>
+        <div className="rounded-lg border border-primary/40 bg-primary/5 px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Avg</div>
+          <div className="text-sm font-semibold tabular-nums text-foreground">
+            ${avg.toLocaleString()}
+          </div>
+        </div>
+        <div className="rounded-lg border border-border/70 bg-card px-2 py-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-success">
+            High
+          </div>
+          <div className="text-sm font-semibold tabular-nums text-foreground">
+            ${high.toLocaleString()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatBlock({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone = "default",
+}: {
+  label: string;
+  value: React.ReactNode;
+  hint?: React.ReactNode;
+  icon?: LucideIcon;
+  tone?: "default" | "success" | "warning" | "destructive" | "info" | "primary";
+}) {
+  const toneCls = {
+    default: "bg-muted text-foreground",
+    success: "bg-success/15 text-success",
+    warning: "bg-warning/20 text-warning-foreground",
+    destructive: "bg-destructive/15 text-destructive",
+    info: "bg-info/15 text-info",
+    primary: "bg-primary/12 text-primary",
+  }[tone];
+  return (
+    <div className="rounded-lg border border-border/70 bg-card/80 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        {Icon && (
+          <span className={cn("flex h-6 w-6 items-center justify-center rounded-md", toneCls)}>
+            <Icon className="h-3.5 w-3.5" />
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5 text-base font-semibold tabular-nums text-foreground">{value}</div>
+      {hint && <div className="mt-0.5 text-[11px] text-muted-foreground">{hint}</div>}
+    </div>
+  );
+}
+
+function DatMarketPanel({
+  draft,
+  customerRate,
+  carrierRate,
+}: {
+  draft: LoadDraft;
+  customerRate: number;
+  carrierRate: number;
+}) {
+  const insights = React.useMemo(
+    () => computeDatInsights(draft, customerRate),
+    [
+      draft.pickupCity,
+      draft.pickupState,
+      draft.deliveryCity,
+      draft.deliveryState,
+      draft.equipmentType,
+      draft.pickupDate,
+      draft.weight,
+      draft.hazmat,
+      customerRate,
+    ],
+  );
+
+  const recommendation = React.useMemo(
+    () => buildRecommendation(insights, customerRate, carrierRate),
+    [insights, customerRate, carrierRate],
+  );
+
+  const equipmentLabel = lookup(EQUIPMENT_OPTIONS, draft.equipmentType) || "Equipment TBD";
+  const lane = `${draft.pickupCity || draft.pickupState || "Origin"} → ${draft.deliveryCity || draft.deliveryState || "Destination"}`;
+
+  const trendUp = insights.trendDelta > 4;
+  const trendDown = insights.trendDelta < -4;
+  const TrendIcon = trendUp ? TrendingUp : trendDown ? TrendingDown : Minus;
+  const trendColor = trendUp
+    ? "text-success"
+    : trendDown
+      ? "text-destructive"
+      : "text-muted-foreground";
+  const trendLabel = trendUp
+    ? `Loosening (+${insights.trendDelta})`
+    : trendDown
+      ? `Tightening (${insights.trendDelta})`
+      : "Steady";
+
+  const diffSign = insights.diffVsAvg > 0 ? "+" : insights.diffVsAvg < 0 ? "−" : "";
+  const diffAbs = Math.abs(insights.diffVsAvg);
+  const diffPctAbs = Math.abs(insights.diffPct);
+
+  return (
+    <Card className="border-primary/30 bg-gradient-to-br from-primary/5 via-card to-info/8">
+      {/* Header */}
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-info text-primary-foreground shadow-sm shadow-primary/30">
+            <BarChart3 className="h-5 w-5" />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                DAT Market Suggestions
+              </h3>
+              <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                Last 7 days
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {lane} · {equipmentLabel} · {insights.miles.toLocaleString()} mi
+              {draft.pickupDate && ` · pickup ${draft.pickupDate}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <MarketBadge position={insights.marketPosition} />
+          <CapacityBadge level={insights.capacityBadge} />
+        </div>
+      </div>
+
+      {/* Top stats */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatBlock
+          label="DAT Capacity Score"
+          value={`${insights.capacityScore}/100`}
+          hint={
+            insights.capacityBadge === "tight"
+              ? "Low truck availability"
+              : insights.capacityBadge === "loose"
+                ? "High truck availability"
+                : "Balanced supply"
+          }
+          icon={Radar}
+          tone={
+            insights.capacityBadge === "tight"
+              ? "destructive"
+              : insights.capacityBadge === "loose"
+                ? "success"
+                : "warning"
+          }
+        />
+        <StatBlock
+          label="Trucks Near Origin"
+          value={insights.trucksNearOrigin.toLocaleString()}
+          hint="Within 100 mi · last 24h"
+          icon={Truck}
+          tone="primary"
+        />
+        <StatBlock
+          label="Truck-to-Load Ratio"
+          value={insights.trl.toFixed(2)}
+          hint={
+            insights.trl >= 1.2
+              ? "Supply > demand"
+              : insights.trl >= 0.8
+                ? "Balanced"
+                : "Demand > supply"
+          }
+          icon={Gauge}
+          tone="info"
+        />
+        <div className="rounded-lg border border-border/70 bg-card/80 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Capacity Trend
+            </span>
+            <span
+              className={cn("inline-flex items-center gap-1 text-[11px] font-semibold", trendColor)}
+            >
+              <TrendIcon className="h-3 w-3" />
+              {trendLabel}
+            </span>
+          </div>
+          <div className="mt-1 flex items-end justify-between">
+            <div className="text-[11px] text-muted-foreground">7-day capacity</div>
+            <Sparkline
+              data={insights.trend}
+              color={
+                trendUp
+                  ? "var(--color-success)"
+                  : trendDown
+                    ? "var(--color-destructive)"
+                    : "var(--color-primary)"
+              }
+              width={140}
+              height={36}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Rate band */}
+      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
+        <div className="rounded-xl border border-border/70 bg-card/80 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold tracking-tight text-foreground">
+                7-Day DAT Rate Band
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Lane rate distribution · {insights.miles.toLocaleString()} mi
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Rate / Mile
+              </div>
+              <div className="text-sm font-semibold tabular-nums text-foreground">
+                ${insights.avgRpm.toFixed(2)}
+                <span className="ml-1 text-[10px] font-medium text-muted-foreground">
+                  (${insights.lowRpm.toFixed(2)}–${insights.highRpm.toFixed(2)})
+                </span>
+              </div>
+            </div>
+          </div>
+          <RateBand
+            low={insights.lowRate}
+            avg={insights.avgRate}
+            high={insights.highRate}
+            user={customerRate}
+          />
+          {customerRate > 0 && (
+            <div className="mt-3 flex items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <Target className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs text-muted-foreground">Your customer rate vs DAT avg</span>
+              </div>
+              <span
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  insights.marketPosition === "above"
+                    ? "text-success"
+                    : insights.marketPosition === "below"
+                      ? "text-destructive"
+                      : "text-foreground",
+                )}
+              >
+                {diffSign}${diffAbs.toLocaleString()}{" "}
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  ({diffSign}
+                  {diffPctAbs.toFixed(1)}%)
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Suggested rates */}
+        <div className="rounded-xl border border-border/70 bg-card/80 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold tracking-tight text-foreground">
+                Suggested Rates
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Optimized for current capacity
+              </div>
+            </div>
+            <span className="rounded-md bg-primary/12 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              AI
+            </span>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-lg border border-info/30 bg-info/5 px-3 py-2">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-info">
+                  Carrier
+                </div>
+                <div className="text-xs text-muted-foreground">Recommended buy</div>
+              </div>
+              <div className="text-base font-semibold tabular-nums text-foreground">
+                ${insights.suggestedCarrierRate.toLocaleString()}
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/8 px-3 py-2">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                  Customer
+                </div>
+                <div className="text-xs text-muted-foreground">Recommended sell</div>
+              </div>
+              <div className="text-base font-semibold tabular-nums text-foreground">
+                ${insights.suggestedCustomerRate.toLocaleString()}
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border border-success/30 bg-success/8 px-3 py-2">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-success">
+                  Est. Gross Margin
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {insights.estMarginPct.toFixed(1)}% on suggested
+                </div>
+              </div>
+              <div className="text-base font-semibold tabular-nums text-success">
+                ${insights.estMargin.toLocaleString()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recommendation banner */}
+      <div className="mt-5 flex items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/8 via-card to-info/8 p-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm shadow-primary/30">
+          <Lightbulb className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="text-xs font-semibold tracking-tight text-foreground">
+              Smart recommendation
+            </div>
+            <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+              DAT-informed
+            </span>
+          </div>
+          <p className="mt-1 text-sm leading-relaxed text-foreground/90">{recommendation}</p>
+          <div className="mt-2 text-[11px] text-muted-foreground">
+            Adjust pricing or posting strategy on prior steps before clicking Create Load.
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }

@@ -49,10 +49,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { FancySelect, type FancySelectOption } from "@/components/loads/fancy-select";
-import { createTruck, type CreateTruckInput } from "@/lib/trucks-store";
+import { createTruck, type CreateTruckInput, type TruckRecord } from "@/lib/trucks-store";
 import { useAuth } from "@/lib/auth";
 
-type TruckDraft = {
+export type TruckDraft = {
   // Step 1: Availability
   truckBoardId: string;
   postingStatus: string;
@@ -494,7 +494,7 @@ const DOCUMENT_OPTIONS = [
   { id: "other", label: "Other Attachments", icon: Paperclip },
 ] as const;
 
-const STEPS = [
+export const TRUCK_FORM_STEPS = [
   { id: 1, label: "Availability", description: "When the truck is open", icon: Calendar },
   { id: 2, label: "Current Location", description: "Where the truck is now", icon: MapPin },
   { id: 3, label: "Equipment Details", description: "Truck, trailer, capacity", icon: Truck },
@@ -504,6 +504,57 @@ const STEPS = [
   { id: 7, label: "Compliance & Docs", description: "Insurance & authority", icon: ShieldCheck },
   { id: 8, label: "Review & Post", description: "Confirm and publish", icon: CheckCircle2 },
 ] as const;
+
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined && v !== null),
+  ) as Partial<T>;
+}
+
+/** Map DynamoDB record → wizard draft (safe defaults for missing fields). */
+export function recordToTruckDraft(r: TruckRecord): TruckDraft {
+  return {
+    ...INITIAL,
+    ...stripUndefined(r as unknown as Record<string, unknown>),
+    truckBoardId: r.truckBoardId,
+    preferredStates: Array.isArray(r.preferredStates) ? [...r.preferredStates] : INITIAL.preferredStates,
+    excludedStates: Array.isArray(r.excludedStates) ? [...r.excludedStates] : INITIAL.excludedStates,
+    documents: Array.isArray(r.documents) ? [...r.documents] : INITIAL.documents,
+  };
+}
+
+export function truckDraftToRecord(draft: TruckDraft, existing: TruckRecord): TruckRecord {
+  return {
+    ...existing,
+    ...draft,
+    truckBoardId: existing.truckBoardId,
+    createdAt: existing.createdAt,
+    createdBy: existing.createdBy,
+  };
+}
+
+export function computeTruckWizardStepErrors(draft: TruckDraft): Record<number, string[]> {
+  const errs: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [] };
+  if (!draft.postingStatus) errs[1].push("postingStatus");
+  if (!draft.availableNow && !draft.availableDate) errs[1].push("availableDate");
+  if (!draft.availableNow && !draft.availableTime) errs[1].push("availableTime");
+  if (!draft.currentCity) errs[2].push("currentCity");
+  if (!draft.currentState) errs[2].push("currentState");
+  if (!draft.equipmentType) errs[3].push("equipmentType");
+  if (!draft.maxWeightCapacity) errs[3].push("maxWeightCapacity");
+  const hasDestination =
+    draft.preferredDestinationCity ||
+    draft.preferredDestinationState ||
+    draft.preferredDestinationRegion ||
+    draft.preferredLanes ||
+    draft.preferredStates.length > 0;
+  if (!hasDestination) errs[4].push("destination");
+  if (!draft.carrierName) errs[5].push("carrierName");
+  if (!draft.carrierMcNumber && !draft.carrierDotNumber) errs[5].push("carrierAuthority");
+  if (!draft.contactName) errs[5].push("contactName");
+  if (!draft.contactPhone) errs[5].push("contactPhone");
+  return errs;
+}
 
 function generateTruckBoardId() {
   const n = Math.floor(4100 + Math.random() * 999);
@@ -546,28 +597,7 @@ export function CreateTruckDialog({
     }
   }, [open]);
 
-  const stepErrors = React.useMemo(() => {
-    const errs: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [] };
-    if (!draft.postingStatus) errs[1].push("postingStatus");
-    if (!draft.availableNow && !draft.availableDate) errs[1].push("availableDate");
-    if (!draft.availableNow && !draft.availableTime) errs[1].push("availableTime");
-    if (!draft.currentCity) errs[2].push("currentCity");
-    if (!draft.currentState) errs[2].push("currentState");
-    if (!draft.equipmentType) errs[3].push("equipmentType");
-    if (!draft.maxWeightCapacity) errs[3].push("maxWeightCapacity");
-    const hasDestination =
-      draft.preferredDestinationCity ||
-      draft.preferredDestinationState ||
-      draft.preferredDestinationRegion ||
-      draft.preferredLanes ||
-      draft.preferredStates.length > 0;
-    if (!hasDestination) errs[4].push("destination");
-    if (!draft.carrierName) errs[5].push("carrierName");
-    if (!draft.carrierMcNumber && !draft.carrierDotNumber) errs[5].push("carrierAuthority");
-    if (!draft.contactName) errs[5].push("contactName");
-    if (!draft.contactPhone) errs[5].push("contactPhone");
-    return errs;
-  }, [draft]);
+  const stepErrors = React.useMemo(() => computeTruckWizardStepErrors(draft), [draft]);
 
   const canAdvance = stepErrors[step].length === 0;
 
@@ -606,6 +636,7 @@ export function CreateTruckDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent
+        showCloseButton={false}
         className="!max-w-6xl w-[96vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl"
         onInteractOutside={(e) => e.preventDefault()}
       >
@@ -639,7 +670,7 @@ export function CreateTruckDialog({
               <div className="mt-2 text-xs text-sidebar-foreground/70">Step {step} of 8</div>
             </div>
             <nav className="mt-4 flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
-              {STEPS.map((s) => {
+              {TRUCK_FORM_STEPS.map((s) => {
                 const Icon = s.icon;
                 const isActive = step === s.id;
                 const isComplete = step > s.id && (stepErrors[s.id]?.length ?? 0) === 0;
@@ -700,10 +731,10 @@ export function CreateTruckDialog({
                     Step {step}
                   </span>
                   <span>·</span>
-                  <span className="truncate">{STEPS[step - 1].description}</span>
+                  <span className="truncate">{TRUCK_FORM_STEPS[step - 1].description}</span>
                 </div>
                 <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-foreground">
-                  {STEPS[step - 1].label}
+                  {TRUCK_FORM_STEPS[step - 1].label}
                 </h2>
               </div>
               <button
@@ -1052,16 +1083,18 @@ function toNumber(v: string) {
 
 // ---------- Step 1: Availability ----------
 
-function StepAvailability({
+export function StepAvailability({
   draft,
   update,
   touched,
   errors,
+  immutableTruckBoardId,
 }: {
   draft: TruckDraft;
   update: <K extends keyof TruckDraft>(k: K, v: TruckDraft[K]) => void;
   touched: boolean;
   errors: string[];
+  immutableTruckBoardId?: boolean;
 }) {
   const isErr = (k: string) => touched && errors.includes(k);
   return (
@@ -1069,11 +1102,14 @@ function StepAvailability({
       <Card>
         <SectionTitle title="Posting identity" hint="Board reference and status" icon={Hash} />
         <GridSection cols={3}>
-          <FieldShell label="Truck Board ID" hint="Auto-generated">
+          <FieldShell label="Truck Board ID" hint={immutableTruckBoardId ? "Primary key · cannot change" : "Auto-generated"}>
             <Input
               value={draft.truckBoardId}
               onChange={(e) => update("truckBoardId", e.target.value)}
               placeholder="T-0000"
+              readOnly={immutableTruckBoardId}
+              disabled={immutableTruckBoardId}
+              className={immutableTruckBoardId ? "cursor-not-allowed bg-muted/60" : undefined}
             />
           </FieldShell>
           <FieldShell label="Posting Status" required error={isErr("postingStatus")}>
@@ -1211,7 +1247,7 @@ function StepAvailability({
 
 // ---------- Step 2: Location ----------
 
-function StepLocation({
+export function StepLocation({
   draft,
   update,
   touched,
@@ -1315,7 +1351,7 @@ function StepLocation({
 
 // ---------- Step 3: Equipment ----------
 
-function StepEquipment({
+export function StepEquipment({
   draft,
   update,
   touched,
@@ -1502,7 +1538,7 @@ function StepEquipment({
 
 // ---------- Step 4: Destination ----------
 
-function StepDestination({
+export function StepDestination({
   draft,
   update,
   touched,
@@ -1668,7 +1704,7 @@ function StepDestination({
 
 // ---------- Step 5: Carrier ----------
 
-function StepCarrier({
+export function StepCarrier({
   draft,
   update,
   touched,
@@ -1810,7 +1846,7 @@ function StepCarrier({
 
 // ---------- Step 6: Rate ----------
 
-function StepRate({
+export function StepRate({
   draft,
   update,
 }: {
@@ -1975,7 +2011,7 @@ function StepRate({
 
 // ---------- Step 7: Compliance & Docs ----------
 
-function StepCompliance({
+export function StepCompliance({
   draft,
   update,
 }: {
@@ -2154,14 +2190,16 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function StepReview({
+export function StepReview({
   draft,
   stepErrors,
   onJump,
+  variant = "wizard",
 }: {
   draft: TruckDraft;
   stepErrors: Record<number, string[]>;
   onJump: (s: number) => void;
+  variant?: "wizard" | "edit";
 }) {
   const blocking = [1, 2, 3, 4, 5].filter((s) => stepErrors[s].length > 0);
   const origin =
@@ -2182,7 +2220,7 @@ function StepReview({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-              Ready to post
+              {variant === "edit" ? "Summary" : "Ready to post"}
             </div>
             <h3 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
               {draft.truckBoardId} · {draft.carrierName || "New truck"}
@@ -2219,7 +2257,9 @@ function StepReview({
           <div className="flex-1">
             <div className="font-semibold text-destructive">Missing required information</div>
             <div className="mt-0.5 text-xs text-destructive/90">
-              The following steps still need attention before this truck can be posted.
+              {variant === "edit"
+                ? "The following sections still need required fields before you can save."
+                : "The following steps still need attention before this truck can be posted."}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {blocking.map((s) => (
@@ -2229,7 +2269,7 @@ function StepReview({
                   onClick={() => onJump(s)}
                   className="rounded-md border border-destructive/30 bg-card px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
                 >
-                  Step {s}: {STEPS[s - 1].label}
+                  Step {s}: {TRUCK_FORM_STEPS[s - 1].label}
                 </button>
               ))}
             </div>

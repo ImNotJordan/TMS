@@ -22,6 +22,10 @@ export type AuthUser = {
   email?: string;
   name?: string;
   attributes: FetchUserAttributesOutput;
+  /** Epoch seconds of the most recent authentication (from Cognito idToken `auth_time`). */
+  authTime?: number;
+  /** Epoch seconds of token issuance (from Cognito idToken `iat`). */
+  issuedAt?: number;
 };
 
 type AuthContextValue = {
@@ -57,12 +61,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const current = await getCurrentUser();
       const attributes = await fetchUserAttributes();
+      const payload = session.tokens?.idToken?.payload as
+        | { auth_time?: number; iat?: number }
+        | undefined;
       setUser({
         username: current.username,
         userId: current.userId,
         email: attributes.email,
         name: attributes.name ?? attributes.given_name,
         attributes,
+        authTime: payload?.auth_time,
+        issuedAt: payload?.iat,
       });
       setStatus("authenticated");
     } catch {

@@ -84,6 +84,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useProfileSection, type UseProfileSection } from "@/hooks/use-profile-section";
 import { isDynamoConfigured } from "@/lib/dynamodb";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -199,7 +200,7 @@ function ProfilePage() {
 
             <div className="mt-4">
               <TabsContent value="overview" className="mt-0 space-y-4">
-                <OverviewTab displayName={displayName} email={email} />
+                <OverviewTab fallbackDisplayName={displayName} fallbackEmail={email} />
               </TabsContent>
               <TabsContent value="personal" className="mt-0 space-y-4">
                 <PersonalTab />
@@ -615,7 +616,153 @@ function Field({
   );
 }
 
-function OverviewTab({ displayName, email }: { displayName: string; email: string }) {
+function formatEpoch(epochSec?: number) {
+  if (!epochSec || !Number.isFinite(epochSec)) return "";
+  const d = new Date(epochSec * 1000);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatEpochDate(epochSec?: number) {
+  if (!epochSec || !Number.isFinite(epochSec)) return "";
+  const d = new Date(epochSec * 1000);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function parseAddressAttr(raw?: string) {
+  if (!raw) return { street: "", city: "", state: "", zip: "", country: "" };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return {
+        street: parsed.street_address ?? parsed.street ?? "",
+        city: parsed.locality ?? parsed.city ?? "",
+        state: parsed.region ?? parsed.state ?? "",
+        zip: parsed.postal_code ?? parsed.zip ?? "",
+        country: parsed.country ?? "",
+      };
+    }
+  } catch {
+    // raw string fallback
+  }
+  return { street: raw, city: "", state: "", zip: "", country: "" };
+}
+
+function OverviewTab({
+  fallbackDisplayName,
+  fallbackEmail,
+}: {
+  fallbackDisplayName: string;
+  fallbackEmail: string;
+}) {
+  const { user } = useAuth();
+  const attrs = user?.attributes ?? {};
+
+  const personal = useProfileSection<Partial<PersonalForm>>("personal", {});
+  const permissions = useProfileSection<Partial<PermissionsForm>>("permissions", {});
+
+  const cloudOffline = !personal.enabled && !permissions.enabled && !isDynamoConfigured();
+  const loading = personal.loading || permissions.loading;
+  const loadError = personal.error || permissions.error;
+
+  // Compose values: DynamoDB (personal section) → Cognito attributes → fallback
+  const address = useMemo(() => parseAddressAttr(attrs.address), [attrs.address]);
+  const givenName =
+    personal.data.given_name ||
+    attrs.given_name ||
+    (attrs.name ?? "").split(" ").slice(0, 1).join(" ") ||
+    "";
+  const familyName =
+    personal.data.family_name ||
+    attrs.family_name ||
+    (attrs.name ?? "").split(" ").slice(1).join(" ") ||
+    "";
+  const fullName =
+    [givenName, familyName].filter(Boolean).join(" ").trim() ||
+    attrs.name ||
+    fallbackDisplayName;
+
+  const jobTitle =
+    personal.data.job_title ||
+    attrs["custom:job_title"] ||
+    "—";
+  const department =
+    personal.data.department ||
+    attrs["custom:department"] ||
+    "—";
+  const emailValue = personal.data.email || attrs.email || fallbackEmail;
+  const phoneValue =
+    personal.data.phone_number ||
+    personal.data.mobile ||
+    attrs.phone_number ||
+    attrs["custom:mobile"] ||
+    "—";
+  const timeZone = personal.data.zoneinfo || attrs.zoneinfo || "—";
+  const city = personal.data.city || address.city;
+  const state = personal.data.state || address.state;
+  const locationValue =
+    [city, state].filter(Boolean).join(", ") || address.country || "—";
+
+  const statusVerified = (attrs.email_verified ?? "").toString() === "true";
+  const statusLabel = statusVerified ? "Active" : "Pending verification";
+  const statusTone = statusVerified ? "success" : "warning";
+
+  const updatedAtEpoch = attrs.updated_at ? Number(attrs.updated_at) : undefined;
+  const lastLogin = formatEpoch(user?.authTime) || formatEpoch(user?.issuedAt) || "—";
+
+  const memberSince =
+    formatEpochDate(
+      attrs["custom:member_since"] ? Number(attrs["custom:member_since"]) : undefined,
+    ) ||
+    formatEpochDate(updatedAtEpoch) ||
+    "—";
+
+  // Permissions card
+  const accessLevel = permissions.data.accessLevel || "—";
+  const permissionGroup = permissions.data.permissionGroup || "—";
+  const branch = permissions.data.branch || "—";
+
+  // Allowed modules: either parse from Cognito custom:modules (CSV) or use a default
+  const allowedModules = useMemo<string[]>(() => {
+    const raw = attrs["custom:modules"] ?? attrs["custom:allowed_modules"] ?? "";
+    const fromCognito = raw
+      .split(/[,;|]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (fromCognito.length > 0) return fromCognito;
+    // Fall back to a sensible default derived from access level
+    if (accessLevel === "view") {
+      return ["Dashboard", "Loads", "Tracking", "Analytics"];
+    }
+    if (accessLevel === "edit") {
+      return ["Dashboard", "Loads", "TruckBoard", "Tracking", "Quotes", "CRM"];
+    }
+    return [
+      "Dashboard",
+      "Loads",
+      "TruckBoard",
+      "Tracking",
+      "Quotes",
+      "RFPs",
+      "CRM",
+      "Accounting",
+      "Analytics",
+      "Admin",
+      "Settings",
+    ];
+  }, [attrs, accessLevel]);
+
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -628,67 +775,120 @@ function OverviewTab({ displayName, email }: { displayName: string; email: strin
       <div className="grid gap-4 lg:grid-cols-3">
         <SectionCard
           title="At a glance"
-          description="Your work and identity in one view."
+          description="Live from Cognito and your DynamoDB profile record."
           action={
-            <Button variant="ghost" size="sm" className="gap-1 text-primary">
-              View all <ArrowUpRight className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-1.5">
+              {cloudOffline && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-warning/30 bg-warning/15 text-warning-foreground"
+                >
+                  Cloud sync offline
+                </Badge>
+              )}
+              {loading && (
+                <Badge variant="outline" className="gap-1 border-info/20 bg-info/10 text-info">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Loading
+                </Badge>
+              )}
+              {loadError && (
+                <Badge
+                  variant="outline"
+                  className="border-destructive/40 bg-destructive/10 text-destructive"
+                  title={loadError}
+                >
+                  Sync error
+                </Badge>
+              )}
+              <Button variant="ghost" size="sm" className="gap-1 text-primary">
+                View all <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </div>
           }
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <InfoRow label="Full name" value={displayName} />
-            <InfoRow label="Job title" value="Senior Dispatcher" />
-            <InfoRow label="Department" value="Operations" />
-            <InfoRow label="Email" value={email} />
-            <InfoRow label="Phone" value="+1 (404) 555-0142" />
-            <InfoRow label="Time zone" value="America/New_York" />
-            <InfoRow label="Location" value="Atlanta, GA" />
-            <InfoRow label="Status" value="Active" tone="success" />
-            <InfoRow label="Last login" value="May 14, 2026 · 6:48 AM" />
-            <InfoRow label="Member since" value="Apr 12, 2023" />
-          </div>
+          {loading ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="space-y-1.5">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InfoRow label="Full name" value={fullName} />
+              <InfoRow label="Job title" value={jobTitle} />
+              <InfoRow label="Department" value={department} />
+              <InfoRow label="Email" value={emailValue} />
+              <InfoRow label="Phone" value={phoneValue} />
+              <InfoRow label="Time zone" value={timeZone} />
+              <InfoRow label="Location" value={locationValue} />
+              <InfoRow label="Status" value={statusLabel} tone={statusTone} />
+              <InfoRow label="Last login" value={lastLogin} />
+              <InfoRow label="Member since" value={memberSince} />
+            </div>
+          )}
         </SectionCard>
 
-        <SectionCard title="Allowed modules" description="Areas you can access today.">
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              "Dashboard",
-              "Loads",
-              "TruckBoard",
-              "Tracking",
-              "Quotes",
-              "RFPs",
-              "CRM",
-              "Accounting",
-              "Analytics",
-              "Admin",
-              "Settings",
-            ].map((m) => (
-              <Badge
-                key={m}
-                variant="outline"
-                className="border-primary/20 bg-primary/5 text-primary"
-              >
-                <Check className="mr-1 h-3 w-3" /> {m}
+        <SectionCard
+          title="Allowed modules"
+          description="From your role & permissions record."
+          action={
+            permissions.loading ? (
+              <Badge variant="outline" className="gap-1 border-info/20 bg-info/10 text-info">
+                <Loader2 className="h-3 w-3 animate-spin" /> Loading
               </Badge>
-            ))}
-          </div>
+            ) : undefined
+          }
+        >
+          {permissions.loading ? (
+            <div className="flex flex-wrap gap-1.5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-5 w-20" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {allowedModules.map((m) => (
+                <Badge
+                  key={m}
+                  variant="outline"
+                  className="border-primary/20 bg-primary/5 text-primary"
+                >
+                  <Check className="mr-1 h-3 w-3" /> {m}
+                </Badge>
+              ))}
+            </div>
+          )}
 
           <Separator className="my-4" />
           <div className="space-y-2 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Permission group</span>
-              <span className="font-medium">Ops · Tier 2</span>
+              {permissions.loading ? (
+                <Skeleton className="h-4 w-24" />
+              ) : (
+                <span className="font-medium">{permissionGroup}</span>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Access level</span>
-              <Badge variant="secondary" className="bg-info/15 text-info">
-                Admin
-              </Badge>
+              {permissions.loading ? (
+                <Skeleton className="h-4 w-16" />
+              ) : (
+                <Badge variant="secondary" className="bg-info/15 text-info capitalize">
+                  {accessLevel}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Branch</span>
-              <span className="font-medium">ATL HQ</span>
+              {permissions.loading ? (
+                <Skeleton className="h-4 w-20" />
+              ) : (
+                <span className="font-medium">{branch}</span>
+              )}
             </div>
           </div>
         </SectionCard>

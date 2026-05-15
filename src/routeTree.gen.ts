@@ -18,6 +18,7 @@ import { Route as QuotesRouteImport } from './routes/quotes'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoadsRouteImport } from './routes/loads'
+import { Route as LandingRouteImport } from './routes/landing'
 import { Route as CrmRouteImport } from './routes/crm'
 import { Route as CommunicationsRouteImport } from './routes/communications'
 import { Route as CarriersRouteImport } from './routes/carriers'
@@ -26,6 +27,8 @@ import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AccountingRouteImport } from './routes/accounting'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TruckboardTruckBoardIdRouteImport } from './routes/truckboard.$truckBoardId'
+import { Route as LoadsLoadIdRouteImport } from './routes/loads.$loadId'
 
 const TruckboardRoute = TruckboardRouteImport.update({
   id: '/truckboard',
@@ -72,6 +75,11 @@ const LoadsRoute = LoadsRouteImport.update({
   path: '/loads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LandingRoute = LandingRouteImport.update({
+  id: '/landing',
+  path: '/landing',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CrmRoute = CrmRouteImport.update({
   id: '/crm',
   path: '/crm',
@@ -112,6 +120,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TruckboardTruckBoardIdRoute = TruckboardTruckBoardIdRouteImport.update({
+  id: '/$truckBoardId',
+  path: '/$truckBoardId',
+  getParentRoute: () => TruckboardRoute,
+} as any)
+const LoadsLoadIdRoute = LoadsLoadIdRouteImport.update({
+  id: '/$loadId',
+  path: '/$loadId',
+  getParentRoute: () => LoadsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -122,7 +140,8 @@ export interface FileRoutesByFullPath {
   '/carriers': typeof CarriersRoute
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
-  '/loads': typeof LoadsRoute
+  '/landing': typeof LandingRoute
+  '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
@@ -130,7 +149,9 @@ export interface FileRoutesByFullPath {
   '/risk': typeof RiskRoute
   '/settings': typeof SettingsRoute
   '/tracking': typeof TrackingRoute
-  '/truckboard': typeof TruckboardRoute
+  '/truckboard': typeof TruckboardRouteWithChildren
+  '/loads/$loadId': typeof LoadsLoadIdRoute
+  '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -141,7 +162,8 @@ export interface FileRoutesByTo {
   '/carriers': typeof CarriersRoute
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
-  '/loads': typeof LoadsRoute
+  '/landing': typeof LandingRoute
+  '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
@@ -149,7 +171,9 @@ export interface FileRoutesByTo {
   '/risk': typeof RiskRoute
   '/settings': typeof SettingsRoute
   '/tracking': typeof TrackingRoute
-  '/truckboard': typeof TruckboardRoute
+  '/truckboard': typeof TruckboardRouteWithChildren
+  '/loads/$loadId': typeof LoadsLoadIdRoute
+  '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -161,7 +185,8 @@ export interface FileRoutesById {
   '/carriers': typeof CarriersRoute
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
-  '/loads': typeof LoadsRoute
+  '/landing': typeof LandingRoute
+  '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
   '/quotes': typeof QuotesRoute
@@ -169,7 +194,9 @@ export interface FileRoutesById {
   '/risk': typeof RiskRoute
   '/settings': typeof SettingsRoute
   '/tracking': typeof TrackingRoute
-  '/truckboard': typeof TruckboardRoute
+  '/truckboard': typeof TruckboardRouteWithChildren
+  '/loads/$loadId': typeof LoadsLoadIdRoute
+  '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -182,6 +209,7 @@ export interface FileRouteTypes {
     | '/carriers'
     | '/communications'
     | '/crm'
+    | '/landing'
     | '/loads'
     | '/login'
     | '/profile'
@@ -191,6 +219,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tracking'
     | '/truckboard'
+    | '/loads/$loadId'
+    | '/truckboard/$truckBoardId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -201,6 +231,7 @@ export interface FileRouteTypes {
     | '/carriers'
     | '/communications'
     | '/crm'
+    | '/landing'
     | '/loads'
     | '/login'
     | '/profile'
@@ -210,6 +241,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tracking'
     | '/truckboard'
+    | '/loads/$loadId'
+    | '/truckboard/$truckBoardId'
   id:
     | '__root__'
     | '/'
@@ -220,6 +253,7 @@ export interface FileRouteTypes {
     | '/carriers'
     | '/communications'
     | '/crm'
+    | '/landing'
     | '/loads'
     | '/login'
     | '/profile'
@@ -229,6 +263,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tracking'
     | '/truckboard'
+    | '/loads/$loadId'
+    | '/truckboard/$truckBoardId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -240,7 +276,8 @@ export interface RootRouteChildren {
   CarriersRoute: typeof CarriersRoute
   CommunicationsRoute: typeof CommunicationsRoute
   CrmRoute: typeof CrmRoute
-  LoadsRoute: typeof LoadsRoute
+  LandingRoute: typeof LandingRoute
+  LoadsRoute: typeof LoadsRouteWithChildren
   LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
   QuotesRoute: typeof QuotesRoute
@@ -248,7 +285,7 @@ export interface RootRouteChildren {
   RiskRoute: typeof RiskRoute
   SettingsRoute: typeof SettingsRoute
   TrackingRoute: typeof TrackingRoute
-  TruckboardRoute: typeof TruckboardRoute
+  TruckboardRoute: typeof TruckboardRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -316,6 +353,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoadsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/landing': {
+      id: '/landing'
+      path: '/landing'
+      fullPath: '/landing'
+      preLoaderRoute: typeof LandingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/crm': {
       id: '/crm'
       path: '/crm'
@@ -372,8 +416,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/truckboard/$truckBoardId': {
+      id: '/truckboard/$truckBoardId'
+      path: '/$truckBoardId'
+      fullPath: '/truckboard/$truckBoardId'
+      preLoaderRoute: typeof TruckboardTruckBoardIdRouteImport
+      parentRoute: typeof TruckboardRoute
+    }
+    '/loads/$loadId': {
+      id: '/loads/$loadId'
+      path: '/$loadId'
+      fullPath: '/loads/$loadId'
+      preLoaderRoute: typeof LoadsLoadIdRouteImport
+      parentRoute: typeof LoadsRoute
+    }
   }
 }
+
+interface LoadsRouteChildren {
+  LoadsLoadIdRoute: typeof LoadsLoadIdRoute
+}
+
+const LoadsRouteChildren: LoadsRouteChildren = {
+  LoadsLoadIdRoute: LoadsLoadIdRoute,
+}
+
+const LoadsRouteWithChildren = LoadsRoute._addFileChildren(LoadsRouteChildren)
+
+interface TruckboardRouteChildren {
+  TruckboardTruckBoardIdRoute: typeof TruckboardTruckBoardIdRoute
+}
+
+const TruckboardRouteChildren: TruckboardRouteChildren = {
+  TruckboardTruckBoardIdRoute: TruckboardTruckBoardIdRoute,
+}
+
+const TruckboardRouteWithChildren = TruckboardRoute._addFileChildren(
+  TruckboardRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -384,7 +464,8 @@ const rootRouteChildren: RootRouteChildren = {
   CarriersRoute: CarriersRoute,
   CommunicationsRoute: CommunicationsRoute,
   CrmRoute: CrmRoute,
-  LoadsRoute: LoadsRoute,
+  LandingRoute: LandingRoute,
+  LoadsRoute: LoadsRouteWithChildren,
   LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
   QuotesRoute: QuotesRoute,
@@ -392,7 +473,7 @@ const rootRouteChildren: RootRouteChildren = {
   RiskRoute: RiskRoute,
   SettingsRoute: SettingsRoute,
   TrackingRoute: TrackingRoute,
-  TruckboardRoute: TruckboardRoute,
+  TruckboardRoute: TruckboardRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

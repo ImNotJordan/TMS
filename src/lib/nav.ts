@@ -24,13 +24,21 @@ export type NavItem = {
   icon: LucideIcon;
   group: "Operations" | "Commercial" | "Insights" | "Workspace";
   badge?: string;
+  /** DynamoDB-backed total shown in the sidebar (replaces static `badge` when set). */
+  liveCount?: "loads" | "trucks" | "tracking";
 };
 
 export const NAV_ITEMS: NavItem[] = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, group: "Operations" },
-  { title: "Loads", url: "/loads", icon: Package, group: "Operations", badge: "128" },
-  { title: "TruckBoard", url: "/truckboard", icon: Truck, group: "Operations" },
-  { title: "Tracking", url: "/tracking", icon: MapPin, group: "Operations", badge: "12" },
+  { title: "Loads", url: "/loads", icon: Package, group: "Operations", liveCount: "loads" },
+  {
+    title: "TruckBoard",
+    url: "/truckboard",
+    icon: Truck,
+    group: "Operations",
+    liveCount: "trucks",
+  },
+  { title: "Tracking", url: "/tracking", icon: MapPin, group: "Operations", liveCount: "tracking" },
 
   { title: "Bidding", url: "/bidding", icon: Gavel, group: "Commercial" },
   { title: "RFPs", url: "/rfps", icon: FileText, group: "Commercial" },
@@ -42,7 +50,13 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Analytics", url: "/analytics", icon: BarChart3, group: "Insights" },
   { title: "Accounting", url: "/accounting", icon: Wallet, group: "Insights" },
 
-  { title: "Communications", url: "/communications", icon: MessageSquare, group: "Workspace", badge: "4" },
+  {
+    title: "Communications",
+    url: "/communications",
+    icon: MessageSquare,
+    group: "Workspace",
+    badge: "4",
+  },
   { title: "Settings", url: "/settings", icon: Settings, group: "Workspace" },
   { title: "Admin", url: "/admin", icon: Lock, group: "Workspace" },
   { title: "Profile", url: "/profile", icon: UserCircle2, group: "Workspace" },

@@ -1,5 +1,6 @@
 import * as React from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Package,
   Filter,
@@ -31,7 +32,22 @@ import {
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
 import { CreateLoadDialog } from "@/components/loads/create-load-dialog";
+import {
+  CUSTOMER_LABELS,
+  CARRIER_LABELS,
+  EQUIPMENT_LABELS,
+  STATUS_LABELS,
+  toneBadge,
+  toneStat,
+  labelOrRaw,
+  formatLane,
+  formatStop,
+  formatRate,
+  isActiveLoad,
+  type Tone,
+} from "@/lib/loads-display";
 import { listAllLoads, type LoadRecord } from "@/lib/loads-store";
+import { invalidateOperationalCounts } from "@/lib/sidebar-counts";
 
 export const Route = createFileRoute("/loads")({
   head: () => ({
@@ -46,96 +62,11 @@ export const Route = createFileRoute("/loads")({
   component: Page,
 });
 
-// ---- Label maps (mirror the options shown in the Create Load wizard) ----
-const CUSTOMER_LABELS: Record<string, string> = {
-  "acme-foods": "Acme Foods, Inc.",
-  "northstar-bev": "Northstar Beverage",
-  greenfield: "Greenfield Co.",
-  transocean: "TransOcean Logistics",
-  freshline: "Freshline Distributors",
-  "summit-retail": "Summit Retail Group",
-};
-
-const CARRIER_LABELS: Record<string, string> = {
-  bluepeak: "Bluepeak Freight",
-  ironline: "Ironline Logistics",
-  gulfstream: "Gulfstream Express",
-  sundial: "Sundial Trucking",
-  northbay: "Northbay Carriers",
-};
-
-const EQUIPMENT_LABELS: Record<string, string> = {
-  "dry-van": "Dry Van",
-  reefer: "Reefer",
-  flatbed: "Flatbed",
-  "step-deck": "Step Deck",
-  lowboy: "Lowboy / RGN",
-  tanker: "Tanker",
-  "power-only": "Power Only",
-};
-
-type Tone = "success" | "warning" | "destructive" | "info" | "default";
-
-const STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
-  draft: { label: "Draft", tone: "default" },
-  tendered: { label: "Tendered", tone: "info" },
-  booked: { label: "Booked", tone: "info" },
-  dispatched: { label: "Dispatched", tone: "info" },
-  "in-transit": { label: "In Transit", tone: "warning" },
-  delivered: { label: "Delivered", tone: "success" },
-};
-
-const toneBadge: Record<Tone, string> = {
-  success: "bg-success/15 text-success border-success/20",
-  warning: "bg-warning/20 text-warning-foreground border-warning/30",
-  destructive: "bg-destructive/12 text-destructive border-destructive/20",
-  info: "bg-info/15 text-info border-info/20",
-  default: "bg-muted text-foreground border-border",
-};
-
-const toneStat: Record<Tone, string> = {
-  success: "bg-success/15 text-success",
-  warning: "bg-warning/20 text-warning-foreground",
-  destructive: "bg-destructive/12 text-destructive",
-  info: "bg-info/15 text-info",
-  default: "bg-muted text-foreground",
-};
-
-function labelOrRaw(map: Record<string, string>, value?: string) {
-  if (!value) return "—";
-  return map[value] ?? value;
-}
-
-function formatPlace(city?: string, state?: string) {
-  if (city && state) return `${city}, ${state}`;
-  return city || state || "?";
-}
-
-function formatLane(load: LoadRecord) {
-  return `${formatPlace(load.pickupCity, load.pickupState)} → ${formatPlace(
-    load.deliveryCity,
-    load.deliveryState,
-  )}`;
-}
-
-function formatStop(date?: string, appt?: string, winStart?: string, winEnd?: string) {
-  if (!date) return "—";
-  const time = appt || (winStart && winEnd ? `${winStart}–${winEnd}` : "");
-  const d = new Date(date);
-  const datePart = Number.isNaN(d.getTime())
-    ? date
-    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return time ? `${datePart} · ${time}` : datePart;
-}
-
-function formatRate(rate?: string) {
-  if (!rate) return "—";
-  const n = parseFloat(rate.replace(/[^0-9.-]/g, ""));
-  if (!Number.isFinite(n)) return rate;
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
-
 function Page() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isLoadDetailPath = /^\/loads\/[^/]+$/.test(pathname);
+  const queryClient = useQueryClient();
+
   const [loads, setLoads] = React.useState<LoadRecord[] | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -160,8 +91,9 @@ function Page() {
   }, []);
 
   React.useEffect(() => {
+    if (isLoadDetailPath) return;
     void fetchLoads("initial");
-  }, [fetchLoads]);
+  }, [fetchLoads, isLoadDetailPath]);
 
   const filtered = React.useMemo(() => {
     if (!loads) return [];
@@ -185,9 +117,7 @@ function Page() {
 
   const stats = React.useMemo(() => {
     const list = loads ?? [];
-    const active = list.filter(
-      (l) => l.loadStatus && !["delivered", "draft"].includes(l.loadStatus),
-    ).length;
+    const active = list.filter(isActiveLoad).length;
     const today = new Date().toISOString().slice(0, 10);
     const bookedToday = list.filter((l) => (l.createdAt ?? "").slice(0, 10) === today).length;
     const delivered = list.filter((l) => l.loadStatus === "delivered").length;
@@ -224,6 +154,10 @@ function Page() {
     ];
   }, [loads]);
 
+  if (isLoadDetailPath) {
+    return <Outlet />;
+  }
+
   return (
     <div>
       <PageHeader
@@ -252,7 +186,10 @@ function Page() {
               Refresh
             </Button>
             <CreateLoadDialog
-              onCreated={() => void fetchLoads("refresh")}
+              onCreated={() => {
+                invalidateOperationalCounts(queryClient);
+                void fetchLoads("refresh");
+              }}
               trigger={
                 <Button
                   size="sm"
@@ -407,7 +344,15 @@ function Page() {
                         : { label: "—", tone: "default" as Tone };
                       return (
                         <TableRow key={r.loadId} className="border-border/60">
-                          <TableCell className="pl-6 font-medium">{r.loadId}</TableCell>
+                          <TableCell className="pl-6 font-medium">
+                            <Link
+                              to="/loads/$loadId"
+                              params={{ loadId: r.loadId }}
+                              className="text-primary underline-offset-4 hover:underline"
+                            >
+                              {r.loadId}
+                            </Link>
+                          </TableCell>
                           <TableCell>{labelOrRaw(CUSTOMER_LABELS, r.customer)}</TableCell>
                           <TableCell className="text-muted-foreground">{formatLane(r)}</TableCell>
                           <TableCell className="tabular-nums text-muted-foreground">
