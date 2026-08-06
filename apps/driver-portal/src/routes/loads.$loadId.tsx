@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { LocationShareCard } from "@/components/home/location-share-card";
 import { DocUploadSheet } from "@/components/loads/doc-upload-sheet";
 import { ShipmentProgressTracker } from "@/components/loads/shipment-progress-tracker";
-import { StatusStepper } from "@/components/loads/status-stepper";
+import { StatusTimelineCard } from "@/components/loads/status-timeline-card";
 import { useLoads } from "@/lib/loads-store";
 import { STATUS_STEPS, type ActiveLoadStatus, type LoadDocument } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -118,82 +118,65 @@ function LoadDetailPage() {
           </Button>
         </div>
       ) : (
-        <Card className="border-border/70 shadow-sm">
-          <CardContent className="p-4">
-            <h3 className="mb-3 font-heading text-sm font-bold uppercase tracking-wide text-foreground">
-              Status
-            </h3>
-            <StatusStepper status={load.status as ActiveLoadStatus} />
-            {nextStep ? (
-              <Button
-                variant="amber"
-                className="w-full gap-1.5"
-                onClick={() => void advanceStatus(load.id)}
-              >
-                Mark as: {nextStep.label} <ArrowRight className="h-4 w-4" />
-              </Button>
-            ) : (
-              <div className="space-y-2">
-                <div className="rounded-lg bg-success/10 py-2 text-center text-sm font-medium text-success">
-                  Delivered ✓
-                </div>
-                {(() => {
-                  const pod = load.documents.find((d) => d.type === "Proof of Delivery");
-                  const bol = load.documents.find((d) => d.type === "Bill of Lading");
-                  const needsPod = !pod?.fileName;
-                  const needsBol = !bol?.fileName;
-                  return (
-                    <div
-                      className={cn(
-                        "rounded-xl border px-3 py-3",
-                        needsPod
-                          ? "border-amber/40 bg-amber/10"
-                          : "border-success/25 bg-success/8",
+        <>
+          <StatusTimelineCard
+            currentStage={load.status as ActiveLoadStatus}
+            onAdvance={() => void advanceStatus(load.id)}
+          />
+          {!nextStep
+            ? (() => {
+                const pod = load.documents.find((d) => d.type === "Proof of Delivery");
+                const bol = load.documents.find((d) => d.type === "Bill of Lading");
+                const needsPod = !pod?.fileName;
+                const needsBol = !bol?.fileName;
+                return (
+                  <div
+                    className={cn(
+                      "rounded-xl border px-3 py-3",
+                      needsPod ? "border-amber/40 bg-amber/10" : "border-success/25 bg-success/8",
+                    )}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      {needsPod ? (
+                        <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+                      ) : (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                       )}
-                    >
-                      <div className="flex items-start gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          {needsPod ? "Next: upload Proof of Delivery" : "You're done on this load"}
+                        </p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                          {needsPod
+                            ? "Dispatch needs your POD photo to close the load and invoice the customer."
+                            : "Dispatch will verify your POD and complete the load. You can still replace docs below if needed."}
+                        </p>
                         {needsPod ? (
-                          <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-                        ) : (
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-foreground">
-                            {needsPod ? "Next: upload Proof of Delivery" : "You're done on this load"}
-                          </p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                            {needsPod
-                              ? "Dispatch needs your POD photo to close the load and invoice the customer."
-                              : "Dispatch will verify your POD and complete the load. You can still replace docs below if needed."}
-                          </p>
-                          {needsPod ? (
-                            <Button
-                              variant="amber"
-                              size="sm"
-                              className="mt-2.5 w-full gap-1.5"
-                              onClick={() => setUploadTarget("Proof of Delivery")}
-                            >
-                              Upload POD <ArrowRight className="h-3.5 w-3.5" />
-                            </Button>
-                          ) : needsBol ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-2.5 w-full gap-1.5"
-                              onClick={() => setUploadTarget("Bill of Lading")}
-                            >
-                              Upload BOL (optional)
-                            </Button>
-                          ) : null}
-                        </div>
+                          <Button
+                            variant="amber"
+                            size="sm"
+                            className="mt-2.5 w-full gap-1.5"
+                            onClick={() => setUploadTarget("Proof of Delivery")}
+                          >
+                            Upload POD <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : needsBol ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2.5 w-full gap-1.5"
+                            onClick={() => setUploadTarget("Bill of Lading")}
+                          >
+                            Upload BOL (optional)
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
-                  );
-                })()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  </div>
+                );
+              })()
+            : null}
+        </>
       )}
 
       {!isOffer ? (

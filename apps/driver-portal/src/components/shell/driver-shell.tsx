@@ -3,7 +3,7 @@ import { useRouterState } from "@tanstack/react-router";
 
 import { PhoneFrame } from "./phone-frame";
 import { TopBar } from "./top-bar";
-import { BottomNav } from "./bottom-nav";
+import { FloatingBottomNav } from "./floating-bottom-nav";
 import {
   ChatPageSkeleton,
   HomePageSkeleton,
@@ -59,7 +59,7 @@ export function DriverShell({ children }: { children: React.ReactNode }) {
           </div>
         ) : null}
       </main>
-      <BottomNav />
+      <FloatingBottomNav />
     </PhoneFrame>
   );
 }

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Flag, MapPin, Package, Truck } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -40,25 +39,17 @@ export function ShipmentProgressTracker({
   nextStepLabel,
   statusElapsedMinutes,
   statusLabel = "In transit",
-  onProgressPreview,
 }: {
   orderId: string;
   originLabel: string;
   destinationLabel: string;
-  /** 0–100, controlled by the caller; the slider only previews this locally. */
+  /** 0–100. Read-only — only advances when the driver marks the next status. */
   progress: number;
   nextStepLabel: string;
   statusElapsedMinutes: number;
   statusLabel?: string;
-  onProgressPreview?: (progress: number) => void;
 }) {
-  const [preview, setPreview] = useState(progress);
-
-  useEffect(() => {
-    setPreview(progress);
-  }, [progress]);
-
-  const clamped = Math.min(100, Math.max(0, preview));
+  const clamped = Math.min(100, Math.max(0, progress));
   const stages = buildStages(originLabel, destinationLabel);
 
   return (
@@ -119,25 +110,23 @@ export function ShipmentProgressTracker({
           {Math.round(clamped)}%
         </span>
       </div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={clamped}
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          setPreview(next);
-          onProgressPreview?.(next);
-        }}
+      <div
+        role="progressbar"
         aria-label="Shipment progress"
-        className={cn(
-          "mt-2 h-1.5 w-full cursor-pointer appearance-none rounded-full bg-border accent-amber",
-          "[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none",
-          "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-amber",
-          "[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full",
-          "[&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-amber",
-        )}
-      />
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(clamped)}
+        className="relative mt-2 h-1.5 w-full rounded-full bg-border"
+      >
+        <div
+          className="h-full rounded-full bg-amber transition-[width] duration-300 ease-out"
+          style={{ width: `${clamped}%` }}
+        />
+        <span
+          className="absolute top-1/2 h-3 w-3 -translate-y-1/2 -translate-x-1/2 rounded-full bg-amber"
+          style={{ left: `${clamped}%` }}
+        />
+      </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="rounded-xl bg-muted p-3">
