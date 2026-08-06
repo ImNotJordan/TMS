@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { GlobalLoader } from "@/components/global-loader";
+import { usePageReady } from "@/components/page-load-gate";
 import {
   TRUCK_FORM_STEPS,
   StepAvailability,
@@ -21,7 +21,7 @@ import {
   truckDraftToRecord,
   type TruckDraft,
 } from "@/components/truckboard/create-truck-dialog";
-import { getTruckById, updateTruck, type TruckRecord } from "@/lib/trucks-store";
+import { getTruckByIdCached, updateTruck, type TruckRecord } from "@/lib/trucks-store";
 
 export const Route = createFileRoute("/truckboard/$truckBoardId")({
   head: ({ params }) => ({
@@ -85,6 +85,8 @@ function TruckDetailPage() {
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [dirty, setDirty] = React.useState(false);
 
+  usePageReady(fetchState === "loading");
+
   const sectionRefs = React.useRef<Record<number, HTMLElement | null>>({});
 
   const scrollToSection = React.useCallback((stepId: number) => {
@@ -102,7 +104,7 @@ function TruckDetailPage() {
     setSaveError(null);
     void (async () => {
       try {
-        const item = await getTruckById(truckBoardId);
+        const item = await getTruckByIdCached(truckBoardId);
         if (cancelled) return;
         if (!item) {
           setFetchState("missing");
@@ -207,9 +209,7 @@ function TruckDetailPage() {
   })();
 
   if (fetchState === "loading") {
-    return (
-      <GlobalLoader variant="embedded" message={`Opening truck ${truckBoardId}…`} />
-    );
+    return null;
   }
 
   if (fetchState === "error") {

@@ -10,7 +10,6 @@ import {
   Inbox,
   Loader2,
   MapPin,
-  MoreHorizontal,
   Plus,
   RefreshCw,
   Search,
@@ -18,9 +17,20 @@ import {
   Truck,
   AlertTriangle,
   Zap,
+  FilePen,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -33,8 +43,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
+import { usePageReady } from "@/components/page-load-gate";
 import { CreateTruckDialog } from "@/components/truckboard/create-truck-dialog";
-import { listAllTrucks, type TruckRecord } from "@/lib/trucks-store";
+import {
+  formatTruckDraftDestination,
+  formatTruckDraftOrigin,
+  formatTruckDraftSavedAt,
+  listStoredTruckDrafts,
+  removeStoredTruckDraft,
+  type StoredTruckDraft,
+} from "@/lib/truck-drafts-storage";
+import { deleteTruck, listAllTrucksCached, type TruckRecord } from "@/lib/trucks-store";
+import { useOperationalList } from "@/hooks/use-operational-list";
 import { invalidateOperationalCounts } from "@/lib/sidebar-counts";
 
 export const Route = createFileRoute("/truckboard")({
@@ -200,33 +220,44 @@ function Page() {
   const isTruckDetailPath = /^\/truckboard\/[^/]+$/.test(pathname);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [trucks, setTrucks] = React.useState<TruckRecord[] | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
+  const [showDrafts, setShowDrafts] = React.useState(false);
+  const [storedDrafts, setStoredDrafts] = React.useState<StoredTruckDraft[]>([]);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [resumeDraft, setResumeDraft] = React.useState<StoredTruckDraft | null>(null);
+  const [draftToDelete, setDraftToDelete] = React.useState<StoredTruckDraft | null>(null);
+  const [truckToDelete, setTruckToDelete] = React.useState<TruckRecord | null>(null);
+  const [deletingTruck, setDeletingTruck] = React.useState(false);
 
-  const fetchTrucks = React.useCallback(async (mode: "initial" | "refresh" = "refresh") => {
-    if (mode === "initial") setLoading(true);
-    else setRefreshing(true);
-    setError(null);
-    try {
-      const items = await listAllTrucks();
-      items.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-      setTrucks(items);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load.";
-      setError(message);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const fetchList = React.useCallback(async ({ force }: { force: boolean }) => {
+    const items = await listAllTrucksCached({ force });
+    items.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+    return items;
+  }, []);
+
+  const {
+    items: trucks,
+    loading,
+    refreshing,
+    error,
+    setItems: setTrucks,
+    setError,
+    refresh: refreshTrucks,
+  } = useOperationalList<TruckRecord>({
+    queryKey: ["truckboard"],
+    fetchList,
+    enabled: !isTruckDetailPath,
+  });
+
+  usePageReady(Boolean(loading && !trucks && !isTruckDetailPath));
+
+  const refreshStoredDrafts = React.useCallback(() => {
+    setStoredDrafts(listStoredTruckDrafts());
   }, []);
 
   React.useEffect(() => {
-    if (isTruckDetailPath) return;
-    void fetchTrucks("initial");
-  }, [fetchTrucks, isTruckDetailPath]);
+    refreshStoredDrafts();
+  }, [refreshStoredDrafts]);
 
   const filtered = React.useMemo(() => {
     if (!trucks) return [];
@@ -290,6 +321,42 @@ function Page() {
     ];
   }, [trucks]);
 
+  const openNewTruck = () => {
+    setResumeDraft(null);
+    setCreateOpen(true);
+  };
+
+  const openStoredDraft = (stored: StoredTruckDraft) => {
+    setResumeDraft(stored);
+    setCreateOpen(true);
+    setShowDrafts(false);
+  };
+
+  const confirmDeleteDraft = () => {
+    if (!draftToDelete) return;
+    removeStoredTruckDraft(draftToDelete.id);
+    refreshStoredDrafts();
+    setDraftToDelete(null);
+  };
+
+  const confirmDeleteTruck = async () => {
+    if (!truckToDelete) return;
+    setDeletingTruck(true);
+    setError(null);
+    try {
+      await deleteTruck(truckToDelete.truckBoardId);
+      setTrucks((prev) =>
+        prev?.filter((row) => row.truckBoardId !== truckToDelete.truckBoardId) ?? null,
+      );
+      invalidateOperationalCounts(queryClient);
+      setTruckToDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete truck posting.");
+    } finally {
+      setDeletingTruck(false);
+    }
+  };
+
   if (isTruckDetailPath) {
     return <Outlet />;
   }
@@ -311,7 +378,7 @@ function Page() {
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => void fetchTrucks("refresh")}
+              onClick={() => void refreshTrucks()}
               disabled={refreshing || loading}
             >
               {refreshing ? (
@@ -321,19 +388,49 @@ function Page() {
               )}
               Refresh
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowDrafts((v) => !v)}
+            >
+              {showDrafts ? (
+                <>
+                  <Truck className="h-4 w-4" />
+                  TruckBoard
+                </>
+              ) : (
+                <>
+                  <FilePen className="h-4 w-4" />
+                  Drafts
+                  {storedDrafts.length > 0 ? (
+                    <Badge variant="secondary" className="ml-0.5 h-5 min-w-5 px-1.5 tabular-nums">
+                      {storedDrafts.length}
+                    </Badge>
+                  ) : null}
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5 bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
+              onClick={openNewTruck}
+            >
+              <Plus className="h-4 w-4" /> Post Truck
+            </Button>
             <CreateTruckDialog
+              open={createOpen}
+              onOpenChange={(next) => {
+                setCreateOpen(next);
+                if (!next) setResumeDraft(null);
+              }}
+              resumeDraft={resumeDraft}
+              onDraftSaved={refreshStoredDrafts}
               onCreated={() => {
                 invalidateOperationalCounts(queryClient);
-                void fetchTrucks("refresh");
+                refreshStoredDrafts();
+                void refreshTrucks();
               }}
-              trigger={
-                <Button
-                  size="sm"
-                  className="gap-1.5 bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
-                >
-                  <Plus className="h-4 w-4" /> Post Truck
-                </Button>
-              }
             />
           </>
         }
@@ -396,9 +493,11 @@ function Page() {
                   <ShieldCheck className="h-4 w-4" /> Verified only
                 </Button>
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  {loading
-                    ? "Loading…"
-                    : `${filtered.length} of ${trucks?.length ?? 0} truck${trucks?.length === 1 ? "" : "s"}`}
+                  {showDrafts
+                    ? `${storedDrafts.length} saved draft${storedDrafts.length === 1 ? "" : "s"}`
+                    : loading
+                      ? "Loading…"
+                      : `${filtered.length} of ${trucks?.length ?? 0} truck${trucks?.length === 1 ? "" : "s"}`}
                 </span>
                 <Button variant="ghost" size="sm" className="gap-1 text-primary">
                   View all <ArrowUpRight className="h-4 w-4" />
@@ -416,7 +515,7 @@ function Page() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => void fetchTrucks("refresh")}
+                  onClick={() => void refreshTrucks()}
                   className="border-destructive/30 text-destructive hover:bg-destructive/10"
                 >
                   Retry
@@ -426,6 +525,80 @@ function Page() {
 
             <div className="overflow-x-auto">
               <Table>
+                {showDrafts ? (
+                  <>
+                    <TableHeader>
+                      <TableRow className="border-border/70">
+                        <TableHead className="pl-6">Truck</TableHead>
+                        <TableHead>Carrier</TableHead>
+                        <TableHead>Origin</TableHead>
+                        <TableHead>Destination</TableHead>
+                        <TableHead>Step</TableHead>
+                        <TableHead>Last saved</TableHead>
+                        <TableHead className="pr-6 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {storedDrafts.length === 0 ? (
+                        <TableRow className="border-border/60">
+                          <TableCell colSpan={7} className="py-12">
+                            <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                                <FilePen className="h-5 w-5" />
+                              </span>
+                              <div className="font-medium text-foreground">No saved drafts</div>
+                              <div className="text-xs">
+                                Start posting a truck and close the wizard — your progress is saved
+                                here automatically.
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        storedDrafts.map((stored) => (
+                          <TableRow
+                            key={stored.id}
+                            className="cursor-pointer border-border/60 hover:bg-muted/40"
+                            onClick={() => openStoredDraft(stored)}
+                          >
+                            <TableCell className="pl-6 font-medium text-primary">
+                              {stored.draft.truckBoardId}
+                            </TableCell>
+                            <TableCell>{stored.draft.carrierName || "—"}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {formatTruckDraftOrigin(stored.draft)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {formatTruckDraftDestination(stored.draft)}
+                            </TableCell>
+                            <TableCell className="tabular-nums text-muted-foreground">
+                              Step {stored.step} of 8
+                            </TableCell>
+                            <TableCell className="tabular-nums text-muted-foreground">
+                              {formatTruckDraftSavedAt(stored.savedAt)}
+                            </TableCell>
+                            <TableCell className="pr-6 text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                aria-label={`Delete draft ${stored.draft.truckBoardId}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDraftToDelete(stored);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </>
+                ) : (
+                  <>
                 <TableHeader>
                   <TableRow className="border-border/70">
                     <TableHead className="pl-6">Status</TableHead>
@@ -573,11 +746,14 @@ function Page() {
                           </TableCell>
                           <TableCell className="pr-6 text-right" onClick={(e) => e.stopPropagation()}>
                             <Button
+                              type="button"
                               size="icon"
                               variant="ghost"
-                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              aria-label={`Delete truck ${t.truckBoardId}`}
+                              onClick={() => setTruckToDelete(t)}
                             >
-                              <MoreHorizontal className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -585,11 +761,86 @@ function Page() {
                     })
                   )}
                 </TableBody>
+                  </>
+                )}
               </Table>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog
+        open={truckToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingTruck) setTruckToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete truck posting?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {truckToDelete ? (
+                <>
+                  This will permanently remove{" "}
+                  <span className="font-medium text-foreground">{truckToDelete.truckBoardId}</span>
+                  {truckToDelete.carrierName ? <> ({truckToDelete.carrierName})</> : null}. This
+                  cannot be undone.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingTruck}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={deletingTruck}
+              onClick={() => void confirmDeleteTruck()}
+            >
+              {deletingTruck ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                "Delete posting"
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={draftToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setDraftToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {draftToDelete ? (
+                <>
+                  This will permanently remove draft{" "}
+                  <span className="font-medium text-foreground">
+                    {draftToDelete.draft.truckBoardId}
+                  </span>
+                  {draftToDelete.draft.carrierName ? (
+                    <> for {draftToDelete.draft.carrierName}</>
+                  ) : null}
+                  . This cannot be undone.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={confirmDeleteDraft}>
+              Delete draft
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

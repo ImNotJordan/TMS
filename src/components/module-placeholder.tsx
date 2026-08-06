@@ -9,11 +9,13 @@ export function ModulePlaceholder({
   title,
   description,
   panels,
+  showWorkspaceCard = true,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   panels: { label: string; value: string; tone?: "default" | "success" | "warning" | "info" }[];
+  showWorkspaceCard?: boolean;
 }) {
   const toneClass = {
     default: "bg-muted text-foreground",
@@ -62,24 +64,26 @@ export function ModulePlaceholder({
           ))}
         </div>
 
-        <Card className="mt-6 border-border/70 shadow-sm">
-          <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Icon className="h-6 w-6" />
-            </div>
-            <div className="max-w-md">
-              <h3 className="text-base font-semibold text-foreground">{title} workspace</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Connected to your live operations data. Tables, filters, and bulk actions appear
-                here. Use the quick create button above to populate this module.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">View documentation</Button>
-              <Button size="sm">Get started</Button>
-            </div>
-          </CardContent>
-        </Card>
+        {showWorkspaceCard ? (
+          <Card className="mt-6 border-border/70 shadow-sm">
+            <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Icon className="h-6 w-6" />
+              </div>
+              <div className="max-w-md">
+                <h3 className="text-base font-semibold text-foreground">{title} workspace</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Connected to your live operations data. Tables, filters, and bulk actions appear
+                  here. Use the quick create button above to populate this module.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">View documentation</Button>
+                <Button size="sm">Get started</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
     </div>
   );

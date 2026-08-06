@@ -2,6 +2,37 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import {
+  handleAiAssistantRequest,
+  handleAiStatusRequest,
+  isAiAssistantRequest,
+  isAiStatusRequest,
+} from "./lib/ai-assistant-proxy";
+import {
+  handleAiChatRequest,
+  handleAiTestRequest,
+  isAiChatRequest,
+  isAiTestRequest,
+} from "./lib/ai-proxy";
+import {
+  handleCommsAgentDraftRequest,
+  handleCommsEmailSendRequest,
+  handleCommsSmsInboundRequest,
+  handleCommsSmsSendRequest,
+  handleCommsSmsStatusCallbackRequest,
+  handleCommsTranslateRequest,
+  isCommsAgentDraftRequest,
+  isCommsEmailSendRequest,
+  isCommsSmsInboundRequest,
+  isCommsSmsSendRequest,
+  isCommsSmsStatusCallbackRequest,
+  isCommsTranslateRequest,
+} from "./lib/comms-proxy";
+import { handleGeocodeSearchRequest, isGeocodeSearchRequest } from "./lib/geocode-proxy";
+import {
+  handleGoogleDirectionsRequest,
+  isGoogleDirectionsRequest,
+} from "./lib/google-directions-proxy";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -69,6 +100,45 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (isGeocodeSearchRequest(url, request.method)) {
+        return handleGeocodeSearchRequest(url, request);
+      }
+      if (isGoogleDirectionsRequest(url, request.method)) {
+        return handleGoogleDirectionsRequest(url, request);
+      }
+      if (isAiStatusRequest(url, request.method)) {
+        return handleAiStatusRequest(request);
+      }
+      if (isAiAssistantRequest(url, request.method)) {
+        return handleAiAssistantRequest(request);
+      }
+      if (isAiTestRequest(url, request.method)) {
+        return handleAiTestRequest(request);
+      }
+      if (isAiChatRequest(url, request.method)) {
+        return handleAiChatRequest(request);
+      }
+
+      if (isCommsSmsSendRequest(url, request.method)) {
+        return handleCommsSmsSendRequest(request);
+      }
+      if (isCommsSmsStatusCallbackRequest(url, request.method)) {
+        return handleCommsSmsStatusCallbackRequest(request);
+      }
+      if (isCommsSmsInboundRequest(url, request.method)) {
+        return handleCommsSmsInboundRequest(request);
+      }
+      if (isCommsEmailSendRequest(url, request.method)) {
+        return handleCommsEmailSendRequest(request);
+      }
+      if (isCommsTranslateRequest(url, request.method)) {
+        return handleCommsTranslateRequest(request);
+      }
+      if (isCommsAgentDraftRequest(url, request.method)) {
+        return handleCommsAgentDraftRequest(request);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

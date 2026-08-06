@@ -1,29 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ShieldAlert } from "lucide-react";
-import { ModulePlaceholder } from "@/components/module-placeholder";
+
+import { RiskPage } from "@/features/risk/risk-page";
 
 export const Route = createFileRoute("/risk")({
   head: () => ({
     meta: [
-      { title: "Risk Models — Logistics Software" },
-      { name: "description", content: "Predictive risk scoring across lanes, carriers, and shipments." },
+      { title: "Risk Models - Logistics Software" },
+      {
+        name: "description",
+        content:
+          "Enterprise risk command center for model lifecycle management, explainable scoring, and governance.",
+      },
     ],
   }),
-  component: Page,
+  component: RiskPage,
 });
-
-function Page() {
-  return (
-    <ModulePlaceholder
-      icon={ShieldAlert}
-      title="Risk Models"
-      description="Predictive risk scoring across lanes, carriers, and shipments."
-      panels={[
-    { label: "High-Risk Loads", value: "9", tone: "warning" },
-    { label: "Avg Risk Score", value: "32", tone: "default" },
-    { label: "Models Active", value: "7", tone: "info" },
-    { label: "Mitigated (30d)", value: "118", tone: "success" }
-      ]}
-    />
-  );
-}

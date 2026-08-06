@@ -6,10 +6,22 @@
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
 // @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
 export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
+  },
+  vite: {
+    resolve: {
+      alias: {
+        "@titan/aws-client": path.resolve(rootDir, "packages/aws-client/src"),
+      },
+    },
   },
 });

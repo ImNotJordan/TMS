@@ -58,6 +58,7 @@ import {
   Youtube,
   Quote,
   Workflow,
+  Play,
 } from "lucide-react";
 import {
   AreaChart,
@@ -85,6 +86,7 @@ import {
 } from "@/components/ui/accordion";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { AppLogoMark } from "@/components/app-logo-mark";
 
 export const Route = createFileRoute("/landing")({
   head: () => ({
@@ -105,9 +107,15 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground antialiased">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        Skip to content
+      </a>
       <BackgroundGlow />
       <Navbar />
-      <main className="relative">
+      <main id="main-content" className="relative" tabIndex={-1}>
         <Hero />
         <LogosStrip />
         <Stats />
@@ -147,11 +155,10 @@ function useThemeFromStorage() {
 function BackgroundGlow() {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div className="absolute -top-40 left-1/2 h-[520px] w-[1100px] -translate-x-1/2 rounded-full bg-primary/15 blur-[140px]" />
-      <div className="absolute top-[40%] -right-40 h-[420px] w-[700px] rounded-full bg-info/10 blur-[140px]" />
-      <div className="absolute -bottom-40 -left-20 h-[420px] w-[700px] rounded-full bg-success/10 blur-[140px]" />
+      <div className="absolute -top-32 left-1/2 h-[360px] w-[720px] -translate-x-1/2 rounded-full bg-primary/12 blur-[80px] motion-reduce:hidden" />
+      <div className="absolute top-[45%] -right-24 h-[280px] w-[480px] rounded-full bg-info/8 blur-[80px] motion-reduce:hidden" />
       <div
-        className="absolute inset-0 opacity-[0.025] dark:opacity-[0.05]"
+        className="absolute inset-0 opacity-[0.02] dark:opacity-[0.04]"
         style={{
           backgroundImage:
             "linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)",
@@ -208,10 +215,7 @@ function Navbar() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <a href="#top" className="flex items-center gap-2.5">
-          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-info text-primary-foreground shadow-sm shadow-primary/20">
-            <Truck className="h-5 w-5" />
-            <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/20" />
-          </div>
+          <AppLogoMark className="h-9 w-9 shrink-0 rounded-xl shadow-sm shadow-primary/20" />
           <div className="flex flex-col leading-tight">
             <span className="text-[15px] font-semibold tracking-tight">Logistics Software</span>
             <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -220,12 +224,12 @@ function Navbar() {
           </div>
         </a>
 
-        <nav className="hidden items-center gap-1 lg:flex">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
           {NAV_LINKS.map((l) => (
             <a
               key={l.label}
               href={l.href}
-              className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               {l.label}
             </a>
@@ -236,8 +240,8 @@ function Navbar() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-lg"
-            aria-label="Toggle theme"
+            className="h-11 w-11 rounded-lg"
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
             onClick={toggleTheme}
           >
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -245,7 +249,7 @@ function Navbar() {
 
           <Link
             to="/login"
-            className="hidden h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground sm:inline-flex"
+            className="hidden h-11 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:inline-flex"
           >
             Login
           </Link>
@@ -253,7 +257,7 @@ function Navbar() {
           <Button
             asChild
             size="sm"
-            className="hidden h-9 gap-1.5 rounded-lg bg-foreground text-background shadow-sm hover:bg-foreground/90 sm:inline-flex"
+            className="hidden h-11 gap-1.5 rounded-lg bg-foreground text-background shadow-sm hover:bg-foreground/90 sm:inline-flex"
           >
             <a href="#cta">
               Get started <ArrowRight className="h-3.5 w-3.5" />
@@ -263,9 +267,11 @@ function Navbar() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-lg lg:hidden"
+            className="h-11 w-11 rounded-lg lg:hidden"
             onClick={() => setOpen((v) => !v)}
-            aria-label="Open menu"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            aria-controls="landing-mobile-nav"
           >
             {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </Button>
@@ -274,29 +280,32 @@ function Navbar() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="border-t border-border/60 bg-background/95 backdrop-blur-xl lg:hidden">
-          <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3 sm:px-6">
+        <div
+          id="landing-mobile-nav"
+          className="border-t border-border/60 bg-background/95 backdrop-blur-xl lg:hidden"
+        >
+          <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3 sm:px-6" aria-label="Mobile">
             {NAV_LINKS.map((l) => (
               <a
                 key={l.label}
                 href={l.href}
                 onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                className="rounded-md px-3 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {l.label}
               </a>
             ))}
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <Button asChild variant="outline" className="h-10">
+              <Button asChild variant="outline" className="h-11">
                 <Link to="/login">Login</Link>
               </Button>
-              <Button asChild className="h-10 bg-foreground text-background hover:bg-foreground/90">
+              <Button asChild className="h-11 bg-foreground text-background hover:bg-foreground/90">
                 <a href="#cta" onClick={() => setOpen(false)}>
                   Get started
                 </a>
               </Button>
             </div>
-          </div>
+          </nav>
         </div>
       )}
     </header>
@@ -314,7 +323,7 @@ function Hero() {
         <div className="mx-auto flex max-w-3xl flex-col items-center text-center">
           <a
             href="#features"
-            className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-primary/40 hover:text-foreground"
+            className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="flex h-1.5 w-1.5 rounded-full bg-success" />
             <span>New · AI Bidding Copilot &amp; smart load matching</span>
@@ -323,10 +332,8 @@ function Hero() {
 
           <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
             The operating system for{" "}
-            <span className="relative whitespace-nowrap">
-              <span className="bg-gradient-to-br from-primary via-info to-success bg-clip-text text-transparent">
-                modern freight
-              </span>
+            <span className="relative inline sm:whitespace-nowrap">
+              <span className="text-primary">modern freight</span>
               <svg
                 aria-hidden
                 viewBox="0 0 200 12"
@@ -351,7 +358,7 @@ function Hero() {
           </p>
 
           <div className="mt-8 flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Button asChild size="lg" className="h-12 gap-1.5 rounded-xl px-5 text-[15px] shadow-lg shadow-primary/20">
+            <Button asChild size="lg" className="h-12 w-full gap-1.5 rounded-xl px-5 text-[15px] shadow-lg shadow-primary/20 sm:w-auto">
               <a href="#cta">
                 Start free trial <ArrowRight className="h-4 w-4" />
               </a>
@@ -360,13 +367,13 @@ function Hero() {
               asChild
               variant="outline"
               size="lg"
-              className="h-12 gap-1.5 rounded-xl border-border/70 bg-card/40 px-5 text-[15px] backdrop-blur"
+              className="h-12 w-full gap-1.5 rounded-xl border-border/70 bg-card/40 px-5 text-[15px] backdrop-blur sm:w-auto"
             >
               <a href="#features">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  ▶
+                  <Play className="h-3 w-3 fill-current" aria-hidden />
                 </span>
-                Watch 2-min demo
+                Explore the product
               </a>
             </Button>
           </div>
@@ -422,7 +429,7 @@ function HeroDashboardPreview() {
             app.logistics.software/dashboard
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-success animate-pulse motion-reduce:animate-none" />
             Live
           </div>
         </div>
@@ -692,7 +699,7 @@ function Pin({
   return (
     <div className={`absolute -translate-x-1/2 -translate-y-1/2 ${className}`}>
       {pulsing && (
-        <span className={`absolute inset-0 -m-1 animate-ping rounded-full ${colors[tone]} opacity-40`} />
+        <span className={`absolute inset-0 -m-1 animate-ping motion-reduce:animate-none rounded-full ${colors[tone]} opacity-40`} />
       )}
       <span className={`block h-2.5 w-2.5 rounded-full ring-2 ring-background ${colors[tone]}`} />
     </div>
@@ -826,19 +833,23 @@ function SectionHeader({
       className={`mx-auto max-w-3xl ${align === "center" ? "text-center" : "text-left"}`}
     >
       {eyebrow && (
-        <div
-          className={`text-[11px] font-semibold uppercase tracking-[0.18em] text-primary ${
-            align === "center" ? "" : ""
-          }`}
-        >
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
           {eyebrow}
         </div>
       )}
-      <h2 className="mt-3 text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
+      <h2
+        className={`text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1] ${
+          eyebrow ? "mt-3" : ""
+        }`}
+      >
         {title}
       </h2>
       {description && (
-        <p className="mt-4 text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
+        <p
+          className={`mt-3 max-w-prose text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg ${
+            align === "center" ? "sm:mx-auto" : ""
+          }`}
+        >
           {description}
         </p>
       )}
@@ -1197,7 +1208,7 @@ function TrackingPreview() {
 
                   <div className="absolute left-3 top-3 rounded-lg border border-border/60 bg-card/90 px-2.5 py-1.5 text-[11px] font-medium backdrop-blur">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+                      <span className="inline-block h-1.5 w-1.5 animate-pulse motion-reduce:animate-none rounded-full bg-success" />
                       L-2841 · Live
                     </span>
                   </div>
@@ -1918,9 +1929,9 @@ function Testimonials() {
               key={i}
               className="group relative flex flex-col rounded-2xl border border-border/70 bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-xl"
             >
-              <div className="flex items-center gap-1 text-warning">
+              <div className="flex items-center gap-1 text-warning" aria-label="5 out of 5 stars">
                 {Array.from({ length: 5 }).map((_, j) => (
-                  <Star key={j} className="h-4 w-4 fill-warning text-warning" />
+                  <Star key={j} className="h-4 w-4 fill-warning text-warning" aria-hidden />
                 ))}
               </div>
               <Quote className="absolute right-5 top-5 h-8 w-8 text-primary/15" />
@@ -2174,7 +2185,7 @@ function FAQSection() {
             </a>
           </Button>
           <Button asChild variant="outline" className="h-10">
-            <a href="#features">Read documentation</a>
+            <a href="#features">Explore features</a>
           </Button>
         </div>
       </div>
@@ -2202,17 +2213,17 @@ function FinalCTA() {
           />
           <div
             aria-hidden
-            className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-primary/30 blur-3xl"
+            className="absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/20 blur-2xl motion-reduce:hidden"
           />
           <div
             aria-hidden
-            className="absolute -right-32 -bottom-32 h-96 w-96 rounded-full bg-info/30 blur-3xl"
+            className="absolute -right-24 -bottom-24 h-72 w-72 rounded-full bg-info/20 blur-2xl motion-reduce:hidden"
           />
 
           <div className="relative z-10 grid items-center gap-8 p-8 sm:p-12 lg:grid-cols-2 lg:gap-12 lg:p-16">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border/40 bg-sidebar-accent/40 px-3 py-1 text-xs font-medium backdrop-blur">
-                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse motion-reduce:animate-none" />
                 Free 14-day trial · no credit card
               </div>
               <h2 className="mt-5 text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
@@ -2230,14 +2241,20 @@ function FinalCTA() {
                 className="mt-4 flex flex-col gap-2 sm:flex-row"
                 onSubmit={(e) => e.preventDefault()}
               >
+                <label htmlFor="landing-cta-email" className="sr-only">
+                  Work email
+                </label>
                 <Input
+                  id="landing-cta-email"
                   type="email"
+                  name="email"
+                  autoComplete="email"
                   placeholder="you@company.com"
-                  className="h-11 border-sidebar-border/40 bg-sidebar/50 text-sidebar-foreground placeholder:text-sidebar-foreground/50"
+                  className="h-11 min-w-0 flex-1 border-sidebar-border/40 bg-sidebar/50 text-sidebar-foreground placeholder:text-sidebar-foreground/50"
                 />
                 <Button
                   type="submit"
-                  className="h-11 gap-1.5 bg-primary px-5 text-primary-foreground hover:bg-primary/90"
+                  className="h-11 shrink-0 gap-1.5 bg-primary px-5 text-primary-foreground hover:bg-primary/90"
                 >
                   Get started <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -2301,9 +2318,7 @@ function Footer() {
         <div className="grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-4">
             <a href="#top" className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-info text-primary-foreground shadow-sm">
-                <Truck className="h-5 w-5" />
-              </div>
+              <AppLogoMark className="h-9 w-9 shrink-0 rounded-xl shadow-sm" />
               <div className="flex flex-col leading-tight">
                 <span className="text-[15px] font-semibold tracking-tight">Logistics Software</span>
                 <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -2317,25 +2332,38 @@ function Footer() {
             </p>
 
             <div className="mt-5 flex max-w-sm gap-2">
+              <label htmlFor="landing-footer-email" className="sr-only">
+                Email for product updates
+              </label>
               <Input
+                id="landing-footer-email"
                 type="email"
+                name="email"
+                autoComplete="email"
                 placeholder="Subscribe to product updates"
-                className="h-10 border-border/70 bg-card"
+                className="h-11 min-w-0 flex-1 border-border/70 bg-card"
               />
-              <Button className="h-10 gap-1.5">
-                <Send className="h-3.5 w-3.5" /> Subscribe
+              <Button type="button" className="h-11 shrink-0 gap-1.5">
+                <Send className="h-3.5 w-3.5" aria-hidden /> Subscribe
               </Button>
             </div>
 
             <div className="mt-6 flex items-center gap-2">
-              {[Twitter, Linkedin, Github, Youtube].map((I, i) => (
+              {(
+                [
+                  { Icon: Twitter, label: "Twitter" },
+                  { Icon: Linkedin, label: "LinkedIn" },
+                  { Icon: Github, label: "GitHub" },
+                  { Icon: Youtube, label: "YouTube" },
+                ] as const
+              ).map(({ Icon, label }) => (
                 <a
-                  key={i}
+                  key={label}
                   href="#"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
-                  aria-label="Social link"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={label}
                 >
-                  <I className="h-4 w-4" />
+                  <Icon className="h-4 w-4" aria-hidden />
                 </a>
               ))}
             </div>
@@ -2352,7 +2380,7 @@ function Footer() {
                     <li key={l}>
                       <a
                         href="#"
-                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                        className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                       >
                         {l}
                       </a>
@@ -2370,7 +2398,7 @@ function Footer() {
           </div>
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
+              <span className="inline-block h-1.5 w-1.5 animate-pulse motion-reduce:animate-none rounded-full bg-success" />
               All systems operational
             </span>
             <a href="#" className="hover:text-foreground">Status</a>

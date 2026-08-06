@@ -1,6 +1,6 @@
-import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
-import { getDynamoDocClient, getProfileTableName } from "./dynamodb";
+import { getDynamoDocClient, getProfileTableName, queryAllItems } from "./dynamodb";
 import { createRateLimitedExecutor } from "./rate-limit";
 
 const PROFILE_READ_RATE_LIMIT_MS = 300;
@@ -41,10 +41,15 @@ function describeError(err: unknown, op: string): Error {
   return new Error(`DynamoDB ${op} failed`);
 }
 
+export type SectionLoadResult<T> = {
+  data: T | null;
+  updatedAt: string | null;
+};
+
 export async function getSection<T = Record<string, unknown>>(
   userId: string,
   section: SectionKey,
-): Promise<T | null> {
+): Promise<SectionLoadResult<T>> {
   return runProfileReadLimited(async () => {
     try {
       const client = await getDynamoDocClient();
@@ -54,7 +59,11 @@ export async function getSection<T = Record<string, unknown>>(
           Key: { userId, section },
         }),
       );
-      return ((out.Item as ProfileItem<T> | undefined)?.data ?? null) as T | null;
+      const item = out.Item as ProfileItem<T> | undefined;
+      return {
+        data: (item?.data ?? null) as T | null,
+        updatedAt: item?.updatedAt ?? null,
+      };
     } catch (err) {
       throw describeError(err, "GetItem");
     }
@@ -86,22 +95,42 @@ export async function putSection<T = Record<string, unknown>>(
   });
 }
 
+/**
+ * Merge `patch` into the existing section document so partial UIs
+ * (e.g. Profile → Role & Permissions) cannot wipe RBAC matrices.
+ */
+export async function putSectionMerge(
+  userId: string,
+  section: SectionKey,
+  patch: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const existing = await getSection<Record<string, unknown>>(userId, section);
+  const base =
+    existing.data && typeof existing.data === "object" && !Array.isArray(existing.data)
+      ? existing.data
+      : {};
+  const merged = { ...base, ...patch };
+  await putSection(userId, section, merged);
+  return merged;
+}
+
 export async function getAllSections(
   userId: string,
 ): Promise<Partial<Record<SectionKey, unknown>>> {
   return runProfileReadLimited(async () => {
     try {
       const client = await getDynamoDocClient();
-      const out = await client.send(
-        new QueryCommand({
-          TableName: getProfileTableName(),
-          KeyConditionExpression: "userId = :u",
-          ExpressionAttributeValues: { ":u": userId },
-        }),
-      );
-      const map: Partial<Record<SectionKey, unknown>> = {};
-      for (const item of (out.Items as ProfileItem<unknown>[] | undefined) ?? []) {
-        map[item.section] = item.data;
+      const items = await queryAllItems<ProfileItem<unknown>>(client, {
+        TableName: getProfileTableName(),
+        KeyConditionExpression: "userId = :u",
+        ExpressionAttributeValues: { ":u": userId },
+      });
+      const map: Partial<Record<SectionKey, SectionLoadResult<unknown>>> = {};
+      for (const item of items) {
+        map[item.section] = {
+          data: item.data ?? null,
+          updatedAt: item.updatedAt ?? null,
+        };
       }
       return map;
     } catch (err) {

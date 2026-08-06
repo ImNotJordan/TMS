@@ -1,29 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Gavel } from "lucide-react";
-import { ModulePlaceholder } from "@/components/module-placeholder";
+
+import { BiddingPage } from "@/features/bidding/bidding-page";
 
 export const Route = createFileRoute("/bidding")({
   head: () => ({
     meta: [
-      { title: "Bidding — Logistics Software" },
-      { name: "description", content: "Active and historical freight bids with win-rate insights." },
+      { title: "Bidding Workspace - Logistics Software" },
+      {
+        name: "description",
+        content:
+          "Premium spot-load bidding workspace with lane search, DAT intelligence, risk scoring, leverage signals, and AI bid recommendations.",
+      },
     ],
   }),
-  component: Page,
+  component: BiddingPage,
 });
-
-function Page() {
-  return (
-    <ModulePlaceholder
-      icon={Gavel}
-      title="Bidding"
-      description="Active and historical freight bids with win-rate insights."
-      panels={[
-    { label: "Open Bids", value: "36", tone: "info" },
-    { label: "Win Rate", value: "42.8%", tone: "success" },
-    { label: "Avg Margin", value: "$184", tone: "default" },
-    { label: "Expiring Today", value: "5", tone: "warning" }
-      ]}
-    />
-  );
-}

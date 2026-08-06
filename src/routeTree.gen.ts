@@ -19,6 +19,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoadsRouteImport } from './routes/loads'
 import { Route as LandingRouteImport } from './routes/landing'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CrmRouteImport } from './routes/crm'
 import { Route as CommunicationsRouteImport } from './routes/communications'
 import { Route as CarriersRouteImport } from './routes/carriers'
@@ -29,6 +30,8 @@ import { Route as AccountingRouteImport } from './routes/accounting'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TruckboardTruckBoardIdRouteImport } from './routes/truckboard.$truckBoardId'
 import { Route as LoadsLoadIdRouteImport } from './routes/loads.$loadId'
+import { Route as CarriersCarrierIdRouteImport } from './routes/carriers.$carrierId'
+import { Route as AdminUsersUserIdRouteImport } from './routes/admin.users.$userId'
 
 const TruckboardRoute = TruckboardRouteImport.update({
   id: '/truckboard',
@@ -78,6 +81,11 @@ const LoadsRoute = LoadsRouteImport.update({
 const LandingRoute = LandingRouteImport.update({
   id: '/landing',
   path: '/landing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CrmRoute = CrmRouteImport.update({
@@ -130,16 +138,27 @@ const LoadsLoadIdRoute = LoadsLoadIdRouteImport.update({
   path: '/$loadId',
   getParentRoute: () => LoadsRoute,
 } as any)
+const CarriersCarrierIdRoute = CarriersCarrierIdRouteImport.update({
+  id: '/$carrierId',
+  path: '/$carrierId',
+  getParentRoute: () => CarriersRoute,
+} as any)
+const AdminUsersUserIdRoute = AdminUsersUserIdRouteImport.update({
+  id: '/users/$userId',
+  path: '/users/$userId',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/accounting': typeof AccountingRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/bidding': typeof BiddingRoute
-  '/carriers': typeof CarriersRoute
+  '/carriers': typeof CarriersRouteWithChildren
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
+  '/dashboard': typeof DashboardRoute
   '/landing': typeof LandingRoute
   '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
@@ -150,18 +169,21 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/tracking': typeof TrackingRoute
   '/truckboard': typeof TruckboardRouteWithChildren
+  '/carriers/$carrierId': typeof CarriersCarrierIdRoute
   '/loads/$loadId': typeof LoadsLoadIdRoute
   '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/accounting': typeof AccountingRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/bidding': typeof BiddingRoute
-  '/carriers': typeof CarriersRoute
+  '/carriers': typeof CarriersRouteWithChildren
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
+  '/dashboard': typeof DashboardRoute
   '/landing': typeof LandingRoute
   '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
@@ -172,19 +194,22 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/tracking': typeof TrackingRoute
   '/truckboard': typeof TruckboardRouteWithChildren
+  '/carriers/$carrierId': typeof CarriersCarrierIdRoute
   '/loads/$loadId': typeof LoadsLoadIdRoute
   '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/accounting': typeof AccountingRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/bidding': typeof BiddingRoute
-  '/carriers': typeof CarriersRoute
+  '/carriers': typeof CarriersRouteWithChildren
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
+  '/dashboard': typeof DashboardRoute
   '/landing': typeof LandingRoute
   '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
@@ -195,8 +220,10 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/tracking': typeof TrackingRoute
   '/truckboard': typeof TruckboardRouteWithChildren
+  '/carriers/$carrierId': typeof CarriersCarrierIdRoute
   '/loads/$loadId': typeof LoadsLoadIdRoute
   '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -209,6 +236,7 @@ export interface FileRouteTypes {
     | '/carriers'
     | '/communications'
     | '/crm'
+    | '/dashboard'
     | '/landing'
     | '/loads'
     | '/login'
@@ -219,8 +247,10 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tracking'
     | '/truckboard'
+    | '/carriers/$carrierId'
     | '/loads/$loadId'
     | '/truckboard/$truckBoardId'
+    | '/admin/users/$userId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -231,6 +261,7 @@ export interface FileRouteTypes {
     | '/carriers'
     | '/communications'
     | '/crm'
+    | '/dashboard'
     | '/landing'
     | '/loads'
     | '/login'
@@ -241,8 +272,10 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tracking'
     | '/truckboard'
+    | '/carriers/$carrierId'
     | '/loads/$loadId'
     | '/truckboard/$truckBoardId'
+    | '/admin/users/$userId'
   id:
     | '__root__'
     | '/'
@@ -253,6 +286,7 @@ export interface FileRouteTypes {
     | '/carriers'
     | '/communications'
     | '/crm'
+    | '/dashboard'
     | '/landing'
     | '/loads'
     | '/login'
@@ -263,19 +297,22 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tracking'
     | '/truckboard'
+    | '/carriers/$carrierId'
     | '/loads/$loadId'
     | '/truckboard/$truckBoardId'
+    | '/admin/users/$userId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountingRoute: typeof AccountingRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AnalyticsRoute: typeof AnalyticsRoute
   BiddingRoute: typeof BiddingRoute
-  CarriersRoute: typeof CarriersRoute
+  CarriersRoute: typeof CarriersRouteWithChildren
   CommunicationsRoute: typeof CommunicationsRoute
   CrmRoute: typeof CrmRoute
+  DashboardRoute: typeof DashboardRoute
   LandingRoute: typeof LandingRoute
   LoadsRoute: typeof LoadsRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -360,6 +397,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LandingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/crm': {
       id: '/crm'
       path: '/crm'
@@ -430,8 +474,44 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoadsLoadIdRouteImport
       parentRoute: typeof LoadsRoute
     }
+    '/carriers/$carrierId': {
+      id: '/carriers/$carrierId'
+      path: '/$carrierId'
+      fullPath: '/carriers/$carrierId'
+      preLoaderRoute: typeof CarriersCarrierIdRouteImport
+      parentRoute: typeof CarriersRoute
+    }
+    '/admin/users/$userId': {
+      id: '/admin/users/$userId'
+      path: '/users/$userId'
+      fullPath: '/admin/users/$userId'
+      preLoaderRoute: typeof AdminUsersUserIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
+
+interface AdminRouteChildren {
+  AdminUsersUserIdRoute: typeof AdminUsersUserIdRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminUsersUserIdRoute: AdminUsersUserIdRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface CarriersRouteChildren {
+  CarriersCarrierIdRoute: typeof CarriersCarrierIdRoute
+}
+
+const CarriersRouteChildren: CarriersRouteChildren = {
+  CarriersCarrierIdRoute: CarriersCarrierIdRoute,
+}
+
+const CarriersRouteWithChildren = CarriersRoute._addFileChildren(
+  CarriersRouteChildren,
+)
 
 interface LoadsRouteChildren {
   LoadsLoadIdRoute: typeof LoadsLoadIdRoute
@@ -458,12 +538,13 @@ const TruckboardRouteWithChildren = TruckboardRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountingRoute: AccountingRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AnalyticsRoute: AnalyticsRoute,
   BiddingRoute: BiddingRoute,
-  CarriersRoute: CarriersRoute,
+  CarriersRoute: CarriersRouteWithChildren,
   CommunicationsRoute: CommunicationsRoute,
   CrmRoute: CrmRoute,
+  DashboardRoute: DashboardRoute,
   LandingRoute: LandingRoute,
   LoadsRoute: LoadsRouteWithChildren,
   LoginRoute: LoginRoute,

@@ -1,0 +1,257 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * "Instrument cluster" design system — dashboards, highway signage, mile
+ * markers. High-contrast, purposeful, not skeuomorphic. Amber is reserved for
+ * the driver's active job, live status, and primary actions — never used as
+ * general decoration. Keep in sync with ../../../src/styles.css only where
+ * the two apps intentionally share a look (fonts/tokens otherwise diverge on
+ * purpose for the driver app).
+ */
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Barlow Semi Condensed", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --color-ink: var(--ink);
+  --color-ink-elevated: var(--ink-elevated);
+  --color-amber: var(--amber);
+  --color-amber-dim: var(--amber-dim);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.875rem;
+
+  /* Brand constants — same in light and dark, never inverted. */
+  --ink: #0b1220;
+  --ink-elevated: #141f36;
+  --amber: #ffb020;
+  --amber-dim: #c77f0e;
+
+  --background: #eef1f6;
+  --foreground: #0e1729;
+  --card: #ffffff;
+  --card-foreground: #0e1729;
+  --popover: #ffffff;
+  --popover-foreground: #0e1729;
+  --primary: #0b1220;
+  --primary-foreground: #ffffff;
+  --secondary: #e4e8f0;
+  --secondary-foreground: #0e1729;
+  --muted: #e6e9f1;
+  --muted-foreground: #697587;
+  --accent: #e7ebf3;
+  --accent-foreground: #0e1729;
+  --destructive: #e23b4e;
+  --destructive-foreground: #ffffff;
+  --success: #0f9d6b;
+  --success-foreground: #ffffff;
+  --warning: #ffb020;
+  --warning-foreground: #0b1220;
+  --info: #3d6fbf;
+  --info-foreground: #ffffff;
+  --border: #e1e7ef;
+  --input: #e1e7ef;
+  --ring: #c77f0e;
+  --chart-1: #ffb020;
+  --chart-2: #0f9d6b;
+  --chart-3: #3d6fbf;
+  --chart-4: #c77f0e;
+  --chart-5: #e23b4e;
+  --sidebar: #0b1220;
+  --sidebar-foreground: #aeb8cc;
+  --sidebar-primary: #ffb020;
+  --sidebar-primary-foreground: #0b1220;
+  --sidebar-accent: #141f36;
+  --sidebar-accent-foreground: #f3f5fa;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #ffb020;
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #e7ecf5;
+  --card: #141f36;
+  --card-foreground: #e7ecf5;
+  --popover: #141f36;
+  --popover-foreground: #e7ecf5;
+  --primary: #f5f7fb;
+  --primary-foreground: #0b1220;
+  --secondary: #1b2740;
+  --secondary-foreground: #e7ecf5;
+  --muted: #1b2740;
+  --muted-foreground: #93a0b8;
+  --accent: #1f2c48;
+  --accent-foreground: #e7ecf5;
+  --destructive: #e9576a;
+  --destructive-foreground: #0b1220;
+  --success: #17b37e;
+  --success-foreground: #0b1220;
+  --warning: #ffb020;
+  --warning-foreground: #0b1220;
+  --info: #5c8fe0;
+  --info-foreground: #0b1220;
+  --border: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: #ffb020;
+  --chart-1: #ffb020;
+  --chart-2: #17b37e;
+  --chart-3: #5c8fe0;
+  --chart-4: #c77f0e;
+  --chart-5: #e9576a;
+  --sidebar: #060a14;
+  --sidebar-foreground: #aeb8cc;
+  --sidebar-primary: #ffb020;
+  --sidebar-primary-foreground: #0b1220;
+  --sidebar-accent: #141f36;
+  --sidebar-accent-foreground: #f3f5fa;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #ffb020;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    overscroll-behavior-y: none;
+  }
+}
+
+/* Voice overlay — pulsing mic rings */
+@keyframes voice-pulse-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+.voice-pulse-ring {
+  animation: voice-pulse-ring 1.8s cubic-bezier(0.25, 0.65, 0.4, 1) infinite;
+}
+
+/* Voice overlay — waveform bars */
+@keyframes voice-wave-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.voice-wave-bar {
+  animation: voice-wave-bar 0.9s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Route strip — live truck marker nudges forward, like it's rolling.
+   Positioning (centering) is handled by a static wrapper; this animates
+   translateX only, so it degrades safely under reduced motion. */
+@keyframes truck-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+
+.truck-nudge {
+  animation: truck-nudge 1.6s ease-in-out infinite;
+}
+
+/* Signature amber glow behind the live truck marker */
+@keyframes amber-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.amber-glow {
+  animation: amber-glow 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

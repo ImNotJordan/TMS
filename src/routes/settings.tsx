@@ -1,5 +1,5 @@
 import * as React from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Activity,
   BellRing,
@@ -34,6 +34,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { usePageReady } from "@/components/page-load-gate";
+import { FormCardSkeleton } from "@/components/page-skeleton";
 import {
   Select,
   SelectContent,
@@ -52,7 +55,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { ConfigureAiDialog } from "@/components/integrations/configure-ai-dialog";
+import { ConfigureGoogleMapsDialog } from "@/components/integrations/configure-google-maps-dialog";
+import {
+  INTEGRATION_PROVIDERS,
+  integrationStatusBadgeClass,
+  runIntegrationTestWithToast,
+  toCanonicalIntegrationId,
+  useIntegrations,
+  type IntegrationId,
+} from "@/features/integrations";
+import { useAppSettings } from "@/hooks/use-app-settings";
+import { useIntegrationsConfig } from "@/hooks/use-integrations-config";
+import { fetchAdminAuditLogsCached } from "@/lib/admin-audit-store";
+import {
+  ensureWorkspaceOpsSeeded,
+  loadAutomations,
+  loadWebhooks,
+  saveAutomations,
+  saveWebhooks,
+  type AutomationRuleRecord,
+  type WebhookEndpointRecord,
+} from "@/lib/workspace-ops-store";
+import { isWorkspaceSettingsConfigured } from "@/lib/dynamodb";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -156,18 +183,18 @@ const DEFAULT_SETTINGS: Record<string, SettingValue> = {
   default_login_landing_page: "Dashboard",
   default_density: "Comfortable View",
 
-  company_legal_name: "Titan Freight Dash LLC",
-  company_dba_name: "Titan Freight",
-  mc_number: "MC-1029374",
-  dot_number: "DOT-3048819",
-  ein_tax_id: "12-3456789",
-  company_website: "https://titanfreight.example",
-  business_address: "1941 Commerce St, Dallas, TX 75201",
-  billing_address: "1941 Commerce St, Dallas, TX 75201",
-  dispatch_phone: "+1 (214) 555-0114",
-  accounting_email: "accounting@titanfreight.com",
-  support_email: "support@titanfreight.com",
-  operating_regions: "US South, Midwest, Southeast",
+  company_legal_name: "",
+  company_dba_name: "",
+  mc_number: "",
+  dot_number: "",
+  ein_tax_id: "",
+  company_website: "",
+  business_address: "",
+  billing_address: "",
+  dispatch_phone: "",
+  accounting_email: "",
+  support_email: "",
+  operating_regions: "",
   supported_equipment_types: "Dry Van, Reefer, Flatbed, Power Only",
 
   default_load_workflow: "Standard Load Lifecycle",
@@ -227,9 +254,9 @@ const DEFAULT_SETTINGS: Record<string, SettingValue> = {
   notify_document_missing: true,
   notification_channels: "Email, SMS, In-App",
 
-  default_sender_email: "ops@titanfreight.com",
-  sms_sender_number: "+1 (214) 555-0110",
-  email_signature: "Titan Freight Operations Team",
+  default_sender_email: "",
+  sms_sender_number: "",
+  email_signature: "",
   quick_replies:
     "Driver has arrived at pickup.\nDriver has been loaded.\nDriver is in transit.\nDriver has arrived at delivery.\nPOD has been uploaded.",
   communication_logging: true,
@@ -272,16 +299,16 @@ const DEFAULT_SETTINGS: Record<string, SettingValue> = {
   manual_risk_override_permission: "Super Admin + Risk Manager",
   require_manager_approval_high_risk: true,
 
-  dat_api_key: "DAT-********-KEY",
-  dat_account_id: "DAT-ACCOUNT-7742",
+  dat_api_key: "",
+  dat_account_id: "",
   enable_dat_capacity_data: true,
   enable_dat_rate_data: true,
   default_dat_data_window: "Last 7 days",
   show_dat_suggestions_load_review: true,
   show_dat_suggestions_truckboard: true,
-  twilio_sms_enabled: true,
-  sendgrid_email_enabled: true,
-  quickbooks_integration_enabled: true,
+  twilio_sms_enabled: false,
+  sendgrid_email_enabled: false,
+  quickbooks_integration_enabled: false,
 
   automation_rule_examples:
     "If load is delivered -> request POD\nIf POD uploaded -> notify accounting\nIf carrier insurance expires in 15 days -> alert admin",
@@ -318,20 +345,20 @@ const DEFAULT_SETTINGS: Record<string, SettingValue> = {
   single_sign_on: true,
   google_login: true,
   microsoft_login: false,
-  ip_restrictions: "Office and approved VPN ranges",
-  allowed_domains: "titanfreight.com, shipperco.com",
+  ip_restrictions: "",
+  allowed_domains: "",
 
-  current_plan: "Enterprise",
-  billing_contact: "Ava Morgan",
-  billing_email: "billing@titanfreight.com",
-  payment_method: "ACH - Corporate Account",
-  seats_used: "84",
-  available_seats: "16",
-  usage_limits: "250 users, 120k monthly loads, 5M API calls",
+  current_plan: "",
+  billing_contact: "",
+  billing_email: "",
+  payment_method: "",
+  seats_used: "",
+  available_seats: "",
+  usage_limits: "",
 
-  api_usage_rate_limits: "10,000 requests/min",
-  webhook_secret_rotation: "Every 30 days",
-  developer_docs_link: "https://docs.titanfreight.example/api",
+  api_usage_rate_limits: "",
+  webhook_secret_rotation: "",
+  developer_docs_link: "",
   create_api_key_scope: "Read + Write",
   webhook_events:
     "load.created, load.updated, load.delivered, quote.accepted, document.uploaded, payment.received",
@@ -959,103 +986,177 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   },
 ];
 
-const INTEGRATION_STATUS = [
-  { provider: "DAT", status: "Connected", lastSync: "2 min ago" },
-  { provider: "Twilio SMS", status: "Connected", lastSync: "5 min ago" },
-  { provider: "SendGrid Email", status: "Connected", lastSync: "4 min ago" },
-  { provider: "QuickBooks", status: "Attention", lastSync: "43 min ago" },
-  { provider: "Google Maps", status: "Connected", lastSync: "1 min ago" },
-  { provider: "Stripe", status: "Disconnected", lastSync: "Never" },
-] as const;
-
-const AUTOMATION_TABLE = [
-  {
-    name: "Delivered -> Request POD",
-    trigger: "load.delivered",
-    condition: "POD missing",
-    action: "Send POD request",
-    audience: "Driver + Dispatcher",
-    status: "Active",
-    lastRun: "15 min ago",
-  },
-  {
-    name: "POD Uploaded -> Notify Accounting",
-    trigger: "document.uploaded",
-    condition: "Type = POD",
-    action: "Notify finance queue",
-    audience: "Accounting Team",
-    status: "Active",
-    lastRun: "31 min ago",
-  },
-  {
-    name: "Delayed 60m -> Notify Customer",
-    trigger: "tracking.exception",
-    condition: "ETA drift > 60m",
-    action: "Send customer update",
-    audience: "Customer Contact",
-    status: "Paused",
-    lastRun: "1 day ago",
-  },
-] as const;
-
-const WEBHOOK_TABLE = [
-  {
-    endpoint: "https://api.partner-a.com/logistics/events",
-    events: "load.created, load.updated",
-    status: "Active",
-  },
-  {
-    endpoint: "https://erp.company.com/hooks/invoice",
-    events: "invoice.created, payment.received",
-    status: "Active",
-  },
-  {
-    endpoint: "https://ops-alerts.company.com/webhook",
-    events: "tracking.exception",
-    status: "Disabled",
-  },
-] as const;
-
-const SYSTEM_LOG_ROWS = [
-  {
-    when: "2026-05-14 10:21",
-    actor: "Ava Morgan",
-    action: "Updated DAT data window",
-    module: "Integrations",
-    status: "Success",
-  },
-  {
-    when: "2026-05-14 09:53",
-    actor: "System",
-    action: "Failed webhook delivery retry #2",
-    module: "API / Webhooks",
-    status: "Warning",
-  },
-  {
-    when: "2026-05-14 09:09",
-    actor: "Mason Hall",
-    action: "Modified load required fields",
-    module: "Load Settings",
-    status: "Success",
-  },
-] as const;
-
 const SETTINGS_SAVE_RATE_LIMIT_MS = 1500;
 
 function Page() {
   const [activeCategory, setActiveCategory] = React.useState<SettingCategoryId>("general");
   const [search, setSearch] = React.useState("");
-  const [values, setValues] = React.useState<Record<string, SettingValue>>(DEFAULT_SETTINGS);
-  const [savedValues, setSavedValues] =
-    React.useState<Record<string, SettingValue>>(DEFAULT_SETTINGS);
-  const [lastSavedAt, setLastSavedAt] = React.useState("Today, 10:04 AM");
-  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const category = params.get("category");
+    if (
+      category === "integrations" ||
+      category === "communications" ||
+      category === "general"
+    ) {
+      setActiveCategory(category as SettingCategoryId);
+    }
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash.startsWith("integration-")) {
+      setActiveCategory("integrations");
+      window.setTimeout(() => {
+        document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 200);
+    }
+  }, []);
+  const {
+    values,
+    setValues,
+    savedValues,
+    loading: settingsLoading,
+    saving,
+    save: saveAppSettings,
+    error: settingsError,
+    dirty,
+    workspaceReady,
+    lastSavedLabel,
+    resetToSaved,
+    resetToDefaults,
+  } = useAppSettings(DEFAULT_SETTINGS);
+  usePageReady(settingsLoading);
   const [saveCoolingDown, setSaveCoolingDown] = React.useState(false);
-  const [auditNotes, setAuditNotes] = React.useState<string[]>([
-    "Ava Morgan changed tracking geofence radius to 2 miles.",
-    "System applied billing seat sync from Stripe.",
-    "Risk manager enabled manager approval for high-risk loads.",
-  ]);
+  const [automationRules, setAutomationRules] = React.useState<AutomationRuleRecord[]>([]);
+  const [webhookEndpoints, setWebhookEndpoints] = React.useState<WebhookEndpointRecord[]>([]);
+  const [opsLoading, setOpsLoading] = React.useState(false);
+  const [systemLogs, setSystemLogs] = React.useState<
+    { when: string; actor: string; action: string; module: string; status: string }[]
+  >([]);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!workspaceReady || !isWorkspaceSettingsConfigured()) return;
+    let cancelled = false;
+    setOpsLoading(true);
+    void (async () => {
+      try {
+        await ensureWorkspaceOpsSeeded();
+        const [autos, hooks, audit] = await Promise.all([
+          loadAutomations(),
+          loadWebhooks(),
+          fetchAdminAuditLogsCached({ force: true }).catch(() => []),
+        ]);
+        if (cancelled) return;
+        setAutomationRules(autos.rules);
+        setWebhookEndpoints(hooks.endpoints);
+        setSystemLogs(
+          audit.slice(0, 25).map((row) => ({
+            when: row.when,
+            actor: row.actorName || "System",
+            action: row.action,
+            module: row.module,
+            status: row.status || "Success",
+          })),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          toast.error("Could not load workspace ops", {
+            description: err instanceof Error ? err.message : "Try again",
+          });
+        }
+      } finally {
+        if (!cancelled) setOpsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceReady]);
+
+  const handleExportSettings = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      appSettings: values,
+      automations: { rules: automationRules },
+      webhooks: { endpoints: webhookEndpoints },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `titan-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Settings exported");
+  };
+
+  const handleImportSettings = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as {
+        appSettings?: Record<string, SettingValue>;
+        automations?: { rules?: AutomationRuleRecord[] };
+        webhooks?: { endpoints?: WebhookEndpointRecord[] };
+      };
+      if (parsed.appSettings && typeof parsed.appSettings === "object") {
+        setValues({ ...values, ...parsed.appSettings });
+      }
+      if (parsed.automations?.rules?.length) {
+        setAutomationRules(parsed.automations.rules);
+        await saveAutomations({ rules: parsed.automations.rules });
+      }
+      if (parsed.webhooks?.endpoints?.length) {
+        setWebhookEndpoints(parsed.webhooks.endpoints);
+        await saveWebhooks({ endpoints: parsed.webhooks.endpoints });
+      }
+      toast.success("Settings imported", {
+        description: "Review changes, then Save to persist app settings to DynamoDB.",
+      });
+    } catch (err) {
+      toast.error("Import failed", {
+        description: err instanceof Error ? err.message : "Invalid JSON",
+      });
+    }
+  };
+
+  const toggleAutomationStatus = async (id: string) => {
+    const next = automationRules.map((rule) =>
+      rule.id === id
+        ? {
+            ...rule,
+            status: (rule.status === "Active" ? "Paused" : "Active") as AutomationRuleRecord["status"],
+            updatedAt: new Date().toISOString(),
+          }
+        : rule,
+    );
+    setAutomationRules(next);
+    try {
+      await saveAutomations({ rules: next });
+      toast.success("Automation updated in WorkspaceSettings");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save automation");
+    }
+  };
+
+  const toggleWebhookStatus = async (id: string) => {
+    const next = webhookEndpoints.map((wh) =>
+      wh.id === id
+        ? {
+            ...wh,
+            status: (wh.status === "Active" ? "Disabled" : "Active") as WebhookEndpointRecord["status"],
+            updatedAt: new Date().toISOString(),
+          }
+        : wh,
+    );
+    setWebhookEndpoints(next);
+    try {
+      await saveWebhooks({ endpoints: next });
+      toast.success("Webhook updated in WorkspaceSettings");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save webhook");
+    }
+  };
 
   const visibleSections = React.useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1070,41 +1171,45 @@ function Page() {
     });
   }, [search, activeCategory]);
 
-  const dirty = React.useMemo(
-    () => Object.keys(values).some((key) => (values[key] ?? "") !== (savedValues[key] ?? "")),
-    [values, savedValues],
-  );
-
   const updateValue = (key: string, nextValue: SettingValue) => {
     setValues((prev) => ({ ...prev, [key]: nextValue }));
   };
 
   const handleSave = async () => {
-    if (saving || saveCoolingDown) return;
-    const changed = Object.keys(values).filter(
-      (key) => (values[key] ?? "") !== (savedValues[key] ?? ""),
-    );
-    if (changed.length === 0) return;
+    if (saving || saveCoolingDown || !dirty) return;
 
     setSaveCoolingDown(true);
-    setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 750));
-    setSavedValues(values);
-    setLastSavedAt("Just now");
-    setAuditNotes((prev) => [
-      `Saved ${changed.length} setting updates in ${labelForCategory(activeCategory)}.`,
-      ...prev,
-    ]);
-    setSaving(false);
-    setTimeout(() => setSaveCoolingDown(false), SETTINGS_SAVE_RATE_LIMIT_MS);
+    try {
+      await saveAppSettings(values);
+      toast.success("Settings saved", {
+        description: "All fields are stored in the WorkspaceSettings table for your organization.",
+      });
+      void fetchAdminAuditLogsCached({ force: true })
+        .then((audit) => {
+          setSystemLogs(
+            audit.slice(0, 25).map((row) => ({
+              when: row.when,
+              actor: row.actorName || "System",
+              action: row.action,
+              module: row.module,
+              status: row.status || "Success",
+            })),
+          );
+        })
+        .catch(() => undefined);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save settings");
+    } finally {
+      setTimeout(() => setSaveCoolingDown(false), SETTINGS_SAVE_RATE_LIMIT_MS);
+    }
   };
 
   const handleCancel = () => {
-    setValues(savedValues);
+    resetToSaved();
   };
 
   const handleResetDefaults = () => {
-    setValues(DEFAULT_SETTINGS);
+    resetToDefaults();
   };
 
   return (
@@ -1114,17 +1219,38 @@ function Page() {
         description="Configure company preferences, workflows, integrations, automations, notifications, security, billing, and system defaults."
         actions={
           <>
-            <Button variant="outline" size="sm" className="gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={handleExportSettings}
+            >
               <Download className="h-4 w-4" /> Export Settings
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => importInputRef.current?.click()}
+            >
               <Upload className="h-4 w-4" /> Import Settings
             </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleImportSettings(file);
+                e.target.value = "";
+              }}
+            />
             <Button
               size="sm"
               className="gap-1.5"
               onClick={handleSave}
-              disabled={!dirty || saving || saveCoolingDown}
+              disabled={!dirty || saving || saveCoolingDown || settingsLoading || !workspaceReady}
             >
               {saving ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1146,7 +1272,9 @@ function Page() {
               <Badge variant="outline" className="bg-success/15 text-success border-success/25">
                 Environment: {String(values.environment_label)}
               </Badge>
-              <Badge variant="outline">Last saved: {lastSavedAt}</Badge>
+              <Badge variant="outline">
+                {settingsLoading ? "Loading…" : `Last saved: ${lastSavedLabel}`}
+              </Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-1">
@@ -1194,7 +1322,27 @@ function Page() {
             </CardContent>
           </Card>
 
-          {visibleSections.length === 0 ? (
+          {settingsError ? (
+            <Card className="border-destructive/40 bg-destructive/5 shadow-sm">
+              <CardContent className="py-3 text-sm text-destructive">{settingsError}</CardContent>
+            </Card>
+          ) : null}
+
+          {!workspaceReady ? (
+            <Card className="border-border/70 shadow-sm">
+              <CardContent className="py-3 text-sm text-muted-foreground">
+                Sign in and set <code className="text-xs">VITE_WORKSPACE_SETTINGS_TABLE_NAME</code> in{" "}
+                <code className="text-xs">.env</code> to save settings to DynamoDB for all users.
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {settingsLoading ? (
+            <>
+              <FormCardSkeleton fields={4} columns={1} />
+              <FormCardSkeleton fields={3} columns={1} />
+            </>
+          ) : visibleSections.length === 0 ? (
             <Card className="border-border/70 shadow-sm">
               <CardContent className="py-14 text-center text-sm text-muted-foreground">
                 No settings matched your search in this category.
@@ -1227,6 +1375,7 @@ function Page() {
                       key={field.key}
                       field={field}
                       value={values[field.key]}
+                      disabled={settingsLoading || !workspaceReady}
                       onChange={(nextValue) => updateValue(field.key, nextValue)}
                     />
                   ))}
@@ -1236,49 +1385,7 @@ function Page() {
           )}
 
           {activeCategory === "integrations" && (
-            <Card className="border-border/70 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Integration Connection Status</CardTitle>
-                <CardDescription>
-                  Connection health, sync recency, and test controls for provider integrations.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {INTEGRATION_STATUS.map((integration) => (
-                  <div
-                    key={integration.provider}
-                    className="rounded-md border border-border/70 p-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-medium">{integration.provider}</div>
-                      <Badge
-                        variant="outline"
-                        className={
-                          integration.status === "Connected"
-                            ? "bg-success/15 text-success border-success/25"
-                            : integration.status === "Attention"
-                              ? "bg-warning/20 text-warning-foreground border-warning/25"
-                              : "bg-destructive/15 text-destructive border-destructive/25"
-                        }
-                      >
-                        {integration.status}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Last sync: {integration.lastSync}
-                    </p>
-                    <div className="mt-3 flex gap-2">
-                      <Button variant="outline" size="sm" className="h-8 gap-1.5">
-                        <RefreshCw className="h-3.5 w-3.5" /> Test
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8">
-                        Configure
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <IntegrationsConnectionPanel settingsValues={values} />
           )}
 
           {activeCategory === "automations" && (
@@ -1303,21 +1410,41 @@ function Page() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {AUTOMATION_TABLE.map((rule) => (
-                      <TableRow key={rule.name}>
+                    {opsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7}>
+                          <Skeleton className="h-8 w-full" />
+                        </TableCell>
+                      </TableRow>
+                    ) : automationRules.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                          No automation rules in WorkspaceSettings yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      automationRules.map((rule) => (
+                      <TableRow key={rule.id}>
                         <TableCell className="font-medium">{rule.name}</TableCell>
                         <TableCell>{rule.trigger}</TableCell>
                         <TableCell>{rule.condition}</TableCell>
                         <TableCell>{rule.action}</TableCell>
                         <TableCell>{rule.audience}</TableCell>
                         <TableCell>
-                          <Badge variant={rule.status === "Active" ? "secondary" : "outline"}>
-                            {rule.status}
-                          </Badge>
+                          <button type="button" onClick={() => void toggleAutomationStatus(rule.id)}>
+                            <Badge variant={rule.status === "Active" ? "secondary" : "outline"}>
+                              {rule.status}
+                            </Badge>
+                          </button>
                         </TableCell>
-                        <TableCell>{rule.lastRun}</TableCell>
+                        <TableCell>
+                          {rule.lastRunAt
+                            ? new Date(rule.lastRunAt).toLocaleString()
+                            : "—"}
+                        </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -1344,31 +1471,59 @@ function Page() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {WEBHOOK_TABLE.map((webhook) => (
-                        <TableRow key={webhook.endpoint}>
-                          <TableCell className="max-w-[340px] truncate">
-                            {webhook.endpoint}
-                          </TableCell>
-                          <TableCell>{webhook.events}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                webhook.status === "Active"
-                                  ? "bg-success/15 text-success border-success/25"
-                                  : "bg-muted text-muted-foreground border-border"
-                              }
-                            >
-                              {webhook.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="outline" size="sm" className="h-8 gap-1.5">
-                              <Webhook className="h-3.5 w-3.5" /> Test Webhook
-                            </Button>
+                      {opsLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={4}>
+                            <Skeleton className="h-8 w-full" />
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : webhookEndpoints.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                            No webhooks in WorkspaceSettings yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        webhookEndpoints.map((webhook) => (
+                          <TableRow key={webhook.id}>
+                            <TableCell className="max-w-[340px] truncate">
+                              {webhook.endpoint}
+                            </TableCell>
+                            <TableCell>{webhook.events}</TableCell>
+                            <TableCell>
+                              <button
+                                type="button"
+                                onClick={() => void toggleWebhookStatus(webhook.id)}
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    webhook.status === "Active"
+                                      ? "bg-success/15 text-success border-success/25"
+                                      : "bg-muted text-muted-foreground border-border"
+                                  }
+                                >
+                                  {webhook.status}
+                                </Badge>
+                              </button>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1.5"
+                                onClick={() =>
+                                  toast.message("Test webhook queued", {
+                                    description: webhook.endpoint,
+                                  })
+                                }
+                              >
+                                <Webhook className="h-3.5 w-3.5" /> Test Webhook
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -1441,19 +1596,33 @@ function Page() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {SYSTEM_LOG_ROWS.map((row) => (
-                      <TableRow key={`${row.when}-${row.action}`}>
-                        <TableCell>{row.when}</TableCell>
-                        <TableCell>{row.actor}</TableCell>
-                        <TableCell>{row.action}</TableCell>
-                        <TableCell>{row.module}</TableCell>
-                        <TableCell>
-                          <Badge variant={row.status === "Success" ? "secondary" : "outline"}>
-                            {row.status}
-                          </Badge>
+                    {opsLoading && systemLogs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5}>
+                          <Skeleton className="h-8 w-full" />
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : systemLogs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                          No admin audit events yet. Changes in Admin will appear here.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      systemLogs.map((row) => (
+                        <TableRow key={`${row.when}-${row.action}-${row.actor}`}>
+                          <TableCell>{row.when}</TableCell>
+                          <TableCell>{row.actor}</TableCell>
+                          <TableCell>{row.action}</TableCell>
+                          <TableCell>{row.module}</TableCell>
+                          <TableCell>
+                            <Badge variant={row.status === "Success" ? "secondary" : "outline"}>
+                              {row.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -1462,20 +1631,24 @@ function Page() {
 
           <Card className="border-border/70 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Recent Audit Notes</CardTitle>
+              <CardTitle className="text-base">Cross-module links</CardTitle>
               <CardDescription>
-                Latest settings changes and administrative system events.
+                Settings drive Accounting invoice prefixes, Admin company profile, and integrations.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {auditNotes.map((note, idx) => (
-                <div
-                  key={`${idx}-${note}`}
-                  className="rounded-md border border-border/70 p-2.5 text-sm"
-                >
-                  {note}
-                </div>
-              ))}
+            <CardContent className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/accounting">Accounting</Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/admin">Admin</Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/communications">Communications</Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/tracking">Tracking</Link>
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -1484,14 +1657,144 @@ function Page() {
   );
 }
 
+function IntegrationsConnectionPanel({
+  settingsValues,
+}: {
+  settingsValues: Record<string, SettingValue>;
+}) {
+  const {
+    data: integrations,
+    isLoading,
+    testingId,
+    test,
+    canTest,
+  } = useIntegrations(settingsValues);
+  const { config, save, loading, saving, error } = useIntegrationsConfig();
+  const [googleMapsOpen, setGoogleMapsOpen] = React.useState(false);
+  const [aiOpen, setAiOpen] = React.useState(false);
+
+  const handleConfigure = (id: IntegrationId) => {
+    if (id === "google_maps") {
+      setGoogleMapsOpen(true);
+      return;
+    }
+    if (id === "ai") {
+      setAiOpen(true);
+      return;
+    }
+    toast.message(
+      `Configure ${INTEGRATION_PROVIDERS.find((p) => p.id === id)?.label} using the fields above.`,
+    );
+  };
+
+  return (
+    <>
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Integration Connection Status</CardTitle>
+          <CardDescription>
+            Connection health, sync recency, and test controls. Google Maps powers facility
+            autocomplete on Loads and TruckBoard and geocoding on Tracking maps.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {error ? (
+            <p className="col-span-full text-sm text-destructive">{error}</p>
+          ) : null}
+          {loading || isLoading
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <div key={`skel-${i}`} className="rounded-md border border-border/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                  </div>
+                  <Skeleton className="mt-3 h-3 w-3/4" />
+                  <Skeleton className="mt-2 h-3 w-1/2" />
+                </div>
+              ))
+            : null}
+          {!loading &&
+            !isLoading &&
+            integrations.map((integration) => {
+              const testing = testingId === integration.id;
+              return (
+                <div
+                  key={integration.id}
+                  id={`integration-${integration.id}`}
+                  className="rounded-md border border-border/70 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-medium">{integration.name}</div>
+                    <Badge
+                      variant="outline"
+                      className={integrationStatusBadgeClass(integration.connectionLabel)}
+                    >
+                      {integration.connectionLabel}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Last sync: {integration.lastSyncLabel}
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5"
+                      disabled={loading || testing || !canTest(integration.id)}
+                      onClick={() => void runIntegrationTestWithToast(test, integration.id)}
+                    >
+                      {testing ? (
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      Test
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      disabled={loading}
+                      onClick={() => handleConfigure(toCanonicalIntegrationId(integration.id))}
+                    >
+                      Configure
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+        </CardContent>
+      </Card>
+
+      <ConfigureGoogleMapsDialog
+        open={googleMapsOpen}
+        onOpenChange={setGoogleMapsOpen}
+        config={config}
+        onSave={save}
+        saving={saving}
+      />
+
+      <ConfigureAiDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        config={config}
+        onSave={save}
+        saving={saving}
+      />
+    </>
+  );
+}
+
 function SettingFieldControl({
   field,
   value,
   onChange,
+  disabled = false,
 }: {
   field: SettingField;
   value: SettingValue | undefined;
   onChange: (value: SettingValue) => void;
+  disabled?: boolean;
 }) {
   const normalizedStringValue = typeof value === "string" ? value : "";
   const normalizedBooleanValue = typeof value === "boolean" ? value : false;
@@ -1508,6 +1811,7 @@ function SettingFieldControl({
           value={normalizedStringValue}
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
+          disabled={disabled}
         />
       )}
 
@@ -1517,12 +1821,17 @@ function SettingFieldControl({
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
           rows={3}
+          disabled={disabled}
         />
       )}
 
       {field.type === "select" && (
-        <Select value={normalizedStringValue} onValueChange={(nextValue) => onChange(nextValue)}>
-          <SelectTrigger>
+        <Select
+          value={normalizedStringValue}
+          onValueChange={(nextValue) => onChange(nextValue)}
+          disabled={disabled}
+        >
+          <SelectTrigger disabled={disabled}>
             <SelectValue placeholder="Select option" />
           </SelectTrigger>
           <SelectContent>
@@ -1541,6 +1850,7 @@ function SettingFieldControl({
           <Switch
             checked={normalizedBooleanValue}
             onCheckedChange={(checked) => onChange(checked)}
+            disabled={disabled}
           />
         </div>
       )}

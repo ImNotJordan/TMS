@@ -1,11 +1,11 @@
 import * as React from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowLeft, Loader2, Package, Save, Truck, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2, MapPin, Package, Receipt, Save, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { GlobalLoader } from "@/components/global-loader";
+import { usePageReady } from "@/components/page-load-gate";
 import {
   LOAD_FORM_STEPS,
   StepAssignment,
@@ -20,7 +20,9 @@ import {
   recordToLoadDraft,
   type LoadDraft,
 } from "@/components/loads/create-load-dialog";
-import { getLoadById, updateLoad, type LoadRecord } from "@/lib/loads-store";
+import { isLoadBillable } from "@/lib/accounting-store";
+import { getLoadByIdCached, updateLoad, type LoadRecord } from "@/lib/loads-store";
+import { useLoadOwnershipOptions } from "@/hooks/use-assignable-users";
 import {
   normalizeLoadForDriverAssignment,
   syncTrackingSessionForLoad,
@@ -88,6 +90,16 @@ function LoadDetailPage() {
   const [saving, setSaving] = React.useState(false);
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [dirty, setDirty] = React.useState(false);
+  const {
+    customerOptions,
+    brokerOptions,
+    dispatcherOptions,
+    driverOptions,
+    carrierOptions,
+    loading: ownershipOptionsLoading,
+  } = useLoadOwnershipOptions(true);
+
+  usePageReady(fetchState === "loading");
 
   const sectionRefs = React.useRef<Record<number, HTMLElement | null>>({});
 
@@ -106,7 +118,7 @@ function LoadDetailPage() {
     setSaveError(null);
     void (async () => {
       try {
-        const item = await getLoadById(loadId);
+        const item = await getLoadByIdCached(loadId);
         if (cancelled) return;
         if (!item) {
           setFetchState("missing");
@@ -212,7 +224,7 @@ function LoadDetailPage() {
   })();
 
   if (fetchState === "loading") {
-    return <GlobalLoader variant="embedded" message={`Opening load ${loadId}…`} />;
+    return null;
   }
 
   if (fetchState === "error") {
@@ -276,6 +288,23 @@ function LoadDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {draft.assignedDriver?.trim() ? (
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link to="/tracking" search={{ loadId: draft.loadId }}>
+                  <MapPin className="mr-1 h-4 w-4" /> Track
+                </Link>
+              </Button>
+            ) : null}
+            {baseline && isLoadBillable(baseline) ? (
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link
+                  to="/accounting"
+                  search={{ tab: "builder", queue: "ready-to-bill", loadId: draft.loadId }}
+                >
+                  <Receipt className="mr-1 h-4 w-4" /> Invoice
+                </Link>
+              </Button>
+            ) : null}
             {dirty && (
               <Button
                 type="button"
@@ -335,6 +364,11 @@ function LoadDetailPage() {
               stepErrors={stepErrors}
               onJump={scrollToSection}
               variant="edit"
+              customerOptions={customerOptions}
+              brokerOptions={brokerOptions}
+              dispatcherOptions={dispatcherOptions}
+              driverOptions={driverOptions}
+              carrierOptions={carrierOptions}
             />
           </section>
 
@@ -350,6 +384,10 @@ function LoadDetailPage() {
                 touched={showValidationErrors}
                 errors={stepErrors[1]}
                 immutableLoadId
+                customerOptions={customerOptions}
+                brokerOptions={brokerOptions}
+                dispatcherOptions={dispatcherOptions}
+                ownershipOptionsLoading={ownershipOptionsLoading}
               />
             </EditLoadSection>
 
@@ -391,6 +429,9 @@ function LoadDetailPage() {
                 update={update}
                 touched={showValidationErrors}
                 errors={stepErrors[5]}
+                carrierOptions={carrierOptions}
+                driverOptions={driverOptions}
+                assignmentOptionsLoading={ownershipOptionsLoading}
               />
             </EditLoadSection>
 

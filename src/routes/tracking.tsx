@@ -10,15 +10,15 @@ import {
   Download,
   ExternalLink,
   FileText,
-  FileUp,
   Filter,
   Globe2,
+  Loader2,
+  Map,
   MapPin,
   MessageSquare,
   Navigation,
   RefreshCw,
   Search,
-  Send,
   Share2,
   Shield,
   Siren,
@@ -30,40 +30,68 @@ import {
 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
+import { TrackingMessagesPanel } from "@/components/tracking/tracking-messages-panel";
+import { TrackingDocumentsPanel } from "@/components/tracking/tracking-documents-panel";
+import { TrackingCloseoutCard } from "@/components/tracking/tracking-closeout-card";
+import { ScrollRegion } from "@/components/scroll-region";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ListSkeleton } from "@/components/page-skeleton";
+import { usePageReady } from "@/components/page-load-gate";
 import { Progress } from "@/components/ui/progress";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listAllLoads, type LoadRecord } from "@/lib/loads-store";
+import { cn } from "@/lib/utils";
+import { listAllLoadsCached, type LoadRecord } from "@/lib/loads-store";
+import { toast } from "sonner";
+
+const TrackingRouteMap = React.lazy(() =>
+  import("@/components/tracking/tracking-route-map").then((m) => ({
+    default: m.TrackingRouteMap,
+  })),
+);
 import {
   applyDriverAction,
   DRIVER_ACTION_LABELS,
   getDriverAssignedLoads,
   getNextDriverActions,
   getTrackingSessionsSnapshot,
+  isTrackingSessionVisible,
   reportTrackingException,
-  sendTrackingMessage,
   subscribeTrackingSessions,
-  syncTrackingSessionForLoad,
+  syncTrackingSessionsForLoads,
   TRACKING_STATE_LABELS,
   type TrackingSession,
   type TrackingState,
 } from "@/lib/tracking-workflow-store";
 
+const TRACKING_TABS = [
+  "timeline",
+  "map",
+  "alerts",
+  "messages",
+  "documents",
+  "history",
+] as const;
+
+type TrackingTab = (typeof TRACKING_TABS)[number];
+
+type TrackingSearch = {
+  loadId?: string;
+  tab?: TrackingTab;
+};
+
 export const Route = createFileRoute("/tracking")({
+  validateSearch: (search: Record<string, unknown>): TrackingSearch => {
+    const loadId = typeof search.loadId === "string" && search.loadId.trim() ? search.loadId.trim() : undefined;
+    const rawTab = typeof search.tab === "string" ? search.tab.trim() : undefined;
+    const tab = TRACKING_TABS.includes(rawTab as TrackingTab) ? (rawTab as TrackingTab) : undefined;
+    return { loadId, tab };
+  },
   head: () => ({
     meta: [
-      { title: "Tracking — Logistics Software" },
+      { title: "Tracking - Logistics Software" },
       {
         name: "description",
         content:
@@ -102,6 +130,31 @@ function prettyTime(iso?: string | null) {
   });
 }
 
+const TRACKING_STATE_SHORT: Record<TrackingState, string> = {
+  "waiting-driver": "Waiting",
+  "driver-accepted": "Accepted",
+  "en-route-pickup": "To pickup",
+  "at-pickup": "At pickup",
+  "in-transit": "In transit",
+  "at-delivery": "At delivery",
+  delivered: "Delivered",
+  "pod-uploaded": "POD",
+  completed: "Done",
+  exception: "Exception",
+};
+
+function prettyTimeShort(iso?: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function matchSession(session: TrackingSession, query: string) {
   if (!query.trim()) return true;
   const q = query.toLowerCase();
@@ -121,29 +174,36 @@ function matchSession(session: TrackingSession, query: string) {
 }
 
 function Page() {
+  const navigate = Route.useNavigate();
+  const search = Route.useSearch();
   const [loads, setLoads] = React.useState<LoadRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
-  const [selectedLoadId, setSelectedLoadId] = React.useState<string | null>(null);
+  const [selectedLoadId, setSelectedLoadId] = React.useState<string | null>(search.loadId ?? null);
   const [driverId, setDriverId] = React.useState("d-101");
-  const [messageText, setMessageText] = React.useState("");
+  const detailTab: TrackingTab = search.tab ?? "timeline";
+  const sessionsListRef = React.useRef<HTMLDivElement>(null);
   const sessions = React.useSyncExternalStore(
     subscribeTrackingSessions,
     getTrackingSessionsSnapshot,
     () => [],
   );
+  const visibleSessions = React.useMemo(
+    () => sessions.filter(isTrackingSessionVisible),
+    [sessions],
+  );
 
-  const fetchLoads = React.useCallback(async () => {
+  usePageReady(loading);
+
+  const fetchLoads = React.useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      const all = await listAllLoads();
+      const all = await listAllLoadsCached({ force });
       all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
       setLoads(all);
-      for (const load of all) {
-        syncTrackingSessionForLoad(load, "Dispatcher");
-      }
+      syncTrackingSessionsForLoads(all, "Dispatcher", { force });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load tracking data.");
     } finally {
@@ -152,33 +212,83 @@ function Page() {
   }, []);
 
   React.useEffect(() => {
-    void fetchLoads();
+    void fetchLoads(true);
   }, [fetchLoads]);
 
+  // Deep-link from notifications / toasts: /tracking?loadId=…&tab=messages
+  React.useEffect(() => {
+    if (!search.loadId) return;
+    setSelectedLoadId(search.loadId);
+    setQuery("");
+  }, [search.loadId]);
+
   const filteredSessions = React.useMemo(
-    () => sessions.filter((s) => matchSession(s, query)),
-    [sessions, query],
+    () => visibleSessions.filter((s) => matchSession(s, query)),
+    [visibleSessions, query],
   );
 
   React.useEffect(() => {
     if (!filteredSessions.length) {
-      setSelectedLoadId(null);
+      if (!search.loadId) setSelectedLoadId(null);
       return;
     }
     if (selectedLoadId && !filteredSessions.some((s) => s.loadId === selectedLoadId)) {
+      // Prefer deep-linked load even if filter temporarily hides it
+      if (search.loadId && visibleSessions.some((s) => s.loadId === search.loadId)) {
+        setSelectedLoadId(search.loadId);
+        return;
+      }
       setSelectedLoadId(null);
     }
-  }, [filteredSessions, selectedLoadId]);
+  }, [filteredSessions, selectedLoadId, search.loadId, visibleSessions]);
 
-  const selected = React.useMemo(
-    () => filteredSessions.find((s) => s.loadId === selectedLoadId) ?? null,
-    [filteredSessions, selectedLoadId],
+  const selected = React.useMemo(() => {
+    if (!selectedLoadId) return null;
+    return (
+      filteredSessions.find((s) => s.loadId === selectedLoadId) ??
+      visibleSessions.find((s) => s.loadId === selectedLoadId) ??
+      null
+    );
+  }, [filteredSessions, selectedLoadId, visibleSessions]);
+
+  // Keep the selected / deep-linked session visible in the side list
+  React.useLayoutEffect(() => {
+    if (loading) return;
+    const targetId = search.loadId || selectedLoadId;
+    if (!targetId) return;
+    const list = sessionsListRef.current;
+    if (!list) return;
+    const row = Array.from(list.querySelectorAll<HTMLElement>("[data-tracking-load-id]")).find(
+      (el) => el.dataset.trackingLoadId === targetId,
+    );
+    row?.scrollIntoView({ block: "nearest", behavior: "auto" });
+  }, [loading, search.loadId, selectedLoadId, filteredSessions.length]);
+
+  const selectLoad = React.useCallback(
+    (loadId: string) => {
+      setSelectedLoadId(loadId);
+      void navigate({
+        search: (prev) => ({ ...prev, loadId }),
+        replace: true,
+      });
+    },
+    [navigate],
+  );
+
+  const setDetailTab = React.useCallback(
+    (tab: TrackingTab) => {
+      void navigate({
+        search: (prev) => ({ ...prev, tab }),
+        replace: true,
+      });
+    },
+    [navigate],
   );
 
   const driverAssigned = getDriverAssignedLoads(driverId);
 
   const counts = React.useMemo(() => {
-    const all = sessions;
+    const all = visibleSessions;
     return {
       total: all.length,
       waiting: all.filter((s) => s.trackingState === "waiting-driver").length,
@@ -190,7 +300,7 @@ function Page() {
       exception: all.filter((s) => s.trackingState === "exception").length,
       completed: all.filter((s) => s.trackingState === "completed").length,
     };
-  }, [sessions]);
+  }, [visibleSessions]);
 
   const performAction = (action: Parameters<typeof applyDriverAction>[1], notes?: string) => {
     if (!selected) return;
@@ -199,12 +309,6 @@ function Page() {
       source: "driver-app",
       notes,
     });
-  };
-
-  const sendMessage = () => {
-    if (!selected || !messageText.trim()) return;
-    sendTrackingMessage(selected.loadId, "ops", messageText);
-    setMessageText("");
   };
 
   return (
@@ -218,7 +322,7 @@ function Page() {
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() => void fetchLoads()}
+              onClick={() => void fetchLoads(true)}
             >
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
@@ -285,7 +389,7 @@ function Page() {
                       <button
                         key={s.loadId}
                         type="button"
-                        onClick={() => setSelectedLoadId(s.loadId)}
+                        onClick={() => selectLoad(s.loadId)}
                         className="w-full rounded-md border border-border/70 bg-background/60 p-2 text-left hover:bg-muted/30"
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -298,7 +402,7 @@ function Page() {
                           </Badge>
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {s.pickup.city}, {s.pickup.state} → {s.delivery.city}, {s.delivery.state}
+                          {s.pickup.city}, {s.pickup.state}{" → "}{s.delivery.city}, {s.delivery.state}
                         </div>
                       </button>
                     ))
@@ -319,68 +423,70 @@ function Page() {
                     className="pl-8"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search load, driver, city…"
+                    placeholder="Search load, driver, city..."
                   />
                 </div>
-                {loading && <div className="text-xs text-muted-foreground">Loading sessions…</div>}
                 {error && (
                   <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
                     {error}
                   </div>
                 )}
-                <div className="max-h-[560px] overflow-auto rounded-md border border-border/70">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Load</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Driver</TableHead>
-                        <TableHead>Route</TableHead>
-                        <TableHead className="text-right">Updated</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredSessions.length === 0 ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="py-6 text-center text-xs text-muted-foreground"
-                          >
-                            No tracking sessions found.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filteredSessions.map((s) => (
-                          <TableRow
-                            key={s.loadId}
-                            onClick={() => setSelectedLoadId(s.loadId)}
-                            data-state={selected?.loadId === s.loadId ? "selected" : undefined}
-                            className="cursor-pointer"
-                          >
-                            <TableCell className="font-semibold">{s.loadId}</TableCell>
-                            <TableCell>
+                <ScrollRegion
+                  ref={sessionsListRef}
+                  id="tracking-sessions"
+                  className="max-h-[560px] overflow-auto rounded-md border border-border/70"
+                >
+                  {loading && filteredSessions.length === 0 ? (
+                    <ListSkeleton items={5} className="p-2" />
+                  ) : filteredSessions.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-muted-foreground">
+                      No tracking sessions found.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-border/60">
+                      {filteredSessions.map((s) => {
+                        const route = `${s.pickup.city} → ${s.delivery.city}`;
+                        const isSelected = selected?.loadId === s.loadId;
+                        return (
+                          <li key={s.loadId}>
+                            <button
+                              type="button"
+                              data-tracking-load-id={s.loadId}
+                              onClick={() => selectLoad(s.loadId)}
+                              title={`${s.loadId} · ${TRACKING_STATE_LABELS[s.trackingState]} · ${s.assignedDriverName} · ${route}`}
+                              className={cn(
+                                "flex w-full min-w-0 items-center gap-1.5 px-2 py-1.5 text-left transition-colors hover:bg-muted/40",
+                                isSelected && "bg-muted/60",
+                              )}
+                            >
+                              <span className="w-[3.1rem] shrink-0 truncate text-[11px] font-semibold tabular-nums">
+                                {s.loadId}
+                              </span>
                               <Badge
                                 variant="outline"
-                                className={toneBadge[stateTone(s.trackingState)]}
+                                className={cn(
+                                  "h-5 shrink-0 whitespace-nowrap px-1.5 py-0 text-[10px] font-medium leading-none",
+                                  toneBadge[stateTone(s.trackingState)],
+                                )}
                               >
-                                {TRACKING_STATE_LABELS[s.trackingState]}
+                                {TRACKING_STATE_SHORT[s.trackingState]}
                               </Badge>
-                            </TableCell>
-                            <TableCell>{s.assignedDriverName}</TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {s.pickup.city}
-                              {" -> "}
-                              {s.delivery.city}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {prettyTime(s.updatedAt)}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                              <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">
+                                {s.assignedDriverName}
+                              </span>
+                              <span className="hidden min-w-0 max-w-[4.75rem] shrink truncate text-[10px] text-muted-foreground min-[400px]:inline">
+                                {route}
+                              </span>
+                              <span className="w-[3.25rem] shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+                                {prettyTimeShort(s.updatedAt)}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </ScrollRegion>
               </CardContent>
             </Card>
           </div>
@@ -403,12 +509,13 @@ function Page() {
                         </Badge>
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
-                        {selected.pickup.city}, {selected.pickup.state} → {selected.delivery.city},{" "}
+                        {selected.pickup.city}, {selected.pickup.state}{" → "}
+                        {selected.delivery.city},{" "}
                         {selected.delivery.state}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        Driver: {selected.assignedDriverName} · Customer: {selected.customer ?? "—"}{" "}
-                        · Carrier: {selected.carrier ?? "—"}
+                        Driver: {selected.assignedDriverName} · Customer: {selected.customer ?? "-"}{" "}
+                        · Carrier: {selected.carrier ?? "-"}
                       </div>
                     </div>
                     <div className="text-right">
@@ -419,7 +526,8 @@ function Page() {
                         {prettyTime(selected.eta)}
                       </div>
                       <div className="text-[11px] text-muted-foreground">
-                        Last GPS ping {prettyTime(selected.gps.lastPingAt)}
+                        {selected.gps.source === "driver" ? "Driver device" : "Estimated"} · Last ping{" "}
+                        {prettyTime(selected.gps.lastPingAt)}
                       </div>
                     </div>
                   </div>
@@ -451,9 +559,19 @@ function Page() {
                         {selected.delivery.facility}
                       </span>
                       <span className="inline-flex items-center gap-1">
-                        <Navigation className="h-4 w-4 text-success" />{" "}
-                        {selected.gps.location.lat.toFixed(3)},{" "}
-                        {selected.gps.location.lng.toFixed(3)}
+                        <Navigation
+                          className={
+                            selected.gps.source === "driver"
+                              ? "h-4 w-4 text-red-500"
+                              : "h-4 w-4 text-success"
+                          }
+                        />{" "}
+                        {selected.gps.source === "driver" ? "Driver · " : ""}
+                        {selected.gps.location.lat.toFixed(4)},{" "}
+                        {selected.gps.location.lng.toFixed(4)}
+                        {selected.gps.accuracyM
+                          ? ` · ±${selected.gps.accuracyM}m`
+                          : ""}
                       </span>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs">
@@ -472,6 +590,11 @@ function Page() {
                     </div>
                   </div>
 
+                  <TrackingCloseoutCard
+                    session={selected}
+                    onCompleted={() => void fetchLoads(true)}
+                  />
+
                   <div className="space-y-2">
                     <div className="text-sm font-semibold text-foreground">Driver Actions</div>
                     <div className="flex flex-wrap gap-2">
@@ -479,9 +602,31 @@ function Page() {
                         <Button
                           key={action}
                           size="sm"
-                          variant="outline"
+                          variant={action === "complete-load" ? "default" : "outline"}
                           className="gap-1.5"
-                          onClick={() => performAction(action)}
+                          onClick={() => {
+                            if (action === "complete-load") {
+                              void (async () => {
+                                try {
+                                  const { completeTrackingLoadAfterPod } = await import(
+                                    "@/lib/tracking-workflow-store"
+                                  );
+                                  await completeTrackingLoadAfterPod(selected.loadId);
+                                  toast.success("Load completed", {
+                                    description: "POD verified. Ready for invoice.",
+                                  });
+                                  void fetchLoads(true);
+                                } catch (err) {
+                                  toast.error("Could not complete load", {
+                                    description:
+                                      err instanceof Error ? err.message : "Try again",
+                                  });
+                                }
+                              })();
+                              return;
+                            }
+                            performAction(action);
+                          }}
                         >
                           <Zap className="h-3.5 w-3.5" /> {DRIVER_ACTION_LABELS[action]}
                         </Button>
@@ -530,29 +675,48 @@ function Page() {
 
               <Card className="border-border/70 shadow-sm">
                 <CardContent className="p-4">
-                  <Tabs defaultValue="timeline">
-                    <TabsList className="w-full">
-                      <TabsTrigger value="timeline" className="flex-1 gap-1.5">
-                        <Activity className="h-3.5 w-3.5" /> Timeline
+                  <Tabs
+                    value={detailTab}
+                    onValueChange={(value) => setDetailTab(value as TrackingTab)}
+                  >
+                    <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-6">
+                      <TabsTrigger value="timeline" className="gap-1.5 px-2 text-xs sm:text-sm">
+                        <Activity className="h-3.5 w-3.5 shrink-0" /> Timeline
                       </TabsTrigger>
-                      <TabsTrigger value="alerts" className="flex-1 gap-1.5">
+                      <TabsTrigger value="map" className="gap-1.5 px-2 text-xs sm:text-sm">
+                        <Map className="h-3.5 w-3.5 shrink-0" /> Map
+                      </TabsTrigger>
+                      <TabsTrigger value="alerts" className="gap-1.5 px-2 text-xs sm:text-sm">
                         <Siren className="h-3.5 w-3.5" /> Alerts
                       </TabsTrigger>
-                      <TabsTrigger value="messages" className="flex-1 gap-1.5">
-                        <MessageSquare className="h-3.5 w-3.5" /> Messages
+                      <TabsTrigger value="messages" className="gap-1.5 px-2 text-xs sm:text-sm">
+                        <MessageSquare className="h-3.5 w-3.5 shrink-0" /> Messages
                       </TabsTrigger>
-                      <TabsTrigger value="documents" className="flex-1 gap-1.5">
-                        <FileText className="h-3.5 w-3.5" /> Documents
+                      <TabsTrigger value="documents" className="gap-1.5 px-2 text-xs sm:text-sm">
+                        <FileText className="h-3.5 w-3.5 shrink-0" /> Documents
                       </TabsTrigger>
-                      <TabsTrigger value="history" className="flex-1 gap-1.5">
-                        <Shield className="h-3.5 w-3.5" /> History
+                      <TabsTrigger value="history" className="gap-1.5 px-2 text-xs sm:text-sm">
+                        <Shield className="h-3.5 w-3.5 shrink-0" /> History
                       </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent
-                      value="timeline"
-                      className="mt-4 max-h-[520px] space-y-2 overflow-y-auto pr-1"
-                    >
+                    <TabsContent value="map" className="mt-4">
+                      <React.Suspense
+                        fallback={
+                          <div className="flex h-[min(420px,52vh)] items-center justify-center rounded-2xl border border-border/70 bg-muted/20">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                        }
+                      >
+                        <TrackingRouteMap session={selected} />
+                      </React.Suspense>
+                    </TabsContent>
+
+                    <TabsContent value="timeline" className="mt-4">
+                      <ScrollRegion
+                        id={`tracking-timeline:${selected.loadId}`}
+                        className="max-h-[520px] space-y-2 overflow-y-auto pr-1"
+                      >
                       {selected.timeline.map((event) => (
                         <div
                           key={event.id}
@@ -566,7 +730,9 @@ function Page() {
                                   ? "Exception Reported"
                                   : event.action === "auto-completed"
                                     ? "Tracking Completed"
-                                    : DRIVER_ACTION_LABELS[event.action]}
+                                    : event.action === "complete-load"
+                                      ? "POD Verified · Load Completed"
+                                      : DRIVER_ACTION_LABELS[event.action]}
                             </div>
                             <Badge variant="outline" className={toneBadge[stateTone(event.state)]}>
                               {TRACKING_STATE_LABELS[event.state]}
@@ -587,6 +753,7 @@ function Page() {
                           )}
                         </div>
                       ))}
+                      </ScrollRegion>
                     </TabsContent>
 
                     <TabsContent value="alerts" className="mt-4 space-y-2">
@@ -617,92 +784,34 @@ function Page() {
                       )}
                     </TabsContent>
 
-                    <TabsContent value="messages" className="mt-4 space-y-3">
-                      <div className="max-h-[380px] space-y-2 overflow-y-auto pr-1">
-                        {selected.messages.map((message) => (
-                          <div
-                            key={message.id}
-                            className="rounded-md border border-border/70 bg-background/60 p-3"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <Badge
-                                variant="outline"
-                                className={
-                                  toneBadge[
-                                    message.from === "system"
-                                      ? "info"
-                                      : message.from === "driver"
-                                        ? "warning"
-                                        : "default"
-                                  ]
-                                }
-                              >
-                                {message.from}
-                              </Badge>
-                              <div className="text-xs text-muted-foreground">
-                                {prettyTime(message.timestamp)}
-                              </div>
-                            </div>
-                            <div className="mt-1 text-sm text-foreground">{message.text}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          value={messageText}
-                          onChange={(e) => setMessageText(e.target.value)}
-                          placeholder="Message driver, dispatcher, or customer…"
-                        />
-                        <Button className="gap-1.5" onClick={sendMessage}>
-                          <Send className="h-4 w-4" /> Send
-                        </Button>
-                      </div>
+                    <TabsContent value="messages" className="mt-4">
+                      <TrackingMessagesPanel
+                        loadId={selected.loadId}
+                        messages={selected.messages}
+                        documents={selected.documents}
+                        active={detailTab === "messages"}
+                      />
                     </TabsContent>
-
-                    <TabsContent value="documents" className="mt-4 space-y-2">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5"
-                          onClick={() => performAction("upload-pod", "POD uploaded by driver app.")}
-                        >
-                          <FileUp className="h-3.5 w-3.5" /> Upload POD
-                        </Button>
-                        <Button size="sm" variant="outline" className="gap-1.5">
-                          <Download className="h-3.5 w-3.5" /> Download packet
-                        </Button>
-                      </div>
-                      {selected.documents.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center justify-between gap-2 rounded-md border border-border/70 bg-background/60 p-3"
-                        >
-                          <div>
-                            <div className="text-sm font-medium text-foreground">{doc.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {doc.type} ·{" "}
-                              {doc.uploadedAt
-                                ? `uploaded ${prettyTime(doc.uploadedAt)}`
-                                : "not uploaded"}
-                            </div>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={
-                              toneBadge[
-                                doc.status === "Received"
-                                  ? "success"
-                                  : doc.status === "Pending"
-                                    ? "warning"
-                                    : "info"
-                              ]
-                            }
-                          >
-                            {doc.status}
-                          </Badge>
-                        </div>
-                      ))}
+                    <TabsContent value="documents" className="mt-4 space-y-3">
+                      <TrackingCloseoutCard
+                        session={selected}
+                        onCompleted={() => {
+                          void fetchLoads(true);
+                          setDetailTab("timeline");
+                        }}
+                      />
+                      <TrackingDocumentsPanel
+                        documents={selected.documents}
+                        onMarkPod={
+                          selected.trackingState === "delivered"
+                            ? () =>
+                                performAction(
+                                  "upload-pod",
+                                  "POD marked received by dispatch — ready to verify & complete.",
+                                )
+                            : undefined
+                        }
+                      />
                     </TabsContent>
 
                     <TabsContent value="history" className="mt-4 space-y-2">

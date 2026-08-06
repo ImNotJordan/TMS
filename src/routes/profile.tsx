@@ -55,6 +55,7 @@ import {
 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
+import { usePageReady } from "@/components/page-load-gate";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -130,7 +131,8 @@ function ProfilePage() {
   const [tab, setTab] = useState<TabId>("overview");
 
   const displayName = user?.name ?? user?.email?.split("@")[0] ?? "User";
-  const email = user?.email ?? "you@logistics.com";
+  const email = user?.email ?? "";
+  const attrs = user?.attributes ?? {};
   const initials =
     (user?.name ?? user?.email ?? "U")
       .split(/[\s@.]+/)
@@ -138,6 +140,18 @@ function ProfilePage() {
       .slice(0, 2)
       .map((p) => p[0]?.toUpperCase() ?? "")
       .join("") || "U";
+
+  const sidebarSubtitle = [attrs["custom:job_title"], attrs["custom:department"]]
+    .filter(Boolean)
+    .join(" · ");
+  const sidebarPhone = attrs.phone_number || attrs["custom:mobile"] || "";
+  const address = parseAddressAttr(attrs.address);
+  const sidebarLocation = [address.city, address.state].filter(Boolean).join(", ");
+  const sidebarTimezone = attrs.zoneinfo || "";
+  const sidebarLastLogin = user?.authTime
+    ? `Last login · ${formatEpoch(user.authTime)}`
+    : "";
+  const sidebarRole = attrs["custom:role"] || attrs["custom:access_level"] || "";
 
   const handleSignOutAll = async () => {
     try {
@@ -173,8 +187,14 @@ function ProfilePage() {
         <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
           <ProfileSidebar
             displayName={displayName}
-            email={email}
+            email={email || "—"}
             initials={initials}
+            subtitle={sidebarSubtitle || undefined}
+            phone={sidebarPhone || undefined}
+            location={sidebarLocation || undefined}
+            timezone={sidebarTimezone || undefined}
+            lastLogin={sidebarLastLogin || undefined}
+            roleLabel={sidebarRole || undefined}
             onSignOutAll={handleSignOutAll}
             onJump={setTab}
           />
@@ -308,12 +328,24 @@ function ProfileSidebar({
   displayName,
   email,
   initials,
+  subtitle,
+  phone,
+  location,
+  timezone,
+  lastLogin,
+  roleLabel,
   onSignOutAll,
   onJump,
 }: {
   displayName: string;
   email: string;
   initials: string;
+  subtitle?: string;
+  phone?: string;
+  location?: string;
+  timezone?: string;
+  lastLogin?: string;
+  roleLabel?: string;
   onSignOutAll: () => void;
   onJump: (id: TabId) => void;
 }) {
@@ -375,16 +407,16 @@ function ProfileSidebar({
               <h2 className="text-base font-semibold tracking-tight">{displayName}</h2>
               <BadgeCheck className="h-4 w-4 text-info" />
             </div>
-            <p className="text-xs text-muted-foreground">Senior Dispatcher · Operations</p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="flex items-center gap-1.5 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                Online
-              </span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                Admin
-              </span>
-            </div>
+            {subtitle ? (
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
+            ) : null}
+            {roleLabel ? (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {roleLabel}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-lg border border-border/70 bg-muted/40 p-3">
@@ -423,10 +455,10 @@ function ProfileSidebar({
 
           <div className="grid grid-cols-1 gap-1.5 text-xs text-muted-foreground">
             <SidebarMeta icon={Mail} text={email} />
-            <SidebarMeta icon={Phone} text="+1 (404) 555-0142" />
-            <SidebarMeta icon={MapPin} text="Atlanta, GA" />
-            <SidebarMeta icon={Globe} text="America/New_York (EST)" />
-            <SidebarMeta icon={Clock} text="Last login · 12 min ago" />
+            {phone ? <SidebarMeta icon={Phone} text={phone} /> : null}
+            {location ? <SidebarMeta icon={MapPin} text={location} /> : null}
+            {timezone ? <SidebarMeta icon={Globe} text={timezone} /> : null}
+            {lastLogin ? <SidebarMeta icon={Clock} text={lastLogin} /> : null}
           </div>
         </CardContent>
       </Card>
@@ -676,6 +708,8 @@ function OverviewTab({
   const loading = personal.loading || permissions.loading;
   const loadError = personal.error || permissions.error;
 
+  usePageReady(loading);
+
   // Compose values: DynamoDB (personal section) → Cognito attributes → fallback
   const address = useMemo(() => parseAddressAttr(attrs.address), [attrs.address]);
   const givenName =
@@ -741,35 +775,16 @@ function OverviewTab({
       .map((s) => s.trim())
       .filter(Boolean);
     if (fromCognito.length > 0) return fromCognito;
-    // Fall back to a sensible default derived from access level
-    if (accessLevel === "view") {
-      return ["Dashboard", "Loads", "Tracking", "Analytics"];
-    }
-    if (accessLevel === "edit") {
-      return ["Dashboard", "Loads", "TruckBoard", "Tracking", "Quotes", "CRM"];
-    }
-    return [
-      "Dashboard",
-      "Loads",
-      "TruckBoard",
-      "Tracking",
-      "Quotes",
-      "RFPs",
-      "CRM",
-      "Accounting",
-      "Analytics",
-      "Admin",
-      "Settings",
-    ];
-  }, [attrs, accessLevel]);
+    return [];
+  }, [attrs]);
 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Assigned Loads" value="47" delta="+6 this week" icon={Package} tone="info" />
-        <StatTile label="Open Tasks" value="12" delta="3 due today" icon={Inbox} tone="warning" />
-        <StatTile label="Approvals" value="4" delta="Action needed" icon={ShieldCheck} tone="warning" />
-        <StatTile label="On-time %" value="98.4%" delta="+0.7%" icon={BadgeCheck} tone="success" />
+        <StatTile label="Assigned Loads" value="—" icon={Package} tone="info" />
+        <StatTile label="Open Tasks" value="—" icon={Inbox} tone="warning" />
+        <StatTile label="Approvals" value="—" icon={ShieldCheck} tone="warning" />
+        <StatTile label="On-time %" value="—" icon={BadgeCheck} tone="success" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -784,11 +799,6 @@ function OverviewTab({
                   className="gap-1 border-warning/30 bg-warning/15 text-warning-foreground"
                 >
                   Cloud sync offline
-                </Badge>
-              )}
-              {loading && (
-                <Badge variant="outline" className="gap-1 border-info/20 bg-info/10 text-info">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Loading
                 </Badge>
               )}
               {loadError && (
@@ -807,14 +817,7 @@ function OverviewTab({
           }
         >
           {loading ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="space-y-1.5">
-                  <Skeleton className="h-3 w-20" />
-                  <Skeleton className="h-4 w-32" />
-                </div>
-              ))}
-            </div>
+            <AtAGlanceSkeleton />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
               <InfoRow label="Full name" value={fullName} />
@@ -906,6 +909,36 @@ function OverviewTab({
         <ActivityList compact />
       </SectionCard>
     </>
+  );
+}
+
+const AT_A_GLANCE_SKELETON_ROWS = [
+  { labelW: "w-16", valueW: "w-[11rem]" },
+  { labelW: "w-14", valueW: "w-28" },
+  { labelW: "w-20", valueW: "w-24" },
+  { labelW: "w-10", valueW: "w-40" },
+  { labelW: "w-12", valueW: "w-32" },
+  { labelW: "w-16", valueW: "w-36" },
+  { labelW: "w-14", valueW: "w-20" },
+  { labelW: "w-12", valueW: "w-16" },
+  { labelW: "w-16", valueW: "w-44" },
+  { labelW: "w-20", valueW: "w-28" },
+] as const;
+
+function AtAGlanceSkeleton() {
+  return (
+    <div
+      className="grid gap-4 sm:grid-cols-2"
+      aria-busy="true"
+      aria-label="Loading profile summary"
+    >
+      {AT_A_GLANCE_SKELETON_ROWS.map((row, i) => (
+        <div key={i} className="min-w-0 space-y-2">
+          <Skeleton className={`h-3 ${row.labelW}`} />
+          <Skeleton className={`h-4 max-w-full ${row.valueW}`} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1009,13 +1042,13 @@ function buildFormFromUser(attrs: Record<string, string | undefined> | undefined
     mobile: a["custom:mobile"] ?? "",
     job_title: a["custom:job_title"] ?? "",
     department: a["custom:department"] ?? "",
-    locale: a.locale ?? "en-US",
-    zoneinfo: a.zoneinfo ?? "America/New_York",
+    locale: a.locale ?? "",
+    zoneinfo: a.zoneinfo ?? "",
     street: address.street,
     city: address.city,
     state: address.state,
     zip: address.zip,
-    country: address.country || "US",
+    country: address.country ?? "",
     bio: a.profile ?? "",
   };
 }
@@ -1303,7 +1336,7 @@ function PersonalTab() {
           rows={4}
           value={form.bio}
           onChange={(e) => set("bio", e.target.value)}
-          placeholder="Senior dispatcher with 8+ years moving dry van and reefer across the Southeast."
+          placeholder="A short bio for your team profile"
         />
       </SectionCard>
     </>
@@ -1323,49 +1356,63 @@ type PermissionsForm = {
 };
 
 const PERMISSIONS_DEFAULTS: PermissionsForm = {
-  role: "admin",
-  permissionGroup: "Ops · Tier 2",
-  accessLevel: "full",
-  branch: "ATL HQ",
-  teams: "SE Dispatch, Reefer Pod",
-  customers: "Acme Foods, Northstar Bev., Summit Retail",
-  carriers: "Bluepeak, Ironline, Sundial",
-  brokers: "Pinecrest, Atlas, Rivermark",
-  adminAccess: true,
+  role: "",
+  permissionGroup: "",
+  accessLevel: "",
+  branch: "",
+  teams: "",
+  customers: "",
+  carriers: "",
+  brokers: "",
+  adminAccess: false,
 };
 
+function countCsvEntries(value: string) {
+  if (!value.trim()) return 0;
+  return value.split(",").map((s) => s.trim()).filter(Boolean).length;
+}
+
+function csvPreview(value: string) {
+  const trimmed = value.trim();
+  return trimmed || "—";
+}
+
 function PermissionsTab() {
-  const hook = useProfileSection<PermissionsForm>("permissions", PERMISSIONS_DEFAULTS);
+  const hook = useProfileSection<PermissionsForm>("permissions", PERMISSIONS_DEFAULTS, {
+    mergeOnSave: true,
+  });
   const { data: form, patch } = hook;
 
-  const modules = [
-    { name: "Dashboard", access: "Full", tone: "success" as const },
-    { name: "Loads", access: "Full", tone: "success" as const },
-    { name: "TruckBoard", access: "Full", tone: "success" as const },
-    { name: "Tracking", access: "Full", tone: "success" as const },
-    { name: "Quotes", access: "Edit", tone: "info" as const },
-    { name: "RFPs", access: "View", tone: "default" as const },
-    { name: "CRM & Sales", access: "Edit", tone: "info" as const },
-    { name: "Accounting", access: "View", tone: "default" as const },
-    { name: "Analytics", access: "Full", tone: "success" as const },
-    { name: "Admin", access: "Restricted", tone: "warning" as const },
-    { name: "Settings", access: "Full", tone: "success" as const },
-  ];
-
-  const toneClass = {
-    default: "bg-muted text-foreground",
-    success: "bg-success/15 text-success",
-    info: "bg-info/15 text-info",
-    warning: "bg-warning/20 text-warning-foreground",
-  } as const;
+  const roleLabel =
+    form.role === "admin"
+      ? "Administrator"
+      : form.role === "ops"
+        ? "Operations Manager"
+        : form.role === "dispatch"
+          ? "Dispatcher"
+          : form.role === "broker"
+            ? "Broker"
+            : form.role === "driver"
+              ? "Driver"
+              : form.role.trim() || "—";
 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Role" value={form.role === "admin" ? "Admin" : form.role} icon={ShieldCheck} tone="info" />
-        <StatTile label="Permission Group" value={form.permissionGroup} icon={Users} tone="default" />
-        <StatTile label="Modules" value="11/11" icon={LayoutDashboard} tone="success" />
-        <StatTile label="Branches" value={form.branch} icon={Building2} tone="default" />
+        <StatTile label="Role" value={roleLabel} icon={ShieldCheck} tone="info" />
+        <StatTile
+          label="Permission Group"
+          value={form.permissionGroup.trim() || "—"}
+          icon={Users}
+          tone="default"
+        />
+        <StatTile
+          label="Access level"
+          value={form.accessLevel.trim() || "—"}
+          icon={LayoutDashboard}
+          tone="default"
+        />
+        <StatTile label="Branch" value={form.branch.trim() || "—"} icon={Building2} tone="default" />
       </div>
 
       <SectionCard
@@ -1375,9 +1422,9 @@ function PermissionsTab() {
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="User role">
-            <Select value={form.role} onValueChange={(v) => patch({ role: v })}>
+            <Select value={form.role || undefined} onValueChange={(v) => patch({ role: v })}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select role" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Administrator</SelectItem>
@@ -1392,12 +1439,16 @@ function PermissionsTab() {
             <Input
               value={form.permissionGroup}
               onChange={(e) => patch({ permissionGroup: e.target.value })}
+              placeholder="e.g. Ops · Tier 2"
             />
           </Field>
           <Field label="Access level">
-            <Select value={form.accessLevel} onValueChange={(v) => patch({ accessLevel: v })}>
+            <Select
+              value={form.accessLevel || undefined}
+              onValueChange={(v) => patch({ accessLevel: v })}
+            >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select access level" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="full">Full access</SelectItem>
@@ -1407,10 +1458,18 @@ function PermissionsTab() {
             </Select>
           </Field>
           <Field label="Assigned branch / office">
-            <Input value={form.branch} onChange={(e) => patch({ branch: e.target.value })} />
+            <Input
+              value={form.branch}
+              onChange={(e) => patch({ branch: e.target.value })}
+              placeholder="Branch or office"
+            />
           </Field>
           <Field label="Assigned teams">
-            <Input value={form.teams} onChange={(e) => patch({ teams: e.target.value })} />
+            <Input
+              value={form.teams}
+              onChange={(e) => patch({ teams: e.target.value })}
+              placeholder="Comma-separated teams"
+            />
           </Field>
           <Field label="Admin access">
             <div className="flex h-9 items-center justify-between rounded-md border border-input bg-background px-3">
@@ -1433,32 +1492,28 @@ function PermissionsTab() {
         </div>
       </SectionCard>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <SectionCard title="Allowed modules" description="Module-level access for your role.">
-          <div className="space-y-1.5">
-            {modules.map((m) => (
-              <div
-                key={m.name}
-                className="flex items-center justify-between rounded-md border border-border/60 bg-card px-3 py-2"
-              >
-                <span className="text-sm font-medium">{m.name}</span>
-                <Badge variant="secondary" className={toneClass[m.tone]}>
-                  {m.access}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Assigned book of business" description="Accounts attached to you.">
+      <SectionCard title="Assigned book of business" description="Accounts attached to you.">
           <div className="space-y-3 text-sm">
-            <AssignedRow icon={Users} label="Customers" count={28} sample="Acme Foods, Northstar Bev., Summit Retail" />
-            <AssignedRow icon={Truck} label="Carriers" count={42} sample="Bluepeak, Ironline, Sundial" />
-            <AssignedRow icon={Building2} label="Brokers" count={11} sample="Pinecrest, Atlas, Rivermark" />
-            <AssignedRow icon={Package} label="Active loads" count={47} sample="L-2841, L-2839, L-2832…" />
+            <AssignedRow
+              icon={Users}
+              label="Customers"
+              count={countCsvEntries(form.customers)}
+              sample={csvPreview(form.customers)}
+            />
+            <AssignedRow
+              icon={Truck}
+              label="Carriers"
+              count={countCsvEntries(form.carriers)}
+              sample={csvPreview(form.carriers)}
+            />
+            <AssignedRow
+              icon={Building2}
+              label="Brokers"
+              count={countCsvEntries(form.brokers)}
+              sample={csvPreview(form.brokers)}
+            />
           </div>
         </SectionCard>
-      </div>
     </>
   );
 }
@@ -1505,15 +1560,15 @@ type PreferencesForm = {
 };
 
 const PREFERENCES_DEFAULTS: PreferencesForm = {
-  landingPage: "dashboard",
-  dashboardView: "ops",
-  loadBoardFilter: "my",
-  equipment: "Dry Van, Reefer, Flatbed",
-  regions: "SE → TX, SE → Midwest",
-  dateFormat: "us",
-  currency: "usd",
-  density: "comfortable",
-  theme: "system",
+  landingPage: "",
+  dashboardView: "",
+  loadBoardFilter: "",
+  equipment: "",
+  regions: "",
+  dateFormat: "",
+  currency: "",
+  density: "",
+  theme: "",
 };
 
 function PreferencesTab() {
@@ -1529,9 +1584,9 @@ function PreferencesTab() {
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Default landing page">
-            <Select value={form.landingPage} onValueChange={(v) => patch({ landingPage: v })}>
+            <Select value={form.landingPage || undefined} onValueChange={(v) => patch({ landingPage: v })}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select page" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="dashboard">Dashboard</SelectItem>
@@ -1645,8 +1700,8 @@ const NOTIFICATION_TOPICS = [
 ];
 
 const NOTIFICATIONS_DEFAULTS: NotificationsForm = {
-  channels: { email: true, sms: false, inapp: true, push: true },
-  topics: Object.fromEntries(NOTIFICATION_TOPICS.map((t) => [t.key, true])),
+  channels: { email: false, sms: false, inapp: false, push: false },
+  topics: Object.fromEntries(NOTIFICATION_TOPICS.map((t) => [t.key, false])),
 };
 
 function NotificationsTab() {
@@ -1753,10 +1808,10 @@ type SecurityPrefs = {
 };
 
 const SECURITY_DEFAULTS: SecurityPrefs = {
-  sessionTimeout: "60",
-  requireBiometrics: true,
-  signInAlerts: true,
-  authenticatorApp: true,
+  sessionTimeout: "",
+  requireBiometrics: false,
+  signInAlerts: false,
+  authenticatorApp: false,
   smsCodes: false,
   backupEmail: "",
 };
@@ -1765,26 +1820,35 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
   const [show, setShow] = useState(false);
   const hook = useProfileSection<SecurityPrefs>("security", SECURITY_DEFAULTS);
   const { data: form, patch } = hook;
-  const sessions = [
-    { device: "MacBook Pro · Chrome", location: "Atlanta, GA · 173.18.x.x", time: "Active now", current: true, icon: Laptop },
-    { device: "iPhone 15 · Safari", location: "Atlanta, GA · 24.106.x.x", time: "1h ago", current: false, icon: Smartphone },
-    { device: "Windows 11 · Edge", location: "Dallas, TX · 70.114.x.x", time: "3 days ago", current: false, icon: Monitor },
-    { device: "iPad · Safari", location: "Miami, FL · 71.43.x.x", time: "Last week", current: false, icon: Tablet },
-  ];
+  const sessions: {
+    device: string;
+    location: string;
+    time: string;
+    current: boolean;
+    icon: typeof Laptop;
+  }[] = [];
 
-  const tokens = [
-    { name: "Operations CLI", created: "Mar 2, 2026", lastUsed: "5 min ago", scopes: "read:loads, write:loads" },
-    { name: "Analytics ETL", created: "Jan 18, 2026", lastUsed: "2 days ago", scopes: "read:* " },
-    { name: "Personal Dev", created: "Nov 5, 2025", lastUsed: "Idle 30d", scopes: "read:profile" },
-  ];
+  const tokens: { name: string; created: string; lastUsed: string; scopes: string }[] = [];
+
+  const twoFaLabel = form.authenticatorApp ? "Enabled" : "—";
 
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="2FA" value="Enabled" icon={Shield} tone="success" />
-        <StatTile label="Active sessions" value={String(sessions.length)} icon={Wifi} tone="info" />
-        <StatTile label="API tokens" value={String(tokens.length)} icon={Key} tone="default" />
-        <StatTile label="Trusted devices" value="3" icon={Fingerprint} tone="success" />
+        <StatTile label="2FA" value={twoFaLabel} icon={Shield} tone="default" />
+        <StatTile
+          label="Active sessions"
+          value={sessions.length ? String(sessions.length) : "—"}
+          icon={Wifi}
+          tone="info"
+        />
+        <StatTile
+          label="API tokens"
+          value={tokens.length ? String(tokens.length) : "—"}
+          icon={Key}
+          tone="default"
+        />
+        <StatTile label="Trusted devices" value="—" icon={Fingerprint} tone="default" />
       </div>
 
       <SectionCard
@@ -1794,7 +1858,7 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Current password">
             <div className="relative">
-              <Input type={show ? "text" : "password"} defaultValue="••••••••••" />
+              <Input type={show ? "text" : "password"} placeholder="Current password" />
               <button
                 type="button"
                 onClick={() => setShow((s) => !s)}
@@ -1830,7 +1894,9 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-success" />
               <div>
-                <div className="text-sm font-medium text-success">2FA is enabled</div>
+                <div className="text-sm font-medium text-success">
+                  {form.authenticatorApp ? "2FA is enabled" : "2FA is not enabled"}
+                </div>
                 <div className="text-xs text-muted-foreground">Authenticator app · 8 backup codes left</div>
               </div>
             </div>
@@ -1871,11 +1937,11 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
           <div className="space-y-3">
             <Field label="Session timeout">
               <Select
-                value={form.sessionTimeout}
+                value={form.sessionTimeout || undefined}
                 onValueChange={(v) => patch({ sessionTimeout: v })}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select timeout" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="15">15 minutes</SelectItem>
@@ -1918,7 +1984,12 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
         }
       >
         <div className="space-y-2">
-          {sessions.map((s) => {
+          {sessions.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border/70 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+              No active sessions.
+            </p>
+          ) : (
+          sessions.map((s) => {
             const Icon = s.icon;
             return (
               <div
@@ -1950,7 +2021,8 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
                 )}
               </div>
             );
-          })}
+          })
+          )}
         </div>
       </SectionCard>
 
@@ -1975,7 +2047,14 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tokens.map((t) => (
+              {tokens.length === 0 ? (
+                <TableRow className="border-border/60">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    No API tokens yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+              tokens.map((t) => (
                 <TableRow key={t.name} className="border-border/60">
                   <TableCell className="pl-4 font-medium">{t.name}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{t.scopes}</TableCell>
@@ -1990,7 +2069,8 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              ))
+              )}
             </TableBody>
           </Table>
         </div>
@@ -2032,10 +2112,10 @@ function ActivityTab() {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Actions (7d)" value="186" delta="+24" icon={Activity} tone="info" />
-        <StatTile label="Logins (30d)" value="42" icon={KeyRound} tone="default" />
-        <StatTile label="Devices" value="4" icon={Monitor} tone="default" />
-        <StatTile label="Last login" value="12m ago" icon={Clock} tone="success" />
+        <StatTile label="Actions (7d)" value="—" icon={Activity} tone="info" />
+        <StatTile label="Logins (30d)" value="—" icon={KeyRound} tone="default" />
+        <StatTile label="Devices" value="—" icon={Monitor} tone="default" />
+        <StatTile label="Last login" value="—" icon={Clock} tone="default" />
       </div>
 
       <SectionCard
@@ -2063,21 +2143,11 @@ function ActivityTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {[
-                ["May 14 · 06:48", "Login", "Mac · Chrome 124", "173.18.92.14", "Atlanta, GA"],
-                ["May 14 · 06:12", "Updated load L-2841", "Mac · Chrome 124", "173.18.92.14", "Atlanta, GA"],
-                ["May 13 · 22:01", "Login", "iPhone · Safari", "24.106.41.7", "Atlanta, GA"],
-                ["May 13 · 18:33", "Created invoice INV-3920", "Mac · Chrome 124", "173.18.92.14", "Atlanta, GA"],
-                ["May 12 · 14:09", "Approved bid B-1187", "Windows · Edge", "70.114.10.221", "Dallas, TX"],
-              ].map((row) => (
-                <TableRow key={row.join("|")} className="border-border/60">
-                  <TableCell className="pl-4 tabular-nums text-muted-foreground">{row[0]}</TableCell>
-                  <TableCell className="font-medium">{row[1]}</TableCell>
-                  <TableCell className="text-muted-foreground">{row[2]}</TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">{row[3]}</TableCell>
-                  <TableCell className="pr-4 text-muted-foreground">{row[4]}</TableCell>
-                </TableRow>
-              ))}
+              <TableRow className="border-border/60">
+                <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                  No access records yet.
+                </TableCell>
+              </TableRow>
             </TableBody>
           </Table>
         </div>
@@ -2087,15 +2157,22 @@ function ActivityTab() {
 }
 
 function ActivityList({ compact = false }: { compact?: boolean }) {
-  const items = [
-    { icon: Package, tone: "info" as const, title: "Booked load L-2841", sub: "Acme Foods · Atlanta → Dallas · $3,420", time: "12 min ago" },
-    { icon: CreditCard, tone: "success" as const, title: "Approved settlement for Bluepeak Freight", sub: "Settlement #S-1182 · $14,820", time: "1 h ago" },
-    { icon: FileText, tone: "default" as const, title: "Uploaded POD for L-2820", sub: "Summit Retail · Dallas → Houston", time: "3 h ago" },
-    { icon: Users, tone: "info" as const, title: "Added carrier Ironline Logistics", sub: "MC-872118 · Onboarding complete", time: "Yesterday" },
-    { icon: ShieldCheck, tone: "warning" as const, title: "2FA backup codes regenerated", sub: "From MacBook Pro · Atlanta, GA", time: "2 days ago" },
-    { icon: KeyRound, tone: "default" as const, title: "Signed in from new device", sub: "iPhone 15 · Safari · Atlanta, GA", time: "3 days ago" },
-  ];
+  const items: {
+    icon: typeof Package;
+    tone: "success" | "info" | "warning" | "default";
+    title: string;
+    sub: string;
+    time: string;
+  }[] = [];
   const shown = compact ? items.slice(0, 4) : items;
+
+  if (shown.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-border/70 bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+        No recent activity yet.
+      </p>
+    );
+  }
   const toneClass = {
     success: "bg-success/15 text-success",
     info: "bg-info/15 text-info",
@@ -2140,14 +2217,7 @@ type DocumentItem = {
 type DocumentsForm = { items: DocumentItem[] };
 
 const DOCUMENTS_DEFAULTS: DocumentsForm = {
-  items: [
-    { name: "W-9 Tax Form 2026.pdf", type: "Tax", size: "184 KB", date: "Jan 12, 2026", status: "Valid", tone: "success" },
-    { name: "ID Verification — Drivers License.jpg", type: "Identity", size: "2.1 MB", date: "Aug 4, 2025", status: "Verified", tone: "success" },
-    { name: "HOS Compliance Cert.pdf", type: "Compliance", size: "412 KB", date: "Mar 20, 2026", status: "Valid", tone: "success" },
-    { name: "Hazmat Training Cert.pdf", type: "Training", size: "612 KB", date: "Nov 8, 2025", status: "Expires soon", tone: "warning" },
-    { name: "Employment Agreement.pdf", type: "Employment", size: "1.8 MB", date: "Apr 12, 2023", status: "Signed", tone: "default" },
-    { name: "Brokerage Agency Agreement.pdf", type: "Agreement", size: "988 KB", date: "Feb 1, 2026", status: "Signed", tone: "default" },
-  ],
+  items: [],
 };
 
 function DocumentsTab() {
@@ -2209,7 +2279,14 @@ function DocumentsTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {form.items.map((d, idx) => (
+              {form.items.length === 0 ? (
+                <TableRow className="border-border/60">
+                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                    No documents uploaded yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+              form.items.map((d, idx) => (
                 <TableRow key={`${d.name}-${idx}`} className="border-border/60">
                   <TableCell className="pl-4">
                     <div className="flex items-center gap-2.5">
@@ -2241,7 +2318,8 @@ function DocumentsTab() {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              ))
+              )}
             </TableBody>
           </Table>
         </div>
@@ -2265,19 +2343,8 @@ const INTEGRATION_DEFINITIONS = [
 ] as const;
 
 const INTEGRATIONS_DEFAULTS: IntegrationsForm = {
-  connections: {
-    google: true,
-    microsoft: true,
-    calendar: true,
-    eld: true,
-    tms: false,
-    accounting: true,
-  },
-  webhooks: [
-    { url: "https://hooks.acme-ops.com/loads", events: "load.updated, load.delivered", status: "Active" },
-    { url: "https://api.northstar.io/freight", events: "invoice.paid", status: "Active" },
-    { url: "https://internal.tools.dev/track", events: "tracking.exception", status: "Paused" },
-  ],
+  connections: Object.fromEntries(INTEGRATION_DEFINITIONS.map((d) => [d.key, false])),
+  webhooks: [],
 };
 
 function IntegrationsTab() {
@@ -2363,7 +2430,12 @@ function IntegrationsTab() {
         }
       >
         <div className="space-y-2">
-          {form.webhooks.map((w, idx) => (
+          {form.webhooks.length === 0 ? (
+            <p className="rounded-md border border-dashed border-border/70 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+              No webhooks configured yet.
+            </p>
+          ) : (
+          form.webhooks.map((w, idx) => (
             <div
               key={`${w.url}-${idx}`}
               className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card p-3"
@@ -2401,7 +2473,8 @@ function IntegrationsTab() {
                 </Button>
               </div>
             </div>
-          ))}
+          ))
+          )}
         </div>
       </SectionCard>
     </>
@@ -2426,20 +2499,20 @@ type CompanyForm = {
 };
 
 const COMPANY_DEFAULTS: CompanyForm = {
-  name: "Logistics Software Inc.",
-  mc: "MC-1024871",
-  dot: "DOT-4198234",
-  ein: "84-1932109",
-  type: "brokerage",
-  website: "https://logisticssoftware.com",
-  businessAddress: "500 Logistics Way, Atlanta, GA 30303",
-  billingAddress: "Same as business address",
-  mainContact: "Jordan Hayes · COO",
-  supportEmail: "support@logisticssoftware.com",
-  dispatchPhone: "+1 (404) 555-0100",
-  accountingEmail: "ap@logisticssoftware.com",
-  regions: ["Southeast", "Texas", "Midwest", "Northeast", "West Coast", "Cross-border MX"],
-  equipment: ["Dry Van", "Reefer", "Flatbed", "Step Deck", "Power Only", "Intermodal", "Hotshot"],
+  name: "",
+  mc: "",
+  dot: "",
+  ein: "",
+  type: "",
+  website: "",
+  businessAddress: "",
+  billingAddress: "",
+  mainContact: "",
+  supportEmail: "",
+  dispatchPhone: "",
+  accountingEmail: "",
+  regions: [],
+  equipment: [],
 };
 
 function CompanyTab() {
@@ -2466,14 +2539,17 @@ function CompanyTab() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-semibold">{form.name}</h3>
-              <Badge variant="outline" className="border-success/20 bg-success/15 text-success">
-                <Check className="mr-1 h-3 w-3" /> Verified
-              </Badge>
-              <Badge variant="outline">{form.type}</Badge>
+              <h3 className="text-base font-semibold">{form.name.trim() || "—"}</h3>
+              {form.name.trim() ? (
+                <Badge variant="outline" className="border-success/20 bg-success/15 text-success">
+                  <Check className="mr-1 h-3 w-3" /> Verified
+                </Badge>
+              ) : null}
+              {form.type ? <Badge variant="outline">{form.type}</Badge> : null}
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {form.mc} · {form.dot} · EIN {form.ein}
+              {[form.mc, form.dot, form.ein ? `EIN ${form.ein}` : ""].filter(Boolean).join(" · ") ||
+                "—"}
             </p>
           </div>
         </div>
@@ -2494,9 +2570,9 @@ function CompanyTab() {
             <Input value={form.ein} onChange={(e) => patch({ ein: e.target.value })} />
           </Field>
           <Field label="Company type">
-            <Select value={form.type} onValueChange={(v) => patch({ type: v })}>
+            <Select value={form.type || undefined} onValueChange={(v) => patch({ type: v })}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="brokerage">Brokerage</SelectItem>

@@ -1,8 +1,6 @@
 import * as React from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Truck } from "lucide-react";
-
 import {
   Sidebar,
   SidebarContent,
@@ -21,24 +19,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { NAV_ITEMS } from "@/lib/nav";
 import { SIDEBAR_OPERATIONAL_COUNTS_QUERY_KEY, fetchOperationalCounts } from "@/lib/sidebar-counts";
 import {
-  getTrackingSessionsSnapshot,
+  getTrackingSessionCountSnapshot,
   subscribeTrackingSessions,
 } from "@/lib/tracking-workflow-store";
 import { useAuth } from "@/lib/auth";
-import { useProfileSection } from "@/hooks/use-profile-section";
-
-type PermissionsSnapshot = {
-  role?: string;
-  permissionGroup?: string;
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Administrator",
-  ops: "Operations Manager",
-  dispatch: "Dispatcher",
-  broker: "Broker",
-  driver: "Driver",
-};
+import { useRbac } from "@/hooks/use-rbac";
+import { AppLogoMark } from "@/components/app-logo-mark";
 
 function computeInitials(value: string) {
   const parts = value.split(/[\s@.]+/).filter(Boolean);
@@ -62,7 +48,7 @@ export function AppSidebar() {
 
   const { user, status } = useAuth();
   const attrs = user?.attributes;
-  const permissions = useProfileSection<PermissionsSnapshot>("permissions", {});
+  const { canViewItem, loading: rbacLoading, roleLabel } = useRbac();
   const displayName =
     [attrs?.given_name, attrs?.family_name].filter(Boolean).join(" ").trim() ||
     user?.name ||
@@ -71,12 +57,11 @@ export function AppSidebar() {
     user?.email ||
     (status === "loading" ? "Loading…" : "Signed in");
 
-  const dynamoRole = permissions.data.role;
   const role =
-    (dynamoRole && (ROLE_LABELS[dynamoRole] ?? dynamoRole)) ||
+    roleLabel ||
     attrs?.["custom:job_title"] ||
     attrs?.["custom:department"] ||
-    (status === "loading" || permissions.loading ? "" : "Operations");
+    (status === "loading" || rbacLoading ? "" : "Operations");
   const initials = computeInitials(displayName === "Loading…" ? "U" : displayName);
 
   const {
@@ -88,10 +73,10 @@ export function AppSidebar() {
     queryFn: fetchOperationalCounts,
     staleTime: 45_000,
   });
-  const trackingSessions = React.useSyncExternalStore(
+  const trackingSessionCount = React.useSyncExternalStore(
     subscribeTrackingSessions,
-    getTrackingSessionsSnapshot,
-    () => [],
+    getTrackingSessionCountSnapshot,
+    () => 0,
   );
 
   const sidebarBadge = (item: (typeof NAV_ITEMS)[number]): string | undefined => {
@@ -106,7 +91,12 @@ export function AppSidebar() {
       return operationalCounts.trucks.toLocaleString();
     }
     if (item.liveCount === "tracking") {
-      return trackingSessions.length.toLocaleString();
+      return trackingSessionCount.toLocaleString();
+    }
+    if (item.liveCount === "carriers") {
+      if (countsPending) return "…";
+      if (countsError || operationalCounts == null) return "—";
+      return operationalCounts.carriers.toLocaleString();
     }
     return item.badge;
   };
@@ -115,9 +105,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-1.5 py-1.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-            <Truck className="h-5 w-5" />
-          </div>
+          <AppLogoMark className="h-9 w-9 shrink-0 rounded-lg shadow-sm" />
           {!collapsed && (
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="truncate text-sm font-semibold text-sidebar-foreground">
@@ -133,7 +121,10 @@ export function AppSidebar() {
 
       <SidebarContent>
         {GROUPS.map((group) => {
-          const items = NAV_ITEMS.filter((i) => i.group === group);
+          const items = NAV_ITEMS.filter((i) => i.group === group).filter(
+            (i) => rbacLoading || canViewItem(i),
+          );
+          if (items.length === 0) return null;
           return (
             <SidebarGroup key={group}>
               <SidebarGroupLabel className="text-sidebar-foreground/50">{group}</SidebarGroupLabel>

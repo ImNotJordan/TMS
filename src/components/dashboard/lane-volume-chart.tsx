@@ -8,22 +8,28 @@ import {
   YAxis,
 } from "recharts";
 
-const data = [
-  { lane: "ATL→DAL", loads: 142 },
-  { lane: "LAX→PHX", loads: 121 },
-  { lane: "CHI→IND", loads: 108 },
-  { lane: "MIA→ORL", loads: 96 },
-  { lane: "SEA→PDX", loads: 84 },
-  { lane: "NYC→BOS", loads: 71 },
-];
+import type { LanePoint } from "@/lib/dashboard-data";
 
-export function LaneVolumeChart() {
+export function LaneVolumeChart({ data }: { data: LanePoint[] }) {
+  if (data.length === 0) {
+    return (
+      <div className="flex h-[260px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+        No lanes yet — lanes appear once loads have pickup and delivery locations.
+      </div>
+    );
+  }
   return (
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
         <XAxis dataKey="lane" stroke="var(--color-muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-        <YAxis stroke="var(--color-muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+        <YAxis
+          stroke="var(--color-muted-foreground)"
+          fontSize={11}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+        />
         <Tooltip
           contentStyle={{
             background: "var(--color-popover)",

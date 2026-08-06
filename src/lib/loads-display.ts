@@ -1,22 +1,9 @@
 import type { LoadRecord } from "./loads-store";
 
-// Label maps (mirror the options shown in the Create Load wizard)
-export const CUSTOMER_LABELS: Record<string, string> = {
-  "acme-foods": "Acme Foods, Inc.",
-  "northstar-bev": "Northstar Beverage",
-  greenfield: "Greenfield Co.",
-  transocean: "TransOcean Logistics",
-  freshline: "Freshline Distributors",
-  "summit-retail": "Summit Retail Group",
-};
+/** Base maps stay empty — CRM accounts / Carriers directory fill labels at runtime. */
+export const CUSTOMER_LABELS: Record<string, string> = {};
 
-export const CARRIER_LABELS: Record<string, string> = {
-  bluepeak: "Bluepeak Freight",
-  ironline: "Ironline Logistics",
-  gulfstream: "Gulfstream Express",
-  sundial: "Sundial Trucking",
-  northbay: "Northbay Carriers",
-};
+export const CARRIER_LABELS: Record<string, string> = {};
 
 export const EQUIPMENT_LABELS: Record<string, string> = {
   "dry-van": "Dry Van",
@@ -67,6 +54,32 @@ export const toneStat: Record<Tone, string> = {
 export function labelOrRaw(map: Record<string, string>, value?: string) {
   if (!value) return "—";
   return map[value] ?? value;
+}
+
+/** Merge static + CRM account names for load customer cells. */
+export function buildCustomerLabelMap(
+  accounts: Array<{ accountId: string; name?: string }>,
+): Record<string, string> {
+  const map: Record<string, string> = { ...CUSTOMER_LABELS };
+  for (const account of accounts) {
+    const id = account.accountId?.trim();
+    const name = account.name?.trim();
+    if (id && name) map[id] = name;
+  }
+  return map;
+}
+
+/** Merge static + Carriers directory names for load carrier cells. */
+export function buildCarrierLabelMap(
+  carriers: Array<{ carrierId: string; companyName?: string }>,
+): Record<string, string> {
+  const map: Record<string, string> = { ...CARRIER_LABELS };
+  for (const carrier of carriers) {
+    const id = carrier.carrierId?.trim();
+    const name = carrier.companyName?.trim();
+    if (id && name) map[id] = name;
+  }
+  return map;
 }
 
 export function formatPlace(city?: string, state?: string) {

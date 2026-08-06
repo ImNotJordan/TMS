@@ -17,7 +17,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { GlobalLoader } from "@/components/global-loader";
+import { AuthGateSkeleton, RoutePageSkeleton } from "@/components/page-skeleton";
+import { GlobalScrollbar } from "@/components/global-scrollbar";
+import { PageTransition } from "@/components/page-transition";
+import { ModuleAccessGate } from "@/components/module-access-gate";
+import { DriverStatusNotificationsWatcher } from "@/components/driver-status-notifications-watcher";
 
 function NotFoundComponent() {
   return (
@@ -92,6 +96,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       {
+        rel: "icon",
+        type: "image/png",
+        href: "/logo.png",
+      },
+      {
         rel: "stylesheet",
         href: appCss,
       },
@@ -122,6 +131,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <GlobalScrollbar />
       <AuthProvider>
         <AuthGate />
       </AuthProvider>
@@ -132,7 +142,7 @@ function RootComponent() {
 function AuthGate() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { status } = useAuth();
+  const { status, user, signOut } = useAuth();
   const isLoginRoute = location.pathname === "/login";
   const isLandingRoute = location.pathname === "/landing";
   const isPublicRoute = isLoginRoute || isLandingRoute;
@@ -144,13 +154,37 @@ function AuthGate() {
     if (status === "authenticated" && isLoginRoute) {
       void navigate({ to: "/", replace: true });
     }
-  }, [status, isPublicRoute, isLoginRoute, navigate]);
+    if (status === "authenticated" && isLandingRoute) {
+      void navigate({ to: "/", replace: true });
+    }
+  }, [status, isPublicRoute, isLoginRoute, isLandingRoute, navigate]);
+
+  // Soft gate: dedicated driver accounts should use the driver app.
+  useEffect(() => {
+    if (status !== "authenticated" || !user) return;
+    if (user.audience !== "driver") return;
+    const driverUrl = import.meta.env.VITE_DRIVER_APP_URL as string | undefined;
+    void (async () => {
+      await signOut();
+      if (driverUrl) {
+        window.location.assign(driverUrl);
+        return;
+      }
+      void navigate({ to: "/login", replace: true });
+    })();
+  }, [status, user, signOut, navigate]);
 
   if (isPublicRoute) {
     return (
       <>
-        <Suspense fallback={<GlobalLoader message="Loading…" />}>
-          <Outlet />
+        <Suspense
+          fallback={
+            <RoutePageSkeleton pathname={location.pathname} bare />
+          }
+        >
+          <PageTransition bare>
+            <Outlet />
+          </PageTransition>
         </Suspense>
         <Toaster />
       </>
@@ -158,17 +192,26 @@ function AuthGate() {
   }
 
   if (status !== "authenticated") {
-    return <GlobalLoader message="Signing you in…" />;
+    return <AuthGateSkeleton message="Signing you in…" />;
+  }
+
+  if (user?.audience === "driver") {
+    return <AuthGateSkeleton message="Redirecting to driver app…" />;
   }
 
   return (
     <SidebarProvider>
+      <DriverStatusNotificationsWatcher />
       <AppSidebar />
-      <SidebarInset className="bg-background">
+      <SidebarInset className="min-w-0 overflow-x-hidden bg-background">
         <Topbar />
-        <main className="flex-1">
-          <Suspense fallback={<GlobalLoader variant="overlay" message="Loading…" />}>
-            <Outlet />
+        <main className="min-w-0 flex-1 overflow-x-hidden">
+          <Suspense fallback={<RoutePageSkeleton pathname={location.pathname} />}>
+            <PageTransition>
+              <ModuleAccessGate>
+                <Outlet />
+              </ModuleAccessGate>
+            </PageTransition>
           </Suspense>
         </main>
       </SidebarInset>

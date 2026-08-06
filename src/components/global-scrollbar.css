@@ -1,0 +1,96 @@
+/**
+ * App-wide scrollbar styling (WebKit + Firefox).
+ * Uses theme tokens (`--muted-foreground`, `--foreground`, `--background`) and,
+ * inside `[data-sidebar="content"]`, sidebar tokens aligned with `bg-sidebar`.
+ */
+
+@layer base {
+  :root {
+    --scrollbar-mask-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 7.5l3-3.5 3 3.5' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --scrollbar-mask-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3.5 3-3.5' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --scrollbar-mask-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M7.5 3L4 6l3.5 3' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    --scrollbar-mask-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5 3L8 6l-3.5 3' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 58%, var(--background)) var(--background);
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--background);
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--background);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) 58%, var(--background));
+    border-radius: 9999px;
+    border: 3px solid var(--background);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--foreground) 42%, var(--muted-foreground));
+  }
+
+  *::-webkit-scrollbar-button:single-button {
+    display: block;
+    height: 10px;
+    width: 10px;
+    background-color: var(--muted-foreground);
+  }
+
+  *::-webkit-scrollbar-button:single-button:vertical:decrement {
+    -webkit-mask: var(--scrollbar-mask-up) center / 8px 8px no-repeat;
+    mask: var(--scrollbar-mask-up) center / 8px 8px no-repeat;
+  }
+
+  *::-webkit-scrollbar-button:single-button:vertical:increment {
+    -webkit-mask: var(--scrollbar-mask-down) center / 8px 8px no-repeat;
+    mask: var(--scrollbar-mask-down) center / 8px 8px no-repeat;
+  }
+
+  *::-webkit-scrollbar-button:single-button:horizontal:decrement {
+    -webkit-mask: var(--scrollbar-mask-left) center / 8px 8px no-repeat;
+    mask: var(--scrollbar-mask-left) center / 8px 8px no-repeat;
+  }
+
+  *::-webkit-scrollbar-button:single-button:horizontal:increment {
+    -webkit-mask: var(--scrollbar-mask-right) center / 8px 8px no-repeat;
+    mask: var(--scrollbar-mask-right) center / 8px 8px no-repeat;
+  }
+
+  /* Sidebar nav scroll (`SidebarContent`): match `bg-sidebar` + `text-sidebar-foreground` */
+  [data-sidebar="content"] {
+    scrollbar-color: color-mix(in oklch, var(--sidebar-foreground) 38%, var(--sidebar)) var(--sidebar);
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-corner {
+    background: var(--sidebar);
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-track {
+    background: var(--sidebar);
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--sidebar-foreground) 38%, var(--sidebar));
+    border-color: var(--sidebar);
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--sidebar-foreground) 58%, var(--sidebar));
+  }
+
+  [data-sidebar="content"]::-webkit-scrollbar-button:single-button {
+    background-color: var(--sidebar-foreground);
+  }
+}

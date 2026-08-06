@@ -1,5 +1,6 @@
 import * as React from "react";
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   Package,
   Gavel,
@@ -7,15 +8,15 @@ import {
   ShieldAlert,
   DollarSign,
   Award,
-  Clock3,
+  FileStack,
   AlertTriangle,
   ArrowUpRight,
-  CalendarClock,
   Plus,
   CircleCheck,
   CircleAlert,
   CircleDot,
   TrendingUp,
+  TrendingDown,
   Inbox,
 } from "lucide-react";
 
@@ -33,10 +34,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ChartSkeleton, ListSkeleton, StatCardsSkeleton } from "@/components/page-skeleton";
+import { usePageReady } from "@/components/page-load-gate";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { RevenueChart } from "@/components/dashboard/revenue-chart";
-import { LaneVolumeChart } from "@/components/dashboard/lane-volume-chart";
 import { ShipmentMap } from "@/components/dashboard/shipment-map";
+import { useAuth } from "@/lib/auth";
 import {
   CARRIER_LABELS,
   STATUS_LABELS,
@@ -49,77 +52,127 @@ import {
   sortLoadsByUrgency,
   type Tone,
 } from "@/lib/loads-display";
-import { listAllLoads, type LoadRecord } from "@/lib/loads-store";
+import {
+  averageCarrierScore,
+  buildActivity,
+  buildAlerts,
+  buildDeadlines,
+  buildShipmentPins,
+  carrierScores,
+  countExceptions,
+  countOpenBids,
+  countPendingQuotes,
+  countRfpsInFlight,
+  fetchDashboardData,
+  formatMoneyCompact,
+  isHighRiskLoad,
+  isInTransit,
+  monthRevenue,
+  topLanes,
+  weeklyRevenueSeries,
+  type DashboardData,
+} from "@/lib/dashboard-data";
+
+const RevenueChart = React.lazy(() =>
+  import("@/components/dashboard/revenue-chart").then((m) => ({ default: m.RevenueChart })),
+);
+const LaneVolumeChart = React.lazy(() =>
+  import("@/components/dashboard/lane-volume-chart").then((m) => ({ default: m.LaneVolumeChart })),
+);
 
 export const Route = createFileRoute("/")({
-  beforeLoad: () => {
-    if (typeof window !== "undefined" && sessionStorage.getItem("isAuthenticated") !== "true") {
-      throw redirect({ to: "/landing" });
-    }
-  },
   head: () => ({
     meta: [
       { title: "Dashboard — Logistics Software" },
       { name: "description", content: "Live operations command center: loads, bids, quotes, risk, revenue, and tracking." },
     ],
   }),
-  component: Index,
+  component: DashboardPage,
 });
 
-const ACTIVITY = [
-  { who: "Jordan T.", what: "Booked load L-2841 with Bluepeak Freight", when: "2m ago", icon: CircleCheck, tone: "text-success" },
-  { who: "System", what: "Risk score elevated for L-2839 (weather)", when: "12m ago", icon: CircleAlert, tone: "text-warning-foreground" },
-  { who: "Priya S.", what: "Quote Q-1182 sent to Acme Foods", when: "28m ago", icon: CircleDot, tone: "text-info" },
-  { who: "Marcus L.", what: "Invoice INV-7741 paid · $4,210", when: "1h ago", icon: CircleCheck, tone: "text-success" },
-  { who: "System", what: "RFP-204 deadline in 6 hours", when: "2h ago", icon: AlertTriangle, tone: "text-warning-foreground" },
-] as const;
+const ACTIVITY_TONE_ICON: Record<Tone, { icon: typeof CircleDot; className: string }> = {
+  success: { icon: CircleCheck, className: "text-success" },
+  warning: { icon: CircleAlert, className: "text-warning-foreground" },
+  destructive: { icon: AlertTriangle, className: "text-destructive" },
+  info: { icon: CircleDot, className: "text-info" },
+  default: { icon: CircleDot, className: "text-muted-foreground" },
+};
 
-const DEADLINES = [
-  { label: "RFP-204 · Northstar Beverage", date: "Today · 11:59 PM", urgency: "High" },
-  { label: "Bid B-882 · TransOcean", date: "Tomorrow · 9:00 AM", urgency: "Medium" },
-  { label: "Quote Q-1180 · Greenfield Co.", date: "Fri · 5:00 PM", urgency: "Low" },
-] as const;
+const EMPTY_DATA: DashboardData = {
+  loads: [],
+  quotes: [],
+  rfps: [],
+  carriers: [],
+  bids: [],
+  errors: [],
+};
 
-const ALERTS = [
-  { title: "Weather delay on I-40", desc: "3 loads in corridor flagged for re-route.", tone: "warning" as const },
-  { title: "Carrier capacity below threshold", desc: "Sundial Trucking at 72% — consider backup.", tone: "destructive" as const },
-  { title: "Detention risk · L-2839", desc: "Receiver dwell trending 90+ minutes.", tone: "warning" as const },
-] as const;
+export function DashboardPage() {
+  const { user } = useAuth();
+  const workspaceId = user?.userId ?? "_";
 
-function Index() {
-  const [loads, setLoads] = React.useState<LoadRecord[] | null>(null);
-  const [loadsLoading, setLoadsLoading] = React.useState(true);
-  const [loadsError, setLoadsError] = React.useState<string | null>(null);
+  const {
+    data = EMPTY_DATA,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["dashboard", "overview", workspaceId],
+    queryFn: () => fetchDashboardData(workspaceId),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
 
-  React.useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setLoadsLoading(true);
-      setLoadsError(null);
-      try {
-        const items = await listAllLoads();
-        if (!cancelled) setLoads(items);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load loads.";
-        if (!cancelled) {
-          setLoadsError(message);
-          setLoads([]);
-        }
-      } finally {
-        if (!cancelled) setLoadsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
+  usePageReady(isLoading);
+
+  const derived = React.useMemo(() => {
+    const now = new Date();
+    const activeLoads = [...data.loads.filter(isActiveLoad)].sort(sortLoadsByUrgency);
+    const thisMonth = monthRevenue(data.loads, now.getFullYear(), now.getMonth());
+    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const prevMonth = monthRevenue(data.loads, prevDate.getFullYear(), prevDate.getMonth());
+    const revenueDelta =
+      prevMonth > 0 ? ((thisMonth - prevMonth) / prevMonth) * 100 : null;
+    const revenueSeries = weeklyRevenueSeries(data.loads, now);
+    const totalRevenue = revenueSeries.reduce((s, p) => s + p.revenue, 0);
+    const totalCost = revenueSeries.reduce((s, p) => s + p.cost, 0);
+    const marginPct = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : null;
+    const inTransit = data.loads.filter(isInTransit);
+    const attention = data.loads.filter(
+      (l) => isActiveLoad(l) && (l.loadStatus === "exception" || isHighRiskLoad(l)),
+    );
+    const avgScore = averageCarrierScore(data.carriers);
+    return {
+      activeLoads,
+      highRiskCount: data.loads.filter(isHighRiskLoad).length,
+      exceptionCount: countExceptions(data.loads),
+      openBids: countOpenBids(data.bids),
+      pendingQuotes: countPendingQuotes(data.quotes),
+      rfpsInFlight: countRfpsInFlight(data.rfps),
+      thisMonth,
+      revenueDelta,
+      revenueSeries,
+      marginPct,
+      lanes: topLanes(data.loads),
+      carrierPerf: carrierScores(data.carriers),
+      avgScore,
+      alerts: buildAlerts(data.loads, data.carriers, data.rfps, now),
+      deadlines: buildDeadlines(data.rfps, data.quotes, now),
+      activity: buildActivity(data, now),
+      pins: buildShipmentPins(data.loads),
+      inTransitCount: inTransit.length,
+      attentionCount: attention.length,
     };
-  }, []);
+  }, [data]);
 
-  const activeLoads = React.useMemo(() => {
-    const list = loads ?? [];
-    return [...list.filter(isActiveLoad)].sort(sortLoadsByUrgency);
-  }, [loads]);
-
-  const activeCount = activeLoads.length;
+  const activeCount = derived.activeLoads.length;
+  const loadError = isError
+    ? error instanceof Error
+      ? error.message
+      : "Failed to load dashboard data."
+    : data.errors.find((e) => e.source === "Loads")?.message ?? null;
+  const otherErrors = data.errors.filter((e) => e.source !== "Loads");
+  const kpiValue = (v: string) => (isLoading ? "…" : v);
 
   return (
     <div>
@@ -127,59 +180,152 @@ function Index() {
         title="Operations Dashboard"
         description="Real-time view of loads, bids, quotes, carriers, and revenue."
         actions={
-          <>
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <CalendarClock className="h-4 w-4" /> Last 7 days
-            </Button>
-            <Button size="sm" className="gap-1.5">
+          <Button size="sm" className="gap-1.5" asChild>
+            <Link to="/loads">
               <Plus className="h-4 w-4" /> New Load
-            </Button>
-          </>
+            </Link>
+          </Button>
         }
       />
 
       <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {otherErrors.length > 0 && (
+          <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground" />
+            <div>
+              <span className="font-medium">
+                Some data sources are unavailable: {otherErrors.map((e) => e.source).join(", ")}.
+              </span>{" "}
+              <span className="text-muted-foreground">
+                Those sections show partial data. {otherErrors[0].message}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* KPIs */}
+        {isLoading ? (
+          <StatCardsSkeleton count={8} />
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             label="Active Loads"
-            value={loadsLoading ? "…" : activeCount.toString()}
+            value={kpiValue(activeCount.toString())}
             icon={Package}
             accent="primary"
+            to="/loads"
           />
-          <KpiCard label="Open Bids" value="36" delta="+4.1%" trend="up" icon={Gavel} accent="info" />
-          <KpiCard label="Pending Quotes" value="58" delta="-2.3%" trend="down" icon={FileSpreadsheet} accent="warning" />
-          <KpiCard label="High-Risk Shipments" value="9" delta="+1.0%" trend="up" icon={ShieldAlert} accent="destructive" />
-          <KpiCard label="Revenue (MTD)" value="$2.41M" delta="+8.7%" trend="up" icon={DollarSign} accent="success" />
-          <KpiCard label="Carrier Score" value="92.4" delta="+1.2 pts" trend="up" icon={Award} accent="primary" />
-          <KpiCard label="On-Time Delivery" value="96.8%" delta="+0.6%" trend="up" icon={Clock3} accent="success" />
-          <KpiCard label="Exceptions Today" value="7" delta="-3" trend="down" icon={AlertTriangle} accent="warning" />
+          <KpiCard
+            label="Open Bids"
+            value={kpiValue(derived.openBids.toString())}
+            icon={Gavel}
+            accent="info"
+            to="/bidding"
+          />
+          <KpiCard
+            label="Pending Quotes"
+            value={kpiValue(derived.pendingQuotes.toString())}
+            icon={FileSpreadsheet}
+            accent="warning"
+            to="/quotes"
+          />
+          <KpiCard
+            label="High-Risk Shipments"
+            value={kpiValue(derived.highRiskCount.toString())}
+            icon={ShieldAlert}
+            accent="destructive"
+            to="/risk"
+          />
+          <KpiCard
+            label="Revenue (MTD)"
+            value={kpiValue(formatMoneyCompact(derived.thisMonth))}
+            delta={
+              derived.revenueDelta != null
+                ? `${derived.revenueDelta >= 0 ? "+" : ""}${derived.revenueDelta.toFixed(1)}%`
+                : undefined
+            }
+            deltaLabel="vs last month"
+            trend={derived.revenueDelta != null && derived.revenueDelta < 0 ? "down" : "up"}
+            icon={DollarSign}
+            accent="success"
+            to="/accounting"
+          />
+          <KpiCard
+            label="Avg Carrier Score"
+            value={kpiValue(derived.avgScore != null ? derived.avgScore.toFixed(1) : "—")}
+            icon={Award}
+            accent="primary"
+            to="/carriers"
+          />
+          <KpiCard
+            label="RFPs In Flight"
+            value={kpiValue(derived.rfpsInFlight.toString())}
+            icon={FileStack}
+            accent="info"
+            to="/rfps"
+          />
+          <KpiCard
+            label="Exceptions"
+            value={kpiValue(derived.exceptionCount.toString())}
+            icon={AlertTriangle}
+            accent="warning"
+            to="/tracking"
+          />
         </div>
+        )}
 
         {/* Revenue + Map */}
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2 border-border/70 shadow-sm">
             <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
               <div>
-                <CardTitle className="text-base">Revenue vs Target</CardTitle>
-                <CardDescription>Weekly performance · last 8 weeks</CardDescription>
+                <CardTitle className="text-base">Revenue vs Carrier Cost</CardTitle>
+                <CardDescription>Weekly booked revenue · last 8 weeks</CardDescription>
               </div>
-              <Badge variant="secondary" className="gap-1 text-success bg-success/12">
-                <TrendingUp className="h-3 w-3" /> +18.2%
-              </Badge>
+              {derived.marginPct != null && (
+                <Badge
+                  variant="secondary"
+                  className={`gap-1 ${
+                    derived.marginPct >= 0
+                      ? "text-success bg-success/12"
+                      : "text-destructive bg-destructive/12"
+                  }`}
+                >
+                  {derived.marginPct >= 0 ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3" />
+                  )}
+                  {derived.marginPct.toFixed(1)}% margin
+                </Badge>
+              )}
             </CardHeader>
             <CardContent className="pt-2">
-              <RevenueChart />
+              {isLoading ? (
+                <ChartSkeleton />
+              ) : (
+                <React.Suspense fallback={<ChartSkeleton />}>
+                  <RevenueChart data={derived.revenueSeries} />
+                </React.Suspense>
+              )}
             </CardContent>
           </Card>
 
           <Card className="border-border/70 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Live Shipments</CardTitle>
-              <CardDescription>12 in transit · 3 require attention</CardDescription>
+              <CardDescription>
+                {isLoading
+                  ? "Loading…"
+                  : `${derived.inTransitCount} in transit · ${derived.attentionCount} require attention`}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <ShipmentMap />
+              {isLoading ? (
+                <Skeleton className="h-[280px] w-full rounded-xl" />
+              ) : (
+                <ShipmentMap pins={derived.pins} />
+              )}
             </CardContent>
           </Card>
         </div>
@@ -191,9 +337,9 @@ function Index() {
               <div>
                 <CardTitle className="text-base">Active Loads</CardTitle>
                 <CardDescription>
-                  {loadsLoading
+                  {isLoading
                     ? "Loading from DynamoDB…"
-                    : loadsError
+                    : loadError
                       ? "Could not refresh — showing last error below"
                       : `${activeCount} active · soonest delivery first`}
                 </CardDescription>
@@ -205,12 +351,12 @@ function Index() {
               </Button>
             </CardHeader>
             <CardContent className="px-0 pb-0">
-              {loadsError && (
+              {loadError && (
                 <div className="flex items-start gap-3 border-b border-destructive/30 bg-destructive/8 px-6 py-3 text-sm text-destructive">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="flex-1">
                     <div className="font-semibold">Couldn't load loads</div>
-                    <div className="mt-0.5 text-xs text-destructive/90">{loadsError}</div>
+                    <div className="mt-0.5 text-xs text-destructive/90">{loadError}</div>
                   </div>
                 </div>
               )}
@@ -227,7 +373,7 @@ function Index() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loadsLoading && (!loads || loads.length === 0) ? (
+                    {isLoading && data.loads.length === 0 ? (
                       Array.from({ length: 5 }).map((_, i) => (
                         <TableRow key={`skel-${i}`} className="border-border/60">
                           {Array.from({ length: 6 }).map((__, j) => (
@@ -240,7 +386,7 @@ function Index() {
                           ))}
                         </TableRow>
                       ))
-                    ) : activeLoads.length === 0 ? (
+                    ) : derived.activeLoads.length === 0 ? (
                       <TableRow className="border-border/60">
                         <TableCell colSpan={6} className="py-12">
                           <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
@@ -256,7 +402,7 @@ function Index() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      activeLoads.slice(0, 12).map((l) => {
+                      derived.activeLoads.slice(0, 12).map((l) => {
                         const status = l.loadStatus
                           ? (STATUS_LABELS[l.loadStatus] ?? {
                               label: l.loadStatus,
@@ -309,89 +455,124 @@ function Index() {
                 <CardDescription>Requires action</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {ALERTS.map((a, i) => (
-                  <div key={i} className="flex gap-3 rounded-lg border border-border/70 bg-muted/30 p-3">
-                    <div
-                      className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                        a.tone === "destructive"
-                          ? "bg-destructive/15 text-destructive"
-                          : "bg-warning/20 text-warning-foreground"
-                      }`}
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium leading-tight text-foreground">{a.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{a.desc}</p>
-                    </div>
+                {isLoading ? (
+                  <ListSkeleton items={3} />
+                ) : derived.alerts.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                    No active alerts. All clear.
                   </div>
-                ))}
+                ) : (
+                  derived.alerts.map((a, i) => (
+                    <div key={i} className="flex gap-3 rounded-lg border border-border/70 bg-muted/30 p-3">
+                      <div
+                        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
+                          a.tone === "destructive"
+                            ? "bg-destructive/15 text-destructive"
+                            : "bg-warning/20 text-warning-foreground"
+                        }`}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium leading-tight text-foreground">{a.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{a.desc}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
 
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Upcoming Deadlines</CardTitle>
-                <CardDescription>Bids, RFPs & quotes</CardDescription>
+                <CardDescription>RFP due dates & quote pickups</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2.5">
-                {DEADLINES.map((d) => (
-                  <div key={d.label} className="flex items-start justify-between gap-2 rounded-lg p-2 hover:bg-muted/40">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{d.label}</p>
-                      <p className="text-xs text-muted-foreground">{d.date}</p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={
-                        d.urgency === "High"
-                          ? toneBadge.destructive
-                          : d.urgency === "Medium"
-                            ? toneBadge.warning
-                            : toneBadge.info
-                      }
-                    >
-                      {d.urgency}
-                    </Badge>
+                {isLoading ? (
+                  <ListSkeleton items={3} />
+                ) : derived.deadlines.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                    No upcoming deadlines.
                   </div>
-                ))}
+                ) : (
+                  derived.deadlines.map((d) => (
+                    <div key={d.label} className="flex items-start justify-between gap-2 rounded-lg p-2 hover:bg-muted/40">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{d.label}</p>
+                        <p className="text-xs text-muted-foreground">{d.date}</p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          d.urgency === "High"
+                            ? toneBadge.destructive
+                            : d.urgency === "Medium"
+                              ? toneBadge.warning
+                              : toneBadge.info
+                        }
+                      >
+                        {d.urgency}
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
         </div>
 
-        {/* Lane volume + activity + carrier perf */}
+        {/* Lane volume + carrier perf */}
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2 border-border/70 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Top Lanes by Volume</CardTitle>
-              <CardDescription>Loads booked · last 30 days</CardDescription>
+              <CardDescription>All loads · grouped by pickup → delivery</CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
-              <LaneVolumeChart />
+              {isLoading ? (
+                <ChartSkeleton />
+              ) : (
+                <React.Suspense fallback={<ChartSkeleton />}>
+                  <LaneVolumeChart data={derived.lanes} />
+                </React.Suspense>
+              )}
             </CardContent>
           </Card>
 
           <Card className="border-border/70 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Carrier Performance</CardTitle>
-              <CardDescription>Top 4 by score</CardDescription>
+              <CardDescription>OTD% minus claims rate · top {Math.max(derived.carrierPerf.length, 1)}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                { name: "Bluepeak Freight", score: 96 },
-                { name: "Ironline Logistics", score: 93 },
-                { name: "Gulfstream Express", score: 89 },
-                { name: "Sundial Trucking", score: 78 },
-              ].map((c) => (
-                <div key={c.name}>
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="font-medium">{c.name}</span>
-                    <span className="tabular-nums text-muted-foreground">{c.score}</span>
-                  </div>
-                  <Progress value={c.score} className="h-1.5" />
+              {isLoading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-8" />
+                      </div>
+                      <Skeleton className="h-1.5 w-full" />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : derived.carrierPerf.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                  No scored carriers yet — add OTD% on carrier profiles.
+                </div>
+              ) : (
+                derived.carrierPerf.map((c) => (
+                  <div key={c.name}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium">{c.name}</span>
+                      <span className="tabular-nums text-muted-foreground">{c.score.toFixed(1)}</span>
+                    </div>
+                    <Progress value={c.score} className="h-1.5" />
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>
@@ -400,31 +581,39 @@ function Index() {
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Recent Activity</CardTitle>
-            <CardDescription>Across your operation</CardDescription>
+            <CardDescription>Latest changes across loads, quotes, RFPs & carriers</CardDescription>
           </CardHeader>
           <CardContent>
-            <ul className="divide-y divide-border/70">
-              {ACTIVITY.map((a, i) => {
-                const Icon = a.icon;
-                return (
-                  <li key={i} className="flex items-center gap-3 py-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-muted text-xs font-semibold">
-                        {a.who.split(" ").map((n) => n[0]).join("").slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">
-                        <span className="font-medium text-foreground">{a.who}</span>{" "}
-                        <span className="text-muted-foreground">{a.what}</span>
-                      </p>
-                    </div>
-                    <Icon className={`h-4 w-4 ${a.tone}`} />
-                    <span className="text-xs text-muted-foreground tabular-nums">{a.when}</span>
-                  </li>
-                );
-              })}
-            </ul>
+            {isLoading ? (
+              <ListSkeleton items={5} />
+            ) : derived.activity.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                No recent activity yet.
+              </div>
+            ) : (
+              <ul className="divide-y divide-border/70">
+                {derived.activity.map((a, i) => {
+                  const { icon: Icon, className } = ACTIVITY_TONE_ICON[a.tone];
+                  return (
+                    <li key={i} className="flex items-center gap-3 py-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-muted text-xs font-semibold">
+                          {a.who.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm">
+                          <span className="font-medium text-foreground">{a.who}</span>{" "}
+                          <span className="text-muted-foreground">{a.what}</span>
+                        </p>
+                      </div>
+                      <Icon className={`h-4 w-4 shrink-0 ${className}`} />
+                      <span className="text-xs text-muted-foreground tabular-nums">{a.when}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>

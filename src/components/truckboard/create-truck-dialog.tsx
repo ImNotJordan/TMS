@@ -42,14 +42,30 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { FancySelect, type FancySelectOption } from "@/components/loads/fancy-select";
+import {
+  FacilityLocationInput,
+  isFacilitySuggestionsTarget,
+} from "@/components/loads/facility-location-input";
 import { createTruck, type CreateTruckInput, type TruckRecord } from "@/lib/trucks-store";
+import {
+  removeStoredTruckDraft,
+  shouldPersistTruckDraft,
+  upsertStoredTruckDraft,
+  type StoredTruckDraft,
+} from "@/lib/truck-drafts-storage";
 import { useAuth } from "@/lib/auth";
 
 export type TruckDraft = {
@@ -564,12 +580,34 @@ function generateTruckBoardId() {
 export function CreateTruckDialog({
   trigger,
   onCreated,
+  onDraftSaved,
+  open: controlledOpen,
+  onOpenChange,
+  resumeDraft,
 }: {
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
   onCreated?: (truckBoardId: string) => void;
+  onDraftSaved?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  resumeDraft?: StoredTruckDraft | null;
 }) {
   const { user } = useAuth();
-  const [open, setOpen] = React.useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+
+  const setOpenRaw = React.useCallback(
+    (next: boolean) => {
+      if (isControlled) {
+        onOpenChange?.(next);
+      } else {
+        setUncontrolledOpen(next);
+      }
+    },
+    [isControlled, onOpenChange],
+  );
+
   const [step, setStep] = React.useState(1);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -579,23 +617,94 @@ export function CreateTruckDialog({
   }));
   const [touched, setTouched] = React.useState<Record<number, boolean>>({});
 
+  const openRef = React.useRef(open);
+  const draftRef = React.useRef(draft);
+  const stepRef = React.useRef(step);
+  const draftStorageIdRef = React.useRef<string | null>(null);
+  const skipDraftSaveRef = React.useRef(false);
+  const resumeDraftRef = React.useRef(resumeDraft);
+
+  openRef.current = open;
+  draftRef.current = draft;
+  stepRef.current = step;
+  resumeDraftRef.current = resumeDraft;
+
   const update = React.useCallback(<K extends keyof TruckDraft>(key: K, value: TruckDraft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }));
   }, []);
 
-  const reset = () => {
+  const reset = React.useCallback(() => {
+    draftStorageIdRef.current = null;
     setDraft({ ...INITIAL, truckBoardId: generateTruckBoardId() });
     setStep(1);
     setTouched({});
     setSubmitError(null);
-  };
+  }, []);
+
+  const applyResumeDraft = React.useCallback((stored: StoredTruckDraft) => {
+    draftStorageIdRef.current = stored.id;
+    setDraft(stored.draft);
+    setStep(Math.min(8, Math.max(1, stored.step)));
+    setTouched({});
+    setSubmitError(null);
+  }, []);
+
+  const persistDraftIfNeeded = React.useCallback(() => {
+    if (skipDraftSaveRef.current) return false;
+    const current = draftRef.current;
+    const currentStep = stepRef.current;
+    const hasStoredDraft = Boolean(draftStorageIdRef.current);
+    if (!shouldPersistTruckDraft(current, currentStep, { hasStoredDraft })) return false;
+    const id = draftStorageIdRef.current ?? current.truckBoardId;
+    draftStorageIdRef.current = id;
+    upsertStoredTruckDraft({
+      id,
+      savedAt: new Date().toISOString(),
+      step: currentStep,
+      draft: current,
+    });
+    onDraftSaved?.();
+    return true;
+  }, [onDraftSaved]);
+
+  const closeWithDraftSave = React.useCallback(() => {
+    if (!openRef.current) return;
+    persistDraftIfNeeded();
+    skipDraftSaveRef.current = false;
+    setOpenRaw(false);
+  }, [persistDraftIfNeeded, setOpenRaw]);
+
+  const handleOpenChange = React.useCallback(
+    (next: boolean) => {
+      if (!next) {
+        if (openRef.current) {
+          persistDraftIfNeeded();
+          skipDraftSaveRef.current = false;
+        }
+      } else if (next) {
+        const stored = resumeDraftRef.current;
+        if (stored) {
+          applyResumeDraft(stored);
+        } else {
+          reset();
+        }
+      }
+      setOpenRaw(next);
+    },
+    [persistDraftIfNeeded, applyResumeDraft, reset, setOpenRaw],
+  );
 
   React.useEffect(() => {
     if (!open) {
       const t = setTimeout(reset, 200);
       return () => clearTimeout(t);
     }
-  }, [open]);
+    if (resumeDraft) {
+      applyResumeDraft(resumeDraft);
+    } else if (isControlled) {
+      reset();
+    }
+  }, [open, resumeDraft, isControlled, applyResumeDraft, reset]);
 
   const stepErrors = React.useMemo(() => computeTruckWizardStepErrors(draft), [draft]);
 
@@ -620,8 +729,13 @@ export function CreateTruckDialog({
         createdBy: user?.userId,
       };
       await createTruck(payload);
+      skipDraftSaveRef.current = true;
+      if (draftStorageIdRef.current) {
+        removeStoredTruckDraft(draftStorageIdRef.current);
+        onDraftSaved?.();
+      }
       onCreated?.(draft.truckBoardId);
-      setOpen(false);
+      setOpenRaw(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to post truck to DynamoDB.";
       setSubmitError(message);
@@ -633,13 +747,25 @@ export function CreateTruckDialog({
   const progress = (step / 8) * 100;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
         showCloseButton={false}
         className="!max-w-6xl w-[96vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl"
-        onInteractOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+          if (isFacilitySuggestionsTarget(e.target)) return;
+          e.preventDefault();
+        }}
+        onPointerDownOutside={(e) => {
+          if (isFacilitySuggestionsTarget(e.target)) {
+            e.preventDefault();
+          }
+        }}
       >
+        <DialogTitle className="sr-only">Post Truck</DialogTitle>
+        <DialogDescription className="sr-only">
+          Post a truck with equipment, location, availability, and pricing details.
+        </DialogDescription>
         <div className="grid h-[88vh] grid-cols-1 lg:grid-cols-[280px_1fr]">
           {/* Stepper sidebar */}
           <aside className="hidden flex-col bg-sidebar text-sidebar-foreground lg:flex">
@@ -718,7 +844,7 @@ export function CreateTruckDialog({
               })}
             </nav>
             <div className="border-t border-sidebar-border/60 px-5 py-3 text-xs text-sidebar-foreground/70">
-              All changes auto-save to draft.
+              Close or Cancel saves to Drafts.
             </div>
           </aside>
 
@@ -739,8 +865,9 @@ export function CreateTruckDialog({
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeWithDraftSave}
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Close and save draft"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -820,8 +947,8 @@ export function CreateTruckDialog({
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                    Draft saved
+                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                    Cancel saves to Drafts
                   </span>
                 )}
               </div>
@@ -830,7 +957,7 @@ export function CreateTruckDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setOpen(false)}
+                  onClick={closeWithDraftSave}
                   className="text-muted-foreground hover:text-foreground"
                 >
                   Cancel
@@ -1261,9 +1388,23 @@ export function StepLocation({
   const isErr = (k: string) => touched && errors.includes(k);
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <Card>
+      <Card className="overflow-visible">
         <SectionTitle title="Current location" hint="Where the truck is sitting" icon={MapPin} />
-        <div className="grid gap-4 sm:grid-cols-6">
+        <FieldShell label="Facility / Yard Name">
+          <FacilityLocationInput
+            value={draft.facilityName}
+            onChange={(v) => update("facilityName", v)}
+            onResolved={(facility, result) => {
+              update("facilityName", facility);
+              update("currentAddress", result.address);
+              update("currentCity", result.city);
+              update("currentState", result.state);
+              update("currentZip", result.zip);
+            }}
+            placeholder="e.g. TA Truck Stop, Dallas TX"
+          />
+        </FieldShell>
+        <div className="mt-4 grid gap-4 sm:grid-cols-6">
           <FieldShell label="City" required error={isErr("currentCity")} className="sm:col-span-3">
             <Input
               value={draft.currentCity}
@@ -1290,19 +1431,12 @@ export function StepLocation({
             />
           </FieldShell>
         </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4">
           <FieldShell label="Street Address" hint="Optional">
             <Input
               value={draft.currentAddress}
               onChange={(e) => update("currentAddress", e.target.value)}
               placeholder="1234 Industrial Blvd"
-            />
-          </FieldShell>
-          <FieldShell label="Facility / Yard Name">
-            <Input
-              value={draft.facilityName}
-              onChange={(e) => update("facilityName", e.target.value)}
-              placeholder="TA Truck Stop #421"
             />
           </FieldShell>
         </div>

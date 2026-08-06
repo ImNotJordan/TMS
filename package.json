@@ -3,18 +3,29 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1046.0",
-    "@aws-sdk/lib-dynamodb": "^3.1046.0",
+    "@ai-sdk/openai": "^4.0.27",
+    "@ai-sdk/react": "^4.0.51",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1049.0",
+    "@aws-sdk/client-dynamodb": "^3.1049.0",
+    "@aws-sdk/credential-providers": "^3.1101.0",
+    "@aws-sdk/lib-dynamodb": "^3.1049.0",
     "@cloudflare/vite-plugin": "^1.25.5",
+    "@googlemaps/js-api-loader": "^2.0.2",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -47,6 +58,8 @@
     "@tanstack/react-router": "^1.168.25",
     "@tanstack/react-start": "^1.167.50",
     "@tanstack/router-plugin": "^1.167.28",
+    "@titan/aws-client": "*",
+    "ai": "^7.0.48",
     "aws-amplify": "^6.17.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -59,8 +72,10 @@
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.2",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.6.5",
     "recharts": "^2.15.4",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
@@ -72,10 +87,12 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "^1.7.0",
+    "@types/google.maps": "^3.64.1",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
@@ -85,6 +102,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.10"
   }
 }

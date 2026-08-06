@@ -44,794 +44,69 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { FancySelect, type FancySelectOption } from "@/components/loads/fancy-select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  FacilityLocationInput,
+  isFacilitySuggestionsTarget,
+} from "@/components/loads/facility-location-input";
 import { createLoad, type CreateLoadInput, type LoadRecord } from "@/lib/loads-store";
+import {
+  removeStoredLoadDraft,
+  shouldPersistLoadDraft,
+  upsertStoredLoadDraft,
+  type StoredLoadDraft,
+} from "@/lib/load-drafts-storage";
 import { useAuth } from "@/lib/auth";
+import { useLoadOwnershipOptions } from "@/hooks/use-assignable-users";
 import {
   normalizeLoadForDriverAssignment,
   syncTrackingSessionForLoad,
 } from "@/lib/tracking-workflow-store";
 
-export type LoadDraft = {
-  // Step 1: basic
-  loadId: string;
-  loadType: string;
-  loadStatus: string;
-  customer: string;
-  broker: string;
-  dispatcher: string;
-  equipmentType: string;
-  trailerType: string;
-  loadPriority: string;
-  internalNotes: string;
-  // Step 2: pickup
-  pickupFacility: string;
-  pickupAddress: string;
-  pickupCity: string;
-  pickupState: string;
-  pickupZip: string;
-  pickupContactName: string;
-  pickupContactPhone: string;
-  pickupContactEmail: string;
-  pickupDate: string;
-  pickupAppointmentTime: string;
-  pickupWindowStart: string;
-  pickupWindowEnd: string;
-  pickupInstructions: string;
-  pickupReference: string;
-  // Step 2b: delivery
-  deliveryFacility: string;
-  deliveryAddress: string;
-  deliveryCity: string;
-  deliveryState: string;
-  deliveryZip: string;
-  deliveryContactName: string;
-  deliveryContactPhone: string;
-  deliveryContactEmail: string;
-  deliveryDate: string;
-  deliveryAppointmentTime: string;
-  deliveryWindowStart: string;
-  deliveryWindowEnd: string;
-  deliveryInstructions: string;
-  deliveryReference: string;
-  // Step 3: freight
-  commodityDescription: string;
-  freightClass: string;
-  weight: string;
-  weightUnit: "lbs" | "kg";
-  dimensions: string;
-  palletCount: string;
-  pieceCount: string;
-  packagingType: string;
-  temperatureRequirement: string;
-  hazmat: boolean;
-  hazmatUn: string;
-  specialHandling: string[];
-  sealNumber: string;
-  loadValue: string;
-  // Step 4: pricing
-  customerRate: string;
-  carrierRate: string;
-  linehaulRate: string;
-  fuelSurcharge: string;
-  accessorialCharges: string;
-  detentionRate: string;
-  lumperFee: string;
-  tonuFee: string;
-  layoverFee: string;
-  paymentTerms: string;
-  // Step 5: carrier/driver
-  assignedCarrier: string;
-  assignedDriver: string;
-  // Step 6: docs + tracking
-  trackingRequired: boolean;
-  trackingMethod: string;
-  checkInRequired: boolean;
-  checkOutRequired: boolean;
-  documents: string[];
-  insuranceVerified: boolean;
-  authorityVerified: boolean;
-  highValueFlag: boolean;
-};
+import {
+  INITIAL,
+  computeLoadWizardStepErrors,
+  loadDraftToRecord,
+  recordToLoadDraft,
+  type LoadDraft,
+} from "./create-load/create-load-types";
+import {
+  DOCUMENT_OPTIONS,
+  EQUIPMENT_OPTIONS,
+  FREIGHT_CLASS_OPTIONS,
+  HANDLING_OPTIONS,
+  LOAD_FORM_STEPS,
+  LOAD_STATUS_OPTIONS,
+  LOAD_TYPE_OPTIONS,
+  PACKAGING_OPTIONS,
+  PAYMENT_TERMS_OPTIONS,
+  PRIORITY_OPTIONS,
+  STATE_OPTIONS,
+  TEMPERATURE_OPTIONS,
+  TRACKING_OPTIONS,
+  TRAILER_OPTIONS,
+} from "./create-load/create-load-constants";
 
-const INITIAL: LoadDraft = {
-  loadId: "",
-  loadType: "",
-  loadStatus: "draft",
-  customer: "",
-  broker: "",
-  dispatcher: "",
-  equipmentType: "",
-  trailerType: "",
-  loadPriority: "standard",
-  internalNotes: "",
-  pickupFacility: "",
-  pickupAddress: "",
-  pickupCity: "",
-  pickupState: "",
-  pickupZip: "",
-  pickupContactName: "",
-  pickupContactPhone: "",
-  pickupContactEmail: "",
-  pickupDate: "",
-  pickupAppointmentTime: "",
-  pickupWindowStart: "",
-  pickupWindowEnd: "",
-  pickupInstructions: "",
-  pickupReference: "",
-  deliveryFacility: "",
-  deliveryAddress: "",
-  deliveryCity: "",
-  deliveryState: "",
-  deliveryZip: "",
-  deliveryContactName: "",
-  deliveryContactPhone: "",
-  deliveryContactEmail: "",
-  deliveryDate: "",
-  deliveryAppointmentTime: "",
-  deliveryWindowStart: "",
-  deliveryWindowEnd: "",
-  deliveryInstructions: "",
-  deliveryReference: "",
-  commodityDescription: "",
-  freightClass: "",
-  weight: "",
-  weightUnit: "lbs",
-  dimensions: "",
-  palletCount: "",
-  pieceCount: "",
-  packagingType: "",
-  temperatureRequirement: "",
-  hazmat: false,
-  hazmatUn: "",
-  specialHandling: [],
-  sealNumber: "",
-  loadValue: "",
-  customerRate: "",
-  carrierRate: "",
-  linehaulRate: "",
-  fuelSurcharge: "",
-  accessorialCharges: "",
-  detentionRate: "",
-  lumperFee: "",
-  tonuFee: "",
-  layoverFee: "",
-  paymentTerms: "",
-  assignedCarrier: "",
-  assignedDriver: "",
-  trackingRequired: true,
-  trackingMethod: "",
-  checkInRequired: true,
-  checkOutRequired: true,
-  documents: [],
-  insuranceVerified: false,
-  authorityVerified: false,
-  highValueFlag: false,
-};
-
-/** Map DynamoDB record → wizard draft (safe defaults for missing fields). */
-export function recordToLoadDraft(r: LoadRecord): LoadDraft {
-  return {
-    ...INITIAL,
-    loadId: r.loadId ?? "",
-    loadType: r.loadType ?? "",
-    loadStatus: r.loadStatus ?? "draft",
-    customer: r.customer ?? "",
-    broker: r.broker ?? "",
-    dispatcher: r.dispatcher ?? "",
-    equipmentType: r.equipmentType ?? "",
-    trailerType: r.trailerType ?? "",
-    loadPriority: r.loadPriority ?? "standard",
-    internalNotes: r.internalNotes ?? "",
-    pickupFacility: r.pickupFacility ?? "",
-    pickupAddress: r.pickupAddress ?? "",
-    pickupCity: r.pickupCity ?? "",
-    pickupState: r.pickupState ?? "",
-    pickupZip: r.pickupZip ?? "",
-    pickupContactName: r.pickupContactName ?? "",
-    pickupContactPhone: r.pickupContactPhone ?? "",
-    pickupContactEmail: r.pickupContactEmail ?? "",
-    pickupDate: r.pickupDate ?? "",
-    pickupAppointmentTime: r.pickupAppointmentTime ?? "",
-    pickupWindowStart: r.pickupWindowStart ?? "",
-    pickupWindowEnd: r.pickupWindowEnd ?? "",
-    pickupInstructions: r.pickupInstructions ?? "",
-    pickupReference: r.pickupReference ?? "",
-    deliveryFacility: r.deliveryFacility ?? "",
-    deliveryAddress: r.deliveryAddress ?? "",
-    deliveryCity: r.deliveryCity ?? "",
-    deliveryState: r.deliveryState ?? "",
-    deliveryZip: r.deliveryZip ?? "",
-    deliveryContactName: r.deliveryContactName ?? "",
-    deliveryContactPhone: r.deliveryContactPhone ?? "",
-    deliveryContactEmail: r.deliveryContactEmail ?? "",
-    deliveryDate: r.deliveryDate ?? "",
-    deliveryAppointmentTime: r.deliveryAppointmentTime ?? "",
-    deliveryWindowStart: r.deliveryWindowStart ?? "",
-    deliveryWindowEnd: r.deliveryWindowEnd ?? "",
-    deliveryInstructions: r.deliveryInstructions ?? "",
-    deliveryReference: r.deliveryReference ?? "",
-    commodityDescription: r.commodityDescription ?? "",
-    freightClass: r.freightClass ?? "",
-    weight: r.weight ?? "",
-    weightUnit: r.weightUnit === "kg" ? "kg" : "lbs",
-    dimensions: r.dimensions ?? "",
-    palletCount: r.palletCount ?? "",
-    pieceCount: r.pieceCount ?? "",
-    packagingType: r.packagingType ?? "",
-    temperatureRequirement: r.temperatureRequirement ?? "",
-    hazmat: Boolean(r.hazmat),
-    hazmatUn: r.hazmatUn ?? "",
-    specialHandling: Array.isArray(r.specialHandling) ? [...r.specialHandling] : [],
-    sealNumber: r.sealNumber ?? "",
-    loadValue: r.loadValue ?? "",
-    customerRate: r.customerRate ?? "",
-    carrierRate: r.carrierRate ?? "",
-    linehaulRate: r.linehaulRate ?? "",
-    fuelSurcharge: r.fuelSurcharge ?? "",
-    accessorialCharges: r.accessorialCharges ?? "",
-    detentionRate: r.detentionRate ?? "",
-    lumperFee: r.lumperFee ?? "",
-    tonuFee: r.tonuFee ?? "",
-    layoverFee: r.layoverFee ?? "",
-    paymentTerms: r.paymentTerms ?? "",
-    assignedCarrier: r.assignedCarrier ?? "",
-    assignedDriver: r.assignedDriver ?? "",
-    trackingRequired: r.trackingRequired ?? false,
-    trackingMethod: r.trackingMethod ?? "",
-    checkInRequired: r.checkInRequired ?? false,
-    checkOutRequired: r.checkOutRequired ?? false,
-    documents: Array.isArray(r.documents) ? [...r.documents] : [],
-    insuranceVerified: Boolean(r.insuranceVerified),
-    authorityVerified: Boolean(r.authorityVerified),
-    highValueFlag: Boolean(r.highValueFlag),
-  };
-}
-
-/** Merge edited draft back into an existing record (keeps PK and audit fields stable). */
-export function loadDraftToRecord(draft: LoadDraft, existing: LoadRecord): LoadRecord {
-  return {
-    ...existing,
-    ...draft,
-    loadId: existing.loadId,
-    createdAt: existing.createdAt,
-    createdBy: existing.createdBy,
-  };
-}
-
-export function computeLoadWizardStepErrors(draft: LoadDraft): Record<number, string[]> {
-  const errs: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
-  if (!draft.customer) errs[1].push("customer");
-  if (!draft.equipmentType) errs[1].push("equipmentType");
-  if (!draft.loadStatus) errs[1].push("loadStatus");
-  if (!draft.pickupAddress) errs[2].push("pickupAddress");
-  if (!draft.pickupDate) errs[2].push("pickupDate");
-  if (!draft.pickupAppointmentTime && !(draft.pickupWindowStart && draft.pickupWindowEnd))
-    errs[2].push("pickupTime");
-  if (!draft.deliveryAddress) errs[2].push("deliveryAddress");
-  if (!draft.deliveryDate) errs[2].push("deliveryDate");
-  if (!draft.deliveryAppointmentTime && !(draft.deliveryWindowStart && draft.deliveryWindowEnd))
-    errs[2].push("deliveryTime");
-  if (!draft.commodityDescription) errs[3].push("commodityDescription");
-  if (!draft.weight) errs[3].push("weight");
-  if (!draft.customerRate) errs[4].push("customerRate");
-  if (!draft.carrierRate) errs[4].push("carrierRate");
-  if (!draft.assignedCarrier && !draft.assignedDriver) errs[5].push("assignment");
-  return errs;
-}
-
-const CUSTOMER_OPTIONS: FancySelectOption[] = [
-  {
-    value: "acme-foods",
-    label: "Acme Foods, Inc.",
-    description: "Net 30 · Atlanta, GA",
-    icon: Building2,
-    badge: "Tier 1",
-    group: "Top customers",
-  },
-  {
-    value: "northstar-bev",
-    label: "Northstar Beverage",
-    description: "Net 45 · Chicago, IL",
-    icon: Building2,
-    badge: "Tier 1",
-    group: "Top customers",
-  },
-  {
-    value: "greenfield",
-    label: "Greenfield Co.",
-    description: "Net 30 · Denver, CO",
-    icon: Building2,
-    group: "Top customers",
-  },
-  {
-    value: "transocean",
-    label: "TransOcean Logistics",
-    description: "Net 60 · Long Beach, CA",
-    icon: Building2,
-    group: "Top customers",
-  },
-  {
-    value: "freshline",
-    label: "Freshline Distributors",
-    description: "Net 30 · Miami, FL",
-    icon: Building2,
-    group: "Standard",
-  },
-  {
-    value: "summit-retail",
-    label: "Summit Retail Group",
-    description: "Net 30 · Dallas, TX",
-    icon: Building2,
-    group: "Standard",
-  },
-];
-
-const LOAD_TYPE_OPTIONS: FancySelectOption[] = [
-  {
-    value: "ftl",
-    label: "Full Truckload",
-    description: "Single shipper · full trailer",
-    icon: Truck,
-    badge: "FTL",
-  },
-  {
-    value: "ltl",
-    label: "Less Than Truckload",
-    description: "Multiple shippers · shared trailer",
-    icon: Container,
-    badge: "LTL",
-  },
-  {
-    value: "partial",
-    label: "Partial Load",
-    description: "Volume between LTL and FTL",
-    icon: Package,
-    badge: "Partial",
-  },
-  {
-    value: "drayage",
-    label: "Drayage",
-    description: "Short-haul container moves",
-    icon: Container,
-    badge: "DRAY",
-  },
-  {
-    value: "intermodal",
-    label: "Intermodal",
-    description: "Rail + truck combination",
-    icon: Route,
-    badge: "IM",
-  },
-  {
-    value: "expedite",
-    label: "Expedited / Hot Shot",
-    description: "Time-critical delivery",
-    icon: Sparkles,
-    badge: "EXPD",
-  },
-];
-
-const LOAD_STATUS_OPTIONS: FancySelectOption[] = [
-  { value: "draft", label: "Draft", description: "Not yet booked or tendered", icon: FileText },
-  {
-    value: "driver-assigned",
-    label: "Driver Assigned",
-    description: "Driver has been assigned and notified",
-    icon: User,
-  },
-  {
-    value: "active",
-    label: "Active",
-    description: "Live load · in planning or execution",
-    icon: Activity,
-  },
-  {
-    value: "tendered",
-    label: "Tendered",
-    description: "Sent to carrier for acceptance",
-    icon: ClipboardCheck,
-  },
-  {
-    value: "booked",
-    label: "Booked",
-    description: "Carrier accepted · awaiting pickup",
-    icon: CheckCircle2,
-  },
-  {
-    value: "dispatched",
-    label: "Dispatched",
-    description: "Driver assigned and en route to pickup",
-    icon: Navigation,
-  },
-  { value: "in-transit", label: "In Transit", description: "Picked up · on the way", icon: Truck },
-  { value: "delivered", label: "Delivered", description: "POD received", icon: CheckCircle2 },
-];
-
-const EQUIPMENT_OPTIONS: FancySelectOption[] = [
-  {
-    value: "dry-van",
-    label: "Dry Van",
-    description: "53' enclosed trailer · general freight",
-    icon: Truck,
-    group: "Standard",
-  },
-  {
-    value: "reefer",
-    label: "Reefer",
-    description: "Temperature-controlled trailer",
-    icon: Snowflake,
-    group: "Temp control",
-  },
-  {
-    value: "flatbed",
-    label: "Flatbed",
-    description: "Open trailer · oversized freight",
-    icon: Container,
-    group: "Specialized",
-  },
-  {
-    value: "step-deck",
-    label: "Step Deck",
-    description: "Lower-height flatbed for tall loads",
-    icon: Container,
-    group: "Specialized",
-  },
-  {
-    value: "lowboy",
-    label: "Lowboy / RGN",
-    description: "Heavy haul · over-dimensional",
-    icon: Container,
-    group: "Specialized",
-  },
-  {
-    value: "tanker",
-    label: "Tanker",
-    description: "Liquid bulk · food or chemical",
-    icon: Container,
-    group: "Specialized",
-  },
-  {
-    value: "power-only",
-    label: "Power Only",
-    description: "Tractor for shipper-owned trailer",
-    icon: Truck,
-    group: "Standard",
-  },
-];
-
-const TRAILER_OPTIONS: FancySelectOption[] = [
-  { value: "53-dry", label: "53' Dry Van", description: "Standard enclosed trailer" },
-  { value: "48-dry", label: "48' Dry Van", description: "Shorter enclosed trailer" },
-  { value: "53-reefer", label: "53' Reefer", description: "Temperature-controlled" },
-  { value: "48-flat", label: "48' Flatbed", description: "Standard flatbed" },
-  { value: "53-flat", label: "53' Flatbed", description: "Long flatbed" },
-  { value: "step-deck", label: "Step Deck", description: "Drop-deck flatbed" },
-];
-
-const PRIORITY_OPTIONS: FancySelectOption[] = [
-  { value: "low", label: "Low", description: "No urgency · flexible scheduling", icon: Flag },
-  { value: "standard", label: "Standard", description: "Normal lane and rate", icon: Flag },
-  {
-    value: "high",
-    label: "High",
-    description: "Customer is watching · prioritize",
-    icon: Flag,
-    badge: "Hot",
-  },
-  {
-    value: "critical",
-    label: "Critical",
-    description: "Time-critical · escalate immediately",
-    icon: Flame,
-    badge: "Critical",
-  },
-];
-
-const DISPATCHER_OPTIONS: FancySelectOption[] = [
-  { value: "jordan", label: "Jordan Taylor", description: "Day shift · East region", icon: User },
-  { value: "priya", label: "Priya Singh", description: "Day shift · West region", icon: User },
-  { value: "marcus", label: "Marcus Lee", description: "Night shift · National", icon: User },
-  { value: "alex", label: "Alex Romero", description: "Day shift · Midwest", icon: User },
-];
-
-const BROKER_OPTIONS: FancySelectOption[] = [
-  {
-    value: "in-house",
-    label: "In-house Brokerage",
-    description: "Logistics Software Brokerage",
-    icon: Users,
-  },
-  {
-    value: "partner-a",
-    label: "Partner: Coastline Logistics",
-    description: "Preferred · 5% margin share",
-    icon: Users,
-  },
-  {
-    value: "partner-b",
-    label: "Partner: Heartland Logistics",
-    description: "Preferred · 4.5% margin share",
-    icon: Users,
-  },
-];
-
-const CARRIER_OPTIONS: FancySelectOption[] = [
-  {
-    value: "bluepeak",
-    label: "Bluepeak Freight",
-    description: "MC 887412 · 96 safety · 32 power units",
-    icon: Truck,
-    badge: "Preferred",
-    group: "Preferred",
-  },
-  {
-    value: "ironline",
-    label: "Ironline Logistics",
-    description: "MC 553201 · 93 safety · 18 power units",
-    icon: Truck,
-    badge: "Preferred",
-    group: "Preferred",
-  },
-  {
-    value: "gulfstream",
-    label: "Gulfstream Express",
-    description: "MC 412009 · 89 safety · 22 power units",
-    icon: Truck,
-    group: "Approved",
-  },
-  {
-    value: "sundial",
-    label: "Sundial Trucking",
-    description: "MC 778120 · 78 safety · 14 power units",
-    icon: Truck,
-    badge: "Watch",
-    group: "Approved",
-  },
-  {
-    value: "northbay",
-    label: "Northbay Carriers",
-    description: "MC 990010 · 84 safety · 27 power units",
-    icon: Truck,
-    group: "Approved",
-  },
-];
-
-const DRIVER_OPTIONS: FancySelectOption[] = [
-  {
-    value: "d-101",
-    label: "Dwayne Carter",
-    description: "Bluepeak · CDL-A · HOS 7h",
-    icon: User,
-    group: "Available",
-  },
-  {
-    value: "d-102",
-    label: "Marisa Lopez",
-    description: "Bluepeak · CDL-A · HOS 9h",
-    icon: User,
-    group: "Available",
-  },
-  {
-    value: "d-201",
-    label: "Sam Reyes",
-    description: "Ironline · CDL-A · HOS 4h",
-    icon: User,
-    badge: "HOS low",
-    group: "Available",
-  },
-  {
-    value: "d-301",
-    label: "Tyrese Hill",
-    description: "Gulfstream · CDL-A · HOS 8h",
-    icon: User,
-    group: "Available",
-  },
-];
-
-const PACKAGING_OPTIONS: FancySelectOption[] = [
-  { value: "pallets", label: "Pallets", description: "Standard 48x40 wood pallets", icon: Package },
-  {
-    value: "boxes",
-    label: "Boxes / Cartons",
-    description: "Loose or palletized cartons",
-    icon: Package,
-  },
-  { value: "drums", label: "Drums", description: "55-gallon or similar", icon: Container },
-  {
-    value: "totes",
-    label: "Totes / IBCs",
-    description: "Intermediate bulk containers",
-    icon: Container,
-  },
-  { value: "bulk", label: "Bulk", description: "Loose unpackaged freight", icon: Container },
-  { value: "crates", label: "Crates", description: "Wooden or metal crates", icon: Package },
-];
-
-const TRACKING_OPTIONS: FancySelectOption[] = [
-  {
-    value: "macropoint",
-    label: "MacroPoint",
-    description: "Phone-based GPS check-in",
-    icon: MapPin,
-  },
-  {
-    value: "project44",
-    label: "project44",
-    description: "ELD-connected real-time visibility",
-    icon: MapPin,
-    badge: "Live",
-  },
-  {
-    value: "fourkites",
-    label: "FourKites",
-    description: "Network-wide tracking platform",
-    icon: MapPin,
-    badge: "Live",
-  },
-  { value: "eld", label: "Direct ELD", description: "Carrier-provided ELD feed", icon: Activity },
-  {
-    value: "manual",
-    label: "Manual Check Calls",
-    description: "Dispatcher schedules check calls",
-    icon: Phone,
-  },
-];
-
-const PAYMENT_TERMS_OPTIONS: FancySelectOption[] = [
-  {
-    value: "quickpay-2",
-    label: "QuickPay (2 days)",
-    description: "3% fee · paid in 2 business days",
-    badge: "Fast",
-  },
-  { value: "net-7", label: "Net 7", description: "Paid 7 days after POD" },
-  { value: "net-15", label: "Net 15", description: "Paid 15 days after POD" },
-  { value: "net-30", label: "Net 30", description: "Paid 30 days after POD" },
-  { value: "net-45", label: "Net 45", description: "Paid 45 days after POD" },
-  { value: "net-60", label: "Net 60", description: "Paid 60 days after POD" },
-];
-
-const FREIGHT_CLASS_OPTIONS: FancySelectOption[] = [
-  "50",
-  "55",
-  "60",
-  "65",
-  "70",
-  "77.5",
-  "85",
-  "92.5",
-  "100",
-  "110",
-  "125",
-  "150",
-  "175",
-  "200",
-  "250",
-  "300",
-  "400",
-  "500",
-].map((v) => ({ value: v, label: `Class ${v}`, description: `NMFC freight class ${v}` }));
-
-const TEMPERATURE_OPTIONS: FancySelectOption[] = [
-  {
-    value: "ambient",
-    label: "Ambient",
-    description: "No temperature control required",
-    icon: Thermometer,
-  },
-  {
-    value: "fresh",
-    label: "Fresh (33–40°F)",
-    description: "Refrigerated · produce, dairy",
-    icon: Thermometer,
-    badge: "Reefer",
-  },
-  {
-    value: "frozen",
-    label: "Frozen (-10–0°F)",
-    description: "Frozen goods",
-    icon: Snowflake,
-    badge: "Reefer",
-  },
-  {
-    value: "deep-frozen",
-    label: "Deep Frozen (-20°F)",
-    description: "Ice cream / pharma",
-    icon: Snowflake,
-    badge: "Reefer",
-  },
-  { value: "heated", label: "Heated", description: "Protect from freeze", icon: Flame },
-];
-
-const STATE_OPTIONS: FancySelectOption[] = [
-  "AL",
-  "AK",
-  "AZ",
-  "AR",
-  "CA",
-  "CO",
-  "CT",
-  "DE",
-  "FL",
-  "GA",
-  "HI",
-  "ID",
-  "IL",
-  "IN",
-  "IA",
-  "KS",
-  "KY",
-  "LA",
-  "ME",
-  "MD",
-  "MA",
-  "MI",
-  "MN",
-  "MS",
-  "MO",
-  "MT",
-  "NE",
-  "NV",
-  "NH",
-  "NJ",
-  "NM",
-  "NY",
-  "NC",
-  "ND",
-  "OH",
-  "OK",
-  "OR",
-  "PA",
-  "RI",
-  "SC",
-  "SD",
-  "TN",
-  "TX",
-  "UT",
-  "VT",
-  "VA",
-  "WA",
-  "WV",
-  "WI",
-  "WY",
-].map((s) => ({ value: s, label: s, description: `US state · ${s}` }));
-
-const HANDLING_OPTIONS = [
-  { id: "stackable", label: "Stackable", icon: Package },
-  { id: "tarp", label: "Tarp Required", icon: Shield },
-  { id: "team-driver", label: "Team Driver", icon: Users },
-  { id: "white-glove", label: "White Glove", icon: Sparkles },
-  { id: "liftgate-pu", label: "Liftgate (Pickup)", icon: ArrowRight },
-  { id: "liftgate-del", label: "Liftgate (Delivery)", icon: ArrowRight },
-  { id: "no-touch", label: "No-Touch Freight", icon: Shield },
-  { id: "appt-required", label: "Appointment Required", icon: Calendar },
-] as const;
-
-const DOCUMENT_OPTIONS = [
-  { id: "rate-con", label: "Rate Confirmation", icon: FileText },
-  { id: "bol", label: "Bill of Lading", icon: FileText },
-  { id: "pod", label: "Proof of Delivery", icon: ClipboardCheck },
-  { id: "packing-list", label: "Packing List", icon: FileText },
-  { id: "carrier-agreement", label: "Carrier Agreement", icon: FileText },
-  { id: "insurance", label: "Insurance Certificate", icon: ShieldCheck },
-] as const;
-
-export const LOAD_FORM_STEPS = [
-  { id: 1, label: "Basic Info", description: "Customer & equipment", icon: Sparkles },
-  { id: 2, label: "Pickup & Delivery", description: "Stops, times, contacts", icon: MapPin },
-  { id: 3, label: "Freight Details", description: "Commodity, weight, hazmat", icon: Package },
-  { id: 4, label: "Pricing", description: "Customer & carrier rates", icon: DollarSign },
-  { id: 5, label: "Assignment", description: "Carrier & driver", icon: Truck },
-  { id: 6, label: "Docs & Tracking", description: "Visibility & paperwork", icon: ClipboardCheck },
-  { id: 7, label: "Review", description: "Confirm and create", icon: CheckCircle2 },
-] as const;
+export type { LoadDraft } from "./create-load/create-load-types";
+export {
+  computeLoadWizardStepErrors,
+  loadDraftToRecord,
+  recordToLoadDraft,
+} from "./create-load/create-load-types";
+export { LOAD_FORM_STEPS } from "./create-load/create-load-constants";
 
 function generateLoadId() {
   const n = Math.floor(2800 + Math.random() * 999);
@@ -841,21 +116,35 @@ function generateLoadId() {
 export function CreateLoadDialog({
   trigger,
   onCreated,
+  onDraftSaved,
   open: controlledOpen,
   onOpenChange,
+  resumeDraft,
 }: {
   trigger?: React.ReactNode;
   onCreated?: (loadId: string) => void;
+  /** Called after a draft is written to localStorage (e.g. accidental close). */
+  onDraftSaved?: () => void;
   /** Controlled mode — omit `trigger` and toggle from parent (e.g. top nav menu). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Open the wizard with a saved local draft. */
+  resumeDraft?: StoredLoadDraft | null;
 }) {
   const { user } = useAuth();
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const {
+    customerOptions,
+    brokerOptions,
+    dispatcherOptions,
+    driverOptions,
+    carrierOptions,
+    loading: ownershipOptionsLoading,
+  } = useLoadOwnershipOptions(open);
 
-  const setOpen = React.useCallback(
+  const setOpenRaw = React.useCallback(
     (next: boolean) => {
       if (isControlled) {
         onOpenChange?.(next);
@@ -874,23 +163,95 @@ export function CreateLoadDialog({
   }));
   const [touched, setTouched] = React.useState<Record<number, boolean>>({});
 
+  const draftRef = React.useRef(draft);
+  const stepRef = React.useRef(step);
+  const draftStorageIdRef = React.useRef<string | null>(null);
+  const skipDraftSaveRef = React.useRef(false);
+  const resumeDraftRef = React.useRef(resumeDraft);
+
+  const openRef = React.useRef(open);
+  openRef.current = open;
+  draftRef.current = draft;
+  stepRef.current = step;
+  resumeDraftRef.current = resumeDraft;
+
   const update = React.useCallback(<K extends keyof LoadDraft>(key: K, value: LoadDraft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }));
   }, []);
 
-  const reset = () => {
+  const reset = React.useCallback(() => {
+    draftStorageIdRef.current = null;
     setDraft({ ...INITIAL, loadId: generateLoadId() });
     setStep(1);
     setTouched({});
     setSubmitError(null);
-  };
+  }, []);
+
+  const applyResumeDraft = React.useCallback((stored: StoredLoadDraft) => {
+    draftStorageIdRef.current = stored.id;
+    setDraft(stored.draft);
+    setStep(Math.min(7, Math.max(1, stored.step)));
+    setTouched({});
+    setSubmitError(null);
+  }, []);
+
+  const persistDraftIfNeeded = React.useCallback(() => {
+    if (skipDraftSaveRef.current) return false;
+    const current = draftRef.current;
+    const currentStep = stepRef.current;
+    const hasStoredDraft = Boolean(draftStorageIdRef.current);
+    if (!shouldPersistLoadDraft(current, currentStep, { hasStoredDraft })) return false;
+    const id = draftStorageIdRef.current ?? current.loadId;
+    draftStorageIdRef.current = id;
+    upsertStoredLoadDraft({
+      id,
+      savedAt: new Date().toISOString(),
+      step: currentStep,
+      draft: current,
+    });
+    onDraftSaved?.();
+    return true;
+  }, [onDraftSaved]);
+
+  /** X / Cancel — always snapshot current wizard state to Drafts when there is progress. */
+  const closeWithDraftSave = React.useCallback(() => {
+    if (!openRef.current) return;
+    persistDraftIfNeeded();
+    skipDraftSaveRef.current = false;
+    setOpenRaw(false);
+  }, [persistDraftIfNeeded, setOpenRaw]);
+
+  const handleOpenChange = React.useCallback(
+    (next: boolean) => {
+      if (!next) {
+        if (openRef.current) {
+          persistDraftIfNeeded();
+          skipDraftSaveRef.current = false;
+        }
+      } else if (next) {
+        const stored = resumeDraftRef.current;
+        if (stored) {
+          applyResumeDraft(stored);
+        } else {
+          reset();
+        }
+      }
+      setOpenRaw(next);
+    },
+    [persistDraftIfNeeded, applyResumeDraft, reset, setOpenRaw],
+  );
 
   React.useEffect(() => {
     if (!open) {
       const t = setTimeout(reset, 200);
       return () => clearTimeout(t);
     }
-  }, [open]);
+    if (resumeDraft) {
+      applyResumeDraft(resumeDraft);
+    } else if (isControlled) {
+      reset();
+    }
+  }, [open, resumeDraft, isControlled, applyResumeDraft, reset]);
 
   const stepErrors = React.useMemo(() => computeLoadWizardStepErrors(draft), [draft]);
 
@@ -916,8 +277,13 @@ export function CreateLoadDialog({
       });
       const saved = await createLoad(payload);
       syncTrackingSessionForLoad(saved, user?.name ?? "Dispatcher");
+      skipDraftSaveRef.current = true;
+      if (draftStorageIdRef.current) {
+        removeStoredLoadDraft(draftStorageIdRef.current);
+        onDraftSaved?.();
+      }
       onCreated?.(draft.loadId);
-      setOpen(false);
+      setOpenRaw(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save load to DynamoDB.";
       setSubmitError(message);
@@ -929,13 +295,25 @@ export function CreateLoadDialog({
   const progress = (step / 7) * 100;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
         showCloseButton={false}
         className="!max-w-6xl w-[96vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl"
-        onInteractOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+          if (isFacilitySuggestionsTarget(e.target)) return;
+          e.preventDefault();
+        }}
+        onPointerDownOutside={(e) => {
+          if (isFacilitySuggestionsTarget(e.target)) {
+            e.preventDefault();
+          }
+        }}
       >
+        <DialogTitle className="sr-only">Create Load</DialogTitle>
+        <DialogDescription className="sr-only">
+          Create a load with pickup, delivery, pricing, assignment, and tracking details.
+        </DialogDescription>
         <div className="grid h-[88vh] grid-cols-1 lg:grid-cols-[280px_1fr]">
           {/* Stepper sidebar */}
           <aside className="hidden flex-col bg-sidebar text-sidebar-foreground lg:flex">
@@ -1013,7 +391,7 @@ export function CreateLoadDialog({
               })}
             </nav>
             <div className="border-t border-sidebar-border/60 px-5 py-3 text-xs text-sidebar-foreground/70">
-              All changes auto-save to draft.
+              Close or Cancel saves to Drafts.
             </div>
           </aside>
 
@@ -1035,8 +413,9 @@ export function CreateLoadDialog({
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={closeWithDraftSave}
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Close and save draft"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1060,6 +439,10 @@ export function CreateLoadDialog({
                   update={update}
                   touched={!!touched[1]}
                   errors={stepErrors[1]}
+                  customerOptions={customerOptions}
+                  brokerOptions={brokerOptions}
+                  dispatcherOptions={dispatcherOptions}
+                  ownershipOptionsLoading={ownershipOptionsLoading}
                 />
               )}
               {step === 2 && (
@@ -1092,10 +475,24 @@ export function CreateLoadDialog({
                   update={update}
                   touched={!!touched[5]}
                   errors={stepErrors[5]}
+                  carrierOptions={carrierOptions}
+                  driverOptions={driverOptions}
+                  assignmentOptionsLoading={ownershipOptionsLoading}
                 />
               )}
               {step === 6 && <StepDocsTracking draft={draft} update={update} />}
-              {step === 7 && <StepReview draft={draft} stepErrors={stepErrors} onJump={setStep} />}
+              {step === 7 && (
+                <StepReview
+                  draft={draft}
+                  stepErrors={stepErrors}
+                  onJump={setStep}
+                  customerOptions={customerOptions}
+                  brokerOptions={brokerOptions}
+                  dispatcherOptions={dispatcherOptions}
+                  driverOptions={driverOptions}
+                  carrierOptions={carrierOptions}
+                />
+              )}
             </div>
 
             {/* Footer */}
@@ -1116,8 +513,8 @@ export function CreateLoadDialog({
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                    Draft saved
+                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                    Cancel saves to Drafts
                   </span>
                 )}
               </div>
@@ -1126,7 +523,7 @@ export function CreateLoadDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setOpen(false)}
+                  onClick={closeWithDraftSave}
                   className="text-muted-foreground hover:text-foreground"
                 >
                   Cancel
@@ -1267,12 +664,20 @@ export function StepBasic({
   touched,
   errors,
   immutableLoadId,
+  customerOptions = [],
+  brokerOptions = [],
+  dispatcherOptions = [],
+  ownershipOptionsLoading = false,
 }: {
   draft: LoadDraft;
   update: <K extends keyof LoadDraft>(k: K, v: LoadDraft[K]) => void;
   touched: boolean;
   errors: string[];
   immutableLoadId?: boolean;
+  customerOptions?: FancySelectOption[];
+  brokerOptions?: FancySelectOption[];
+  dispatcherOptions?: FancySelectOption[];
+  ownershipOptionsLoading?: boolean;
 }) {
   const isErr = (k: string) => touched && errors.includes(k);
   return (
@@ -1324,7 +729,7 @@ export function StepBasic({
       <Card>
         <SectionTitle
           title="Customer & ownership"
-          hint="Who owns the load internally"
+          hint="CRM shippers · Broker / Dispatcher roles"
           icon={Users}
         />
         <GridSection cols={3}>
@@ -1332,28 +737,52 @@ export function StepBasic({
             <FancySelect
               value={draft.customer}
               onChange={(v) => update("customer", v)}
-              options={CUSTOMER_OPTIONS}
+              options={customerOptions}
               triggerIcon={Building2}
               error={isErr("customer")}
-              placeholder="Search customers"
+              placeholder={
+                ownershipOptionsLoading
+                  ? "Loading customers…"
+                  : customerOptions.length === 0
+                    ? "No CRM shippers found"
+                    : "Search customers"
+              }
+              disabled={ownershipOptionsLoading}
+              emptyMessage="Add a Shipper account in CRM first"
             />
           </FieldShell>
           <FieldShell label="Broker">
             <FancySelect
               value={draft.broker}
               onChange={(v) => update("broker", v)}
-              options={BROKER_OPTIONS}
+              options={brokerOptions}
               triggerIcon={Users}
-              placeholder="In-house or partner"
+              placeholder={
+                ownershipOptionsLoading
+                  ? "Loading brokers…"
+                  : brokerOptions.length === 0
+                    ? "No brokers found"
+                    : "Assign broker"
+              }
+              disabled={ownershipOptionsLoading}
+              emptyMessage="No users with Broker role"
             />
           </FieldShell>
           <FieldShell label="Dispatcher">
             <FancySelect
               value={draft.dispatcher}
               onChange={(v) => update("dispatcher", v)}
-              options={DISPATCHER_OPTIONS}
+              options={dispatcherOptions}
               triggerIcon={User}
-              placeholder="Assign dispatcher"
+              placeholder={
+                ownershipOptionsLoading
+                  ? "Loading dispatchers…"
+                  : dispatcherOptions.length === 0
+                    ? "No dispatchers found"
+                    : "Assign dispatcher"
+              }
+              disabled={ownershipOptionsLoading}
+              emptyMessage="No users with Dispatcher role"
             />
           </FieldShell>
         </GridSection>
@@ -1430,7 +859,7 @@ function StopBlock({
       ? "from-primary/20 to-primary/0 text-primary"
       : "from-info/25 to-info/0 text-info";
   return (
-    <Card>
+    <Card className="overflow-visible">
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <span
@@ -1460,12 +889,18 @@ function StopBlock({
 
       <GridSection cols={2}>
         <FieldShell label="Facility / Location Name">
-          <Input
+          <FacilityLocationInput
+            key={`${prefix}-facility`}
             value={draft[`${prefix}Facility`] as string}
-            onChange={(e) =>
-              update(`${prefix}Facility` as keyof LoadDraft, e.target.value as never)
-            }
-            placeholder="Warehouse / DC name"
+            onChange={(v) => update(`${prefix}Facility` as keyof LoadDraft, v as never)}
+            onResolved={(facility, result) => {
+              update(`${prefix}Facility` as keyof LoadDraft, facility as never);
+              update(`${prefix}Address` as keyof LoadDraft, result.address as never);
+              update(`${prefix}City` as keyof LoadDraft, result.city as never);
+              update(`${prefix}State` as keyof LoadDraft, result.state as never);
+              update(`${prefix}Zip` as keyof LoadDraft, result.zip as never);
+            }}
+            placeholder="e.g. Costco Atlanta"
           />
         </FieldShell>
         <FieldShell label={`${title} Reference #`}>
@@ -1507,13 +942,14 @@ function StopBlock({
             placeholder="ZIP"
           />
         </FieldShell>
-        <FieldShell label="State" className="sm:col-span-2">
+        <FieldShell label="State" className="sm:col-span-3">
           <FancySelect
             value={draft[`${prefix}State`] as string}
             onChange={(v) => update(`${prefix}State` as keyof LoadDraft, v as never)}
             options={STATE_OPTIONS}
             placeholder="State"
             triggerIcon={MapPin}
+            className="w-full"
           />
         </FieldShell>
       </div>
@@ -2072,36 +1508,58 @@ export function StepAssignment({
   update,
   touched,
   errors,
+  carrierOptions = [],
+  driverOptions = [],
+  assignmentOptionsLoading = false,
 }: {
   draft: LoadDraft;
   update: <K extends keyof LoadDraft>(k: K, v: LoadDraft[K]) => void;
   touched: boolean;
   errors: string[];
+  carrierOptions?: FancySelectOption[];
+  driverOptions?: FancySelectOption[];
+  assignmentOptionsLoading?: boolean;
 }) {
   const isErr = touched && errors.includes("assignment");
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Carrier" hint="Approved & insurance-verified only" icon={Truck} />
+        <SectionTitle title="Carrier" hint="From your Carriers directory" icon={Truck} />
         <FieldShell label="Assigned Carrier" hint="At least one of carrier or driver required">
           <FancySelect
             value={draft.assignedCarrier}
             onChange={(v) => update("assignedCarrier", v)}
-            options={CARRIER_OPTIONS}
-            placeholder="Search carriers"
+            options={carrierOptions}
+            placeholder={
+              assignmentOptionsLoading
+                ? "Loading carriers…"
+                : carrierOptions.length === 0
+                  ? "No carriers found"
+                  : "Search carriers"
+            }
             triggerIcon={Truck}
+            disabled={assignmentOptionsLoading}
+            emptyMessage="Add a carrier in Carriers first"
           />
         </FieldShell>
       </Card>
       <Card>
-        <SectionTitle title="Driver" hint="HOS-aware from connected ELDs" icon={User} />
+        <SectionTitle title="Driver" hint="Users with Driver role from your directory" icon={User} />
         <FieldShell label="Assigned Driver">
           <FancySelect
             value={draft.assignedDriver}
             onChange={(v) => update("assignedDriver", v)}
-            options={DRIVER_OPTIONS}
-            placeholder="Search drivers"
+            options={driverOptions}
+            placeholder={
+              assignmentOptionsLoading
+                ? "Loading drivers…"
+                : driverOptions.length === 0
+                  ? "No drivers found"
+                  : "Search drivers"
+            }
             triggerIcon={User}
+            disabled={assignmentOptionsLoading}
+            emptyMessage="No users with Driver role"
           />
         </FieldShell>
       </Card>
@@ -2335,11 +1793,21 @@ export function StepReview({
   stepErrors,
   onJump,
   variant = "create",
+  customerOptions = [],
+  brokerOptions = [],
+  dispatcherOptions = [],
+  driverOptions = [],
+  carrierOptions = [],
 }: {
   draft: LoadDraft;
   stepErrors: Record<number, string[]>;
   onJump: (s: number) => void;
   variant?: "create" | "edit";
+  customerOptions?: FancySelectOption[];
+  brokerOptions?: FancySelectOption[];
+  dispatcherOptions?: FancySelectOption[];
+  driverOptions?: FancySelectOption[];
+  carrierOptions?: FancySelectOption[];
 }) {
   const customerRate = toNumber(draft.customerRate);
   const carrierRate = toNumber(draft.carrierRate);
@@ -2356,7 +1824,7 @@ export function StepReview({
               {variant === "edit" ? "Review & save" : "Ready to create"}
             </div>
             <h3 className="mt-1 text-xl font-semibold tracking-tight text-foreground">
-              {draft.loadId} · {lookup(CUSTOMER_OPTIONS, draft.customer) || "New load"}
+              {draft.loadId} · {lookup(customerOptions, draft.customer) || "New load"}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {draft.pickupCity || draft.pickupState || "Origin"}
@@ -2418,12 +1886,13 @@ export function StepReview({
           <SectionTitle title="Basic" icon={Sparkles} />
           <div className="divide-y divide-border/70">
             <ReviewRow label="Load ID" value={draft.loadId} />
-            <ReviewRow label="Customer" value={lookup(CUSTOMER_OPTIONS, draft.customer)} />
+            <ReviewRow label="Customer" value={lookup(customerOptions, draft.customer)} />
+            <ReviewRow label="Broker" value={lookup(brokerOptions, draft.broker)} />
             <ReviewRow label="Type" value={lookup(LOAD_TYPE_OPTIONS, draft.loadType)} />
             <ReviewRow label="Status" value={lookup(LOAD_STATUS_OPTIONS, draft.loadStatus)} />
             <ReviewRow label="Equipment" value={lookup(EQUIPMENT_OPTIONS, draft.equipmentType)} />
             <ReviewRow label="Priority" value={lookup(PRIORITY_OPTIONS, draft.loadPriority)} />
-            <ReviewRow label="Dispatcher" value={lookup(DISPATCHER_OPTIONS, draft.dispatcher)} />
+            <ReviewRow label="Dispatcher" value={lookup(dispatcherOptions, draft.dispatcher)} />
           </div>
         </Card>
         <Card>
@@ -2495,8 +1964,8 @@ export function StepReview({
               label="Payment Terms"
               value={lookup(PAYMENT_TERMS_OPTIONS, draft.paymentTerms)}
             />
-            <ReviewRow label="Carrier" value={lookup(CARRIER_OPTIONS, draft.assignedCarrier)} />
-            <ReviewRow label="Driver" value={lookup(DRIVER_OPTIONS, draft.assignedDriver)} />
+            <ReviewRow label="Carrier" value={lookup(carrierOptions, draft.assignedCarrier)} />
+            <ReviewRow label="Driver" value={lookup(driverOptions, draft.assignedDriver)} />
             <ReviewRow
               label="Tracking"
               value={

@@ -1,17 +1,16 @@
-import { GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 
-import { getDynamoDocClient, getLoadsTableName } from "./dynamodb";
-import { createRateLimitedExecutor } from "./rate-limit";
+import { createDynamoEntityStore, describeDynamoError } from "./dynamo-entity-store";
+import { getDynamoDocClient, getLoadsTableName, queryAllItems } from "./dynamodb";
 
-const LOADS_READ_RATE_LIMIT_MS = 300;
-const LOADS_WRITE_RATE_LIMIT_MS = 1200;
+/** Soft guard under DynamoDB 400KB item limit for data-URL document blobs. */
+export const LOAD_DOCUMENT_DATA_URL_SOFT_LIMIT = 350_000;
 
 export type LoadRecord = {
   loadId: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
-  // Step 1
   loadType?: string;
   loadStatus?: string;
   customer?: string;
@@ -21,7 +20,6 @@ export type LoadRecord = {
   trailerType?: string;
   loadPriority?: string;
   internalNotes?: string;
-  // Step 2: pickup
   pickupFacility?: string;
   pickupAddress?: string;
   pickupCity?: string;
@@ -36,7 +34,6 @@ export type LoadRecord = {
   pickupWindowEnd?: string;
   pickupInstructions?: string;
   pickupReference?: string;
-  // Step 2b: delivery
   deliveryFacility?: string;
   deliveryAddress?: string;
   deliveryCity?: string;
@@ -51,7 +48,6 @@ export type LoadRecord = {
   deliveryWindowEnd?: string;
   deliveryInstructions?: string;
   deliveryReference?: string;
-  // Step 3: freight
   commodityDescription?: string;
   freightClass?: string;
   weight?: string;
@@ -66,7 +62,6 @@ export type LoadRecord = {
   specialHandling?: string[];
   sealNumber?: string;
   loadValue?: string;
-  // Step 4: pricing
   customerRate?: string;
   carrierRate?: string;
   linehaulRate?: string;
@@ -77,141 +72,84 @@ export type LoadRecord = {
   tonuFee?: string;
   layoverFee?: string;
   paymentTerms?: string;
-  // Step 5: carrier/driver
   assignedCarrier?: string;
   assignedDriver?: string;
-  // Step 6: docs + tracking
+  driverWorkflowStatus?: string;
+  driverStatusHistory?: DriverStatusHistoryEntry[];
   trackingRequired?: boolean;
   trackingMethod?: string;
   checkInRequired?: boolean;
   checkOutRequired?: boolean;
   documents?: string[];
+  documentAssets?: import("./load-documents").LoadDocumentAsset[];
+  driverGps?: import("./driver-gps").DriverGpsPing;
+  trackingSession?: import("./tracking-workflow-store").TrackingSessionCloud;
   insuranceVerified?: boolean;
   authorityVerified?: boolean;
   highValueFlag?: boolean;
 };
 
-function describeError(err: unknown, op: string): Error {
-  if (err instanceof Error) {
-    const awsName = (err as { name?: string }).name;
-    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-    const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
-      .filter(Boolean)
-      .join(" · ");
-    console.error(`[DynamoDB Loads ${op}]`, err);
-    return new Error(`DynamoDB ${op} failed: ${detail}`);
-  }
-  console.error(`[DynamoDB Loads ${op}]`, err);
-  return new Error(`DynamoDB ${op} failed`);
-}
-
-const runReadLimited = createRateLimitedExecutor(LOADS_READ_RATE_LIMIT_MS);
-const runWriteLimited = createRateLimitedExecutor(LOADS_WRITE_RATE_LIMIT_MS);
+export type DriverStatusHistoryEntry = {
+  status: string;
+  at: string;
+  by?: string;
+  byName?: string;
+};
 
 export type CreateLoadInput = Omit<LoadRecord, "createdAt" | "updatedAt">;
 
-export async function createLoad(input: CreateLoadInput): Promise<LoadRecord> {
-  if (!input.loadId) {
-    throw new Error("loadId is required to create a load");
+export function warnIfLoadDocumentsOversized(record: Pick<LoadRecord, "loadId" | "documentAssets">) {
+  const assets = record.documentAssets;
+  if (!assets?.length) return;
+  let total = 0;
+  for (const asset of assets) {
+    total += asset.dataUrl?.length ?? 0;
   }
-  return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const now = new Date().toISOString();
-      const item: LoadRecord = {
-        ...input,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await client.send(
-        new PutCommand({
-          TableName: getLoadsTableName(),
-          Item: item,
-          ConditionExpression: "attribute_not_exists(loadId)",
-        }),
-      );
-      return item;
-    } catch (err) {
-      throw describeError(err, "PutItem");
-    }
-  });
+  if (total > LOAD_DOCUMENT_DATA_URL_SOFT_LIMIT) {
+    console.warn(
+      "[Loads] document data-URL payload near Dynamo item limit",
+      { loadId: record.loadId, chars: total, softLimit: LOAD_DOCUMENT_DATA_URL_SOFT_LIMIT },
+    );
+  }
 }
+
+const store = createDynamoEntityStore<LoadRecord>({
+  tableName: getLoadsTableName,
+  idKey: "loadId",
+  label: "Loads",
+  kind: "loads",
+  normalizeCreate: (input, now) => {
+    const item = { ...input, createdAt: now, updatedAt: now } as LoadRecord;
+    warnIfLoadDocumentsOversized(item);
+    return item;
+  },
+  normalizeUpdate: (record, now) => {
+    const item = { ...record, updatedAt: now };
+    warnIfLoadDocumentsOversized(item);
+    return item;
+  },
+});
+
+export const createLoad = store.create;
+export const listAllLoads = store.listAll;
+export const listAllLoadsCached = store.listAllCached;
+export const getLoadById = store.getById;
+export const getLoadByIdCached = store.getByIdCached;
+export const updateLoad = store.update;
+export const deleteLoad = store.remove;
 
 export async function listLoadsByUser(userId: string): Promise<LoadRecord[]> {
-  return runReadLimited(async () => {
+  return store.runReadLimited(async () => {
     try {
       const client = await getDynamoDocClient();
-      const out = await client.send(
-        new QueryCommand({
-          TableName: getLoadsTableName(),
-          IndexName: "createdBy-index",
-          KeyConditionExpression: "createdBy = :u",
-          ExpressionAttributeValues: { ":u": userId },
-        }),
-      );
-      return (out.Items as LoadRecord[] | undefined) ?? [];
+      return await queryAllItems<LoadRecord>(client, {
+        TableName: getLoadsTableName(),
+        IndexName: "createdBy-index",
+        KeyConditionExpression: "createdBy = :u",
+        ExpressionAttributeValues: { ":u": userId },
+      });
     } catch (err) {
-      throw describeError(err, "Query");
-    }
-  });
-}
-
-export async function listAllLoads(): Promise<LoadRecord[]> {
-  return runReadLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const out = await client.send(new ScanCommand({ TableName: getLoadsTableName() }));
-      return (out.Items as LoadRecord[] | undefined) ?? [];
-    } catch (err) {
-      throw describeError(err, "Scan");
-    }
-  });
-}
-
-export async function getLoadById(loadId: string): Promise<LoadRecord | null> {
-  if (!loadId?.trim()) {
-    throw new Error("loadId is required");
-  }
-  return runReadLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const out = await client.send(
-        new GetCommand({
-          TableName: getLoadsTableName(),
-          Key: { loadId: loadId.trim() },
-        }),
-      );
-      const item = out.Item as LoadRecord | undefined;
-      return item ?? null;
-    } catch (err) {
-      throw describeError(err, "GetItem");
-    }
-  });
-}
-
-/** Replace an existing load item (preserves `createdAt` / `createdBy` from `record`). */
-export async function updateLoad(record: LoadRecord): Promise<LoadRecord> {
-  if (!record.loadId?.trim()) {
-    throw new Error("loadId is required");
-  }
-  return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const now = new Date().toISOString();
-      const item: LoadRecord = {
-        ...record,
-        updatedAt: now,
-      };
-      await client.send(
-        new PutCommand({
-          TableName: getLoadsTableName(),
-          Item: item,
-          ConditionExpression: "attribute_exists(loadId)",
-        }),
-      );
-      return item;
-    } catch (err) {
-      throw describeError(err, "PutItem(update)");
+      throw describeDynamoError(err, "Query", "Loads");
     }
   });
 }

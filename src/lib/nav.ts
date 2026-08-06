@@ -25,11 +25,11 @@ export type NavItem = {
   group: "Operations" | "Commercial" | "Insights" | "Workspace";
   badge?: string;
   /** DynamoDB-backed total shown in the sidebar (replaces static `badge` when set). */
-  liveCount?: "loads" | "trucks" | "tracking";
+  liveCount?: "loads" | "trucks" | "tracking" | "carriers";
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard, group: "Operations" },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, group: "Operations" },
   { title: "Loads", url: "/loads", icon: Package, group: "Operations", liveCount: "loads" },
   {
     title: "TruckBoard",
@@ -43,7 +43,13 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Bidding", url: "/bidding", icon: Gavel, group: "Commercial" },
   { title: "RFPs", url: "/rfps", icon: FileText, group: "Commercial" },
   { title: "Quotes", url: "/quotes", icon: FileSpreadsheet, group: "Commercial" },
-  { title: "Carriers / Brokers", url: "/carriers", icon: Building2, group: "Commercial" },
+  {
+    title: "Carriers / Brokers",
+    url: "/carriers",
+    icon: Building2,
+    group: "Commercial",
+    liveCount: "carriers",
+  },
   { title: "CRM & Sales", url: "/crm", icon: Briefcase, group: "Commercial" },
 
   { title: "Risk Models", url: "/risk", icon: ShieldAlert, group: "Insights" },
@@ -55,7 +61,6 @@ export const NAV_ITEMS: NavItem[] = [
     url: "/communications",
     icon: MessageSquare,
     group: "Workspace",
-    badge: "4",
   },
   { title: "Settings", url: "/settings", icon: Settings, group: "Workspace" },
   { title: "Admin", url: "/admin", icon: Lock, group: "Workspace" },

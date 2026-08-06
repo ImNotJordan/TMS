@@ -29,9 +29,13 @@ dist-ssr
 .vscode/*
 !.vscode/extensions.json
 .idea
+.cursor/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# PWA / Vite build artifacts
+apps/*/dev-dist/
