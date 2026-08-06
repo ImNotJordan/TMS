@@ -40,7 +40,9 @@ export function DriverShell({ children }: { children: React.ReactNode }) {
       <main
         className={cn(
           "relative min-h-0 flex-1",
-          isChat ? "flex flex-col overflow-hidden" : "overflow-y-auto",
+          isChat
+            ? "flex flex-col overflow-hidden"
+            : "overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
       >
         <div

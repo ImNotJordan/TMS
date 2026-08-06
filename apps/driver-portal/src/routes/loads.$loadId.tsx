@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LocationShareCard } from "@/components/home/location-share-card";
 import { DocUploadSheet } from "@/components/loads/doc-upload-sheet";
-import { RouteMapPreview } from "@/components/loads/route-map-preview";
+import { ShipmentProgressTracker } from "@/components/loads/shipment-progress-tracker";
 import { StatusStepper } from "@/components/loads/status-stepper";
 import { useLoads } from "@/lib/loads-store";
 import { STATUS_STEPS, type ActiveLoadStatus, type LoadDocument } from "@/lib/mock-data";
@@ -20,7 +20,8 @@ export const Route = createFileRoute("/loads/$loadId")({
 
 function LoadDetailPage() {
   const { loadId } = useParams({ from: "/loads/$loadId" });
-  const { getLoad, acceptLoad, declineLoad, advanceStatus, markDocumentUploaded } = useLoads();
+  const { getLoad, recordsById, acceptLoad, declineLoad, advanceStatus, markDocumentUploaded } =
+    useLoads();
   const load = getLoad(loadId);
   const [uploadTarget, setUploadTarget] = useState<LoadDocument["type"] | null>(null);
 
@@ -45,6 +46,15 @@ function LoadDetailPage() {
   const nextStep = !isOffer && !isDeclined ? STATUS_STEPS[currentIndex + 1] : undefined;
   const perMile =
     load.distanceMiles > 0 ? (load.rate / load.distanceMiles).toFixed(2) : "—";
+  const progressPercent = isOffer ? 0 : ((currentIndex + 1) / STATUS_STEPS.length) * 100;
+  const nextStepLabel = isOffer ? "Awaiting acceptance" : nextStep ? nextStep.label : "Delivered";
+  const statusHistory = recordsById[load.id]?.driverStatusHistory ?? [];
+  const currentStatusEnteredAt = [...statusHistory]
+    .reverse()
+    .find((entry) => entry.status === load.status)?.at;
+  const statusElapsedMinutes = currentStatusEnteredAt
+    ? Math.max(0, (Date.now() - Date.parse(currentStatusEnteredAt)) / 60_000)
+    : 0;
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-4 px-4 py-5">
@@ -89,7 +99,14 @@ function LoadDetailPage() {
         </CardContent>
       </Card>
 
-      <RouteMapPreview progress={isOffer ? 0 : (currentIndex + 1) / STATUS_STEPS.length} />
+      <ShipmentProgressTracker
+        orderId={load.id}
+        originLabel={load.pickup.city}
+        destinationLabel={load.delivery.city}
+        progress={progressPercent}
+        nextStepLabel={nextStepLabel}
+        statusElapsedMinutes={statusElapsedMinutes}
+      />
 
       {isOffer ? (
         <div className="flex gap-3">
