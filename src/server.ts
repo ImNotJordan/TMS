@@ -1,6 +1,7 @@
 import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
+import { captureServerEnv } from "./lib/server-env";
 import { renderErrorPage } from "./lib/error-page";
 import {
   handleAiAssistantRequest,
@@ -28,6 +29,28 @@ import {
   isCommsSmsStatusCallbackRequest,
   isCommsTranslateRequest,
 } from "./lib/comms-proxy";
+import {
+  handleSettingsAiWriteRequest,
+  handleSettingsStatusRequest,
+  isSettingsAiWriteRequest,
+  isSettingsStatusRequest,
+} from "./lib/settings-proxy";
+import {
+  handleCompanyAssignmentRequest,
+  isCompanyAssignmentRequest,
+} from "./lib/admin-company-proxy";
+import { handleLoadsApiRequest, isLoadsApiRequest } from "./lib/loads-api-proxy";
+import { handleDriverLoadsRequest, isDriverLoadsRequest } from "./lib/driver-loads-proxy";
+import { preflightResponse, withCors } from "./lib/api-cors";
+import { handleResourceApiRequest, isResourceApiRequest } from "./lib/api/resource-proxy";
+import {
+  handleTrackingMessagesRequest,
+  isTrackingMessagesRequest,
+} from "./lib/tracking-messages-proxy";
+import {
+  handleBiddingWorkspaceRequest,
+  isBiddingWorkspaceRequest,
+} from "./lib/bidding-workspace-proxy";
 import { handleGeocodeSearchRequest, isGeocodeSearchRequest } from "./lib/geocode-proxy";
 import {
   handleGoogleDirectionsRequest,
@@ -43,7 +66,7 @@ let serverEntryPromise: Promise<ServerEntry> | undefined;
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
     serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => ((m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry)),
+      (m) => (m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry),
     );
   }
   return serverEntryPromise;
@@ -99,13 +122,51 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Workers deliver secrets through this binding, not process.env. Capture it
+    // so `readServerEnv` can find TITAN_AWS_* from .dev.vars / wrangler secrets.
+    captureServerEnv(env);
     try {
       const url = new URL(request.url);
+
+      // The driver portal is a separate origin, so its API calls are
+      // cross-origin and preflighted.
+      const preflight = preflightResponse(request);
+      if (preflight) return preflight;
+
+      // Checked before /api/loads — the driver path is a distinct scope, not a
+      // sub-resource of the company one.
+      if (isDriverLoadsRequest(url)) {
+        return withCors(request, await handleDriverLoadsRequest(request));
+      }
+      // Both apps talk to this one — the driver portal is cross-origin, hence
+      // the CORS wrapper.
+      if (isTrackingMessagesRequest(url)) {
+        return withCors(request, await handleTrackingMessagesRequest(request));
+      }
+      if (isBiddingWorkspaceRequest(url)) {
+        return handleBiddingWorkspaceRequest(request);
+      }
       if (isGeocodeSearchRequest(url, request.method)) {
         return handleGeocodeSearchRequest(url, request);
       }
       if (isGoogleDirectionsRequest(url, request.method)) {
         return handleGoogleDirectionsRequest(url, request);
+      }
+      if (isCompanyAssignmentRequest(url, request.method)) {
+        return handleCompanyAssignmentRequest(request);
+      }
+      if (isLoadsApiRequest(url)) {
+        return handleLoadsApiRequest(request);
+      }
+      // Every other tenant-scoped table, driven by the resource registry.
+      if (isResourceApiRequest(url)) {
+        return withCors(request, await handleResourceApiRequest(request));
+      }
+      if (isSettingsStatusRequest(url, request.method)) {
+        return handleSettingsStatusRequest(request);
+      }
+      if (isSettingsAiWriteRequest(url, request.method)) {
+        return handleSettingsAiWriteRequest(request);
       }
       if (isAiStatusRequest(url, request.method)) {
         return handleAiStatusRequest(request);

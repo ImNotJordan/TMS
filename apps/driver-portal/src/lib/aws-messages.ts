@@ -1,14 +1,22 @@
-import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+/**
+ * Tracking messages — driver side.
+ *
+ * Goes to the console's `/api/tracking-messages`; the portal holds no DynamoDB
+ * credentials for the table. The server checks the load is assigned to this
+ * driver before returning or accepting anything, so a driver sees exactly the
+ * threads for their own loads.
+ *
+ * Exported names and signatures are unchanged so no screen moved.
+ */
+import { fetchAuthSession } from "aws-amplify/auth";
 
-import {
-  getDynamoDocClient,
-  getTrackingMessagesTableName,
-  isTrackingMessagesConfigured,
-} from "./dynamodb";
+import { apiUrl } from "./api-base";
 import { createRateLimitedExecutor } from "./rate-limit";
 
 const runRead = createRateLimitedExecutor(300);
 const runWrite = createRateLimitedExecutor(600);
+
+const PATH = "/api/tracking-messages";
 
 export type TrackingMessageSender = "driver" | "ops" | "system";
 
@@ -36,12 +44,33 @@ export type TrackingMessageDto = {
   assetId?: string;
 };
 
-function describeError(err: unknown, op: string): Error {
-  if (err instanceof Error) {
-    console.error(`[DynamoDB TrackingMessages ${op}]`, err);
-    return new Error(`Tracking messages ${op} failed: ${err.message}`);
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
   }
-  return new Error(`Tracking messages ${op} failed`);
+}
+
+async function send(path: string, init?: RequestInit): Promise<Response> {
+  const headers = await authHeaders();
+  return fetch(apiUrl(path), {
+    ...init,
+    headers: { ...headers, ...(init?.body ? { "content-type": "application/json" } : {}) },
+  });
+}
+
+async function failure(response: Response, op: string): Promise<Error> {
+  let message = `Tracking messages ${op} failed (HTTP ${response.status})`;
+  try {
+    const body = (await response.json()) as { error?: string };
+    if (body?.error) message = body.error;
+  } catch {
+    /* non-JSON error body — the status line is enough */
+  }
+  return new Error(message);
 }
 
 export function createTrackingMessageId(loadId: string) {
@@ -62,24 +91,16 @@ function recordToDto(r: TrackingMessageRecord): TrackingMessageDto {
 }
 
 export async function listTrackingMessages(loadId: string): Promise<TrackingMessageDto[]> {
-  if (!loadId.trim() || !isTrackingMessagesConfigured()) return [];
+  if (!loadId.trim()) return [];
 
   return runRead(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const out = await client.send(
-        new QueryCommand({
-          TableName: getTrackingMessagesTableName(),
-          KeyConditionExpression: "loadId = :loadId",
-          ExpressionAttributeValues: { ":loadId": loadId.trim() },
-          ScanIndexForward: true,
-        }),
-      );
-      const items = (out.Items as TrackingMessageRecord[] | undefined) ?? [];
-      return items.map(recordToDto);
-    } catch (err) {
-      throw describeError(err, "Query");
-    }
+    const response = await send(`${PATH}?loadId=${encodeURIComponent(loadId.trim())}`);
+    // Not assigned to this driver reads the same as no such load: an empty
+    // thread, not an error.
+    if (response.status === 404) return [];
+    if (!response.ok) throw await failure(response, "Query");
+    const body = (await response.json()) as { messages?: TrackingMessageRecord[] };
+    return (body.messages ?? []).map(recordToDto);
   });
 }
 
@@ -95,35 +116,24 @@ export async function putTrackingMessage(input: {
   assetId?: string;
 }): Promise<TrackingMessageDto> {
   if (!input.loadId?.trim()) throw new Error("loadId is required");
-  if (!isTrackingMessagesConfigured()) {
-    throw new Error("Tracking messages table is not configured.");
-  }
 
   return runWrite(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const timestamp = input.timestamp ?? new Date().toISOString();
-      const messageId = input.messageId ?? createTrackingMessageId(input.loadId);
-      const item: TrackingMessageRecord = {
-        loadId: input.loadId.trim(),
-        messageId,
-        from: input.from,
-        text: input.text.trim(),
-        timestamp,
-        ...(input.docKind ? { docKind: input.docKind } : {}),
-        ...(input.fileName ? { fileName: input.fileName } : {}),
-        ...(input.contentType ? { contentType: input.contentType } : {}),
-        ...(input.assetId ? { assetId: input.assetId } : {}),
-      };
-      await client.send(
-        new PutCommand({
-          TableName: getTrackingMessagesTableName(),
-          Item: item,
-        }),
-      );
-      return recordToDto(item);
-    } catch (err) {
-      throw describeError(err, "PutItem");
-    }
+    const timestamp = input.timestamp ?? new Date().toISOString();
+    const messageId = input.messageId ?? createTrackingMessageId(input.loadId);
+    const item: TrackingMessageRecord = {
+      loadId: input.loadId.trim(),
+      messageId,
+      from: input.from,
+      text: input.text.trim(),
+      timestamp,
+      ...(input.docKind ? { docKind: input.docKind } : {}),
+      ...(input.fileName ? { fileName: input.fileName } : {}),
+      ...(input.contentType ? { contentType: input.contentType } : {}),
+      ...(input.assetId ? { assetId: input.assetId } : {}),
+    };
+    const response = await send(PATH, { method: "POST", body: JSON.stringify(item) });
+    if (!response.ok) throw await failure(response, "PutItem");
+    const body = (await response.json()) as { message?: TrackingMessageRecord };
+    return recordToDto(body.message ?? item);
   });
 }

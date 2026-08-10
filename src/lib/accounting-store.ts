@@ -1,3 +1,4 @@
+import { createApiBackedStore } from "./api/api-backed-store";
 import type { LoadRecord } from "./loads-store";
 import { findAssetByKind } from "./load-documents";
 import {
@@ -12,7 +13,6 @@ import {
   isDynamoResourceNotFound,
   isInvoicesConfigured,
 } from "./dynamodb";
-import { createDynamoEntityStore } from "./dynamo-entity-store";
 
 export type InvoiceQueue =
   | "ready-to-bill"
@@ -121,13 +121,11 @@ function mapInvoiceError(err: unknown, op: string): Error {
   return err instanceof Error ? err : new Error(`DynamoDB ${op} failed`);
 }
 
-const invoiceStore = createDynamoEntityStore<InvoiceRecord>({
-  tableName: getInvoicesTableName,
+const invoiceStore = createApiBackedStore<InvoiceRecord>({
+  resource: "invoices",
+  keys: { collection: "invoices", item: "invoice" },
   idKey: "invoiceId",
-  label: "Invoices",
   kind: "invoices",
-  createIfNotExists: false,
-  updateIfExists: false,
 });
 
 function parseMoney(value?: string): number {
@@ -240,10 +238,7 @@ export function loadHasPod(load: LoadRecord): boolean {
   return (load.documents ?? []).some((d) => d.startsWith("pod:") || /pod|proof/i.test(d));
 }
 
-export function isLoadBillable(
-  load: LoadRecord,
-  opts?: { requirePod?: boolean },
-): boolean {
+export function isLoadBillable(load: LoadRecord, opts?: { requirePod?: boolean }): boolean {
   const status = (load.loadStatus ?? "").toLowerCase();
   if (["cancelled", "canceled", "draft", "booked"].includes(status)) return false;
   const requirePod = opts?.requirePod ?? getAppSettingBool("require_pod_before_invoice", true);
@@ -265,9 +260,7 @@ export function laneForLoad(load: LoadRecord): string {
 
 export function buildDraftLinesFromLoad(load: LoadRecord): InvoiceLineItem[] {
   const linehaul =
-    parseMoney(load.customerRate) ||
-    parseMoney(load.linehaulRate) ||
-    parseMoney(load.carrierRate);
+    parseMoney(load.customerRate) || parseMoney(load.linehaulRate) || parseMoney(load.carrierRate);
   const fuel = parseMoney(load.fuelSurcharge);
   const accessorials = parseMoney(load.accessorialCharges);
   const detention = parseMoney(load.detentionRate);
@@ -309,7 +302,12 @@ export function buildDraftLinesFromLoad(load: LoadRecord): InvoiceLineItem[] {
     lines.push({ id: "tonu", kind: "accessorial", label: "TONU", amount: moneyRound(tonu) });
   }
   if (layover > 0) {
-    lines.push({ id: "layover", kind: "accessorial", label: "Layover", amount: moneyRound(layover) });
+    lines.push({
+      id: "layover",
+      kind: "accessorial",
+      label: "Layover",
+      amount: moneyRound(layover),
+    });
   }
 
   const subtotal = lines.reduce((s, l) => s + l.amount, 0);
@@ -360,7 +358,7 @@ function draftFromLoad(load: LoadRecord): InvoiceRecord {
     total,
     remitTo: "Titan Freight LLC · ACH · ****4821",
     terms: load.paymentTerms?.trim() || "Net 30",
-      podOnFile: loadHasPod(load),
+    podOnFile: loadHasPod(load),
     rateConRef: `RC-${load.loadId}`,
     createdAt: now,
     updatedAt: now,

@@ -149,9 +149,12 @@ async function sendViaTwilio(
     body: form.toString(),
   });
 
-  const payload = (await response.json().catch(() => null)) as
-    | { sid?: string; status?: string; message?: string; error_message?: string }
-    | null;
+  const payload = (await response.json().catch(() => null)) as {
+    sid?: string;
+    status?: string;
+    message?: string;
+    error_message?: string;
+  } | null;
 
   if (!response.ok || !payload?.sid) {
     throw new Error(
@@ -194,8 +197,8 @@ export function isCommsAgentDraftRequest(url: URL, method: string) {
 }
 
 export async function handleCommsSmsSendRequest(request: Request): Promise<Response> {
-  const { readIdTokenClaims } = await import("@/lib/ai/cognito-request-credentials");
-  if (!readIdTokenClaims(request)?.sub) {
+  const { tryVerifiedIdClaims } = await import("@/lib/ai/cognito-request-credentials");
+  if (!(await tryVerifiedIdClaims(request))?.sub) {
     return jsonError("Sign in required to send messages.", 401, "not_authenticated");
   }
 
@@ -311,8 +314,8 @@ export async function handleCommsSmsInboundRequest(request: Request): Promise<Re
 }
 
 export async function handleCommsEmailSendRequest(request: Request): Promise<Response> {
-  const { readIdTokenClaims } = await import("@/lib/ai/cognito-request-credentials");
-  if (!readIdTokenClaims(request)?.sub) {
+  const { tryVerifiedIdClaims } = await import("@/lib/ai/cognito-request-credentials");
+  if (!(await tryVerifiedIdClaims(request))?.sub) {
     return jsonError("Sign in required to send messages.", 401, "not_authenticated");
   }
 
@@ -373,7 +376,8 @@ export async function handleCommsEmailSendRequest(request: Request): Promise<Res
   }
 
   const providerMessageId =
-    response.headers.get("X-Message-Id") ?? `SG_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    response.headers.get("X-Message-Id") ??
+    `SG_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
   idempotencyCache.set(idempotencyKey, {
     providerMessageId,
     status: "sent",

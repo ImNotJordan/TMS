@@ -3,7 +3,7 @@ import {
   formatIntegrationLastSync,
   getAiConnectionStatus,
   getGoogleMapsConnectionStatus,
-  getStoredAiApiKey,
+  readAiConnectionStatus,
   getStoredGeocodeApiKey,
   readIntegrationsConfig,
   type IntegrationConnectionStatus,
@@ -34,8 +34,7 @@ export function resolveIntegrationState(
   id: IntegrationId,
   settingsValues: Record<string, AppSettingValue>,
 ): IntegrationState {
-  const name =
-    INTEGRATION_PROVIDERS.find((p) => p.id === id)?.label ?? String(id);
+  const name = INTEGRATION_PROVIDERS.find((p) => p.id === id)?.label ?? String(id);
 
   if (id === "google_maps") {
     const { googleMaps } = readIntegrationsConfig();
@@ -56,7 +55,10 @@ export function resolveIntegrationState(
   if (id === "ai") {
     const { ai } = readIntegrationsConfig();
     const connectionLabel = getAiConnectionStatus();
-    const key = getStoredAiApiKey();
+    // The key itself never reaches the browser — the server hands back only the
+    // last four characters, which is all a masked display ever needed.
+    const status = readAiConnectionStatus();
+    const connected = Boolean(status?.connected);
     return {
       id,
       name,
@@ -64,17 +66,15 @@ export function resolveIntegrationState(
       connectionLabel,
       lastSyncAt: ai.lastTestedAt,
       lastSyncLabel: formatIntegrationLastSync(ai.lastTestedAt),
-      maskedConfig: key ? { apiKey: maskKey(key) } : {},
-      capabilities: ai.enabled && key ? ["ai.chat", "ai.translate", "ai.draft"] : [],
+      maskedConfig: status?.last4 ? { apiKey: `****${status.last4}` } : {},
+      capabilities: connected ? ["ai.chat", "ai.translate", "ai.draft"] : [],
     };
   }
 
   if (id === "dat") {
     const key = String(settingsValues.dat_api_key ?? "").trim();
     const connected = key.length > 0 && !key.includes("****");
-    const connectionLabel: IntegrationConnectionStatus = connected
-      ? "Connected"
-      : "Disconnected";
+    const connectionLabel: IntegrationConnectionStatus = connected ? "Connected" : "Disconnected";
     return {
       id,
       name,

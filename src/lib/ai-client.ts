@@ -3,8 +3,8 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { DEFAULT_AI_MODEL, type AiChatMessage } from "@/lib/ai-proxy";
 import { configureAmplify } from "@/lib/amplify";
 import {
+  ensureAiConnectionStatus,
   ensureIntegrationsConfigLoaded,
-  getStoredAiApiKey,
   isAiBiddingCopilotEnabled,
   readIntegrationsConfig,
 } from "@/lib/integrations-config";
@@ -18,11 +18,6 @@ export type CallWorkspaceAiOptions = {
   model?: string;
   temperature?: number;
   maxTokens?: number;
-  /**
-   * Draft key for Settings → Test connection only.
-   * Normal product calls must omit this so the server loads the workspace key.
-   */
-  apiKey?: string;
   signal?: AbortSignal;
 };
 
@@ -55,26 +50,28 @@ async function cognitoAuthHeader(): Promise<Record<string, string>> {
 
 /**
  * Shared OpenAI chat helper for product surfaces.
- * Sends Cognito auth only — the workspace OpenAI key stays server-side.
- * Pass `apiKey` solely when testing an unsaved draft key from Settings.
+ *
+ * Sends Cognito auth only. The workspace key is loaded server-side from the
+ * `secrets` partition — there is no client-supplied-key path, because one let a
+ * caller skip the role check, the rate limiter and the daily budget.
  */
 export async function callWorkspaceAi(
   options: CallWorkspaceAiOptions,
 ): Promise<CallWorkspaceAiResult> {
   await ensureIntegrationsConfigLoaded();
 
-  const draftKey = options.apiKey?.trim() ?? "";
-  if (!draftKey) {
-    if (!getStoredAiApiKey() || !isWorkspaceAiReady()) {
-      return {
-        status: "not_configured",
-        message: "Configure an OpenAI API key in Settings → Integrations to use AI.",
-      };
-    }
+  // Readiness is a server-side fact now: the key lives in the `secrets`
+  // partition and the browser only learns whether one is installed.
+  await ensureAiConnectionStatus();
+  if (!isWorkspaceAiReady()) {
+    return {
+      status: "not_configured",
+      message: "Configure an OpenAI API key in Settings → Integrations to use AI.",
+    };
   }
 
   const auth = await cognitoAuthHeader();
-  if (!draftKey && !auth.Authorization) {
+  if (!auth.Authorization) {
     return {
       status: "error",
       message: "Sign in required to use workspace AI.",
@@ -87,11 +84,6 @@ export async function callWorkspaceAi(
       "Content-Type": "application/json",
       ...auth,
     };
-    // Only the Settings test dialog may send a key header.
-    if (draftKey) {
-      const { AI_API_KEY_HEADER } = await import("@/lib/ai-proxy");
-      headers[AI_API_KEY_HEADER] = draftKey;
-    }
 
     const response = await fetch("/api/ai/chat", {
       method: "POST",
@@ -106,9 +98,13 @@ export async function callWorkspaceAi(
       }),
     });
 
-    const body = (await response.json().catch(() => null)) as
-      | { ok?: boolean; text?: string; model?: string; error?: string; code?: string }
-      | null;
+    const body = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      text?: string;
+      model?: string;
+      error?: string;
+      code?: string;
+    } | null;
 
     if (!response.ok) {
       if (response.status === 409 || body?.code === "not_connected") {
@@ -152,7 +148,6 @@ export async function askWorkspaceAi(options: {
   model?: string;
   temperature?: number;
   maxTokens?: number;
-  apiKey?: string;
   signal?: AbortSignal;
 }): Promise<CallWorkspaceAiResult> {
   const messages: AiChatMessage[] = [];
@@ -166,7 +161,6 @@ export async function askWorkspaceAi(options: {
     model: options.model,
     temperature: options.temperature,
     maxTokens: options.maxTokens,
-    apiKey: options.apiKey,
     signal: options.signal,
   });
 }

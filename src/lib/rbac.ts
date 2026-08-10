@@ -83,15 +83,11 @@ export function isPrivilegedRole(role?: string | null): boolean {
   if (!role?.trim()) return false;
   const normalized = normalizeRole(role);
   return (
-    normalized === "Organization Owner" ||
-    normalized === "Admin" ||
-    normalized === "SuperAdmin"
+    normalized === "Organization Owner" || normalized === "Admin" || normalized === "SuperAdmin"
   );
 }
 
-function asMatrix(
-  raw: PermissionsRecord["modulePermissions"],
-): ModulePermissionMatrix | null {
+function asMatrix(raw: PermissionsRecord["modulePermissions"]): ModulePermissionMatrix | null {
   if (!raw || typeof raw !== "object") return null;
   const keys = Object.keys(raw);
   if (keys.length === 0) return null;

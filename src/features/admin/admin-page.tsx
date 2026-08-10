@@ -82,8 +82,15 @@ import {
   cacheAdminDirectoryUser,
   createAdminDirectoryUser,
   listAdminDirectoryUsersCached,
+  listKnownCompanies,
   type AdminUserDirectoryEntry,
+  type KnownCompany,
 } from "@/lib/admin-users-store";
+import {
+  ensureCompanyContext,
+  newCompanyId,
+  normalizeCompanyName,
+} from "@/lib/tenant/company-context";
 import {
   adminResendCognitoInvite,
   adminResetCognitoPassword,
@@ -162,6 +169,14 @@ type AddUserDraft = {
   lastName: string;
   displayName: string;
   email: string;
+  /**
+   * Company the new user is assigned to, by name. The id is resolved at submit
+   * — matching an existing company, or minting a new one when the name is new.
+   * Deliberately not free-text-into-the-filter: the *name* is a label, the
+   * generated `companyId` is what records are keyed by, so renames and typo
+   * variants cannot silently split or merge a tenant.
+   */
+  companyName: string;
   phone: string;
   profilePhoto: string;
   jobTitle: string;
@@ -278,6 +293,7 @@ function buildEmptyDraft(): AddUserDraft {
     lastName: "",
     displayName: "",
     email: "",
+    companyName: "",
     phone: "",
     profilePhoto: "",
     jobTitle: "",
@@ -316,9 +332,7 @@ function buildEmptyDraft(): AddUserDraft {
   };
 }
 
-function auditSeverity(
-  status: AdminAuditLogEntry["status"],
-): "destructive" | "warning" | "info" {
+function auditSeverity(status: AdminAuditLogEntry["status"]): "destructive" | "warning" | "info" {
   if (status === "Blocked" || status === "Failed") return "destructive";
   if (status === "Reviewed") return "warning";
   return "info";
@@ -586,7 +600,16 @@ export function AdminPage() {
   const [selectedIds, setSelectedIds] = React.useState<Record<string, boolean>>({});
 
   const [addUserOpen, setAddUserOpen] = React.useState(false);
+  const [knownCompanies, setKnownCompanies] = React.useState<KnownCompany[]>([]);
+  const [activeCompany, setActiveCompany] = React.useState<{
+    companyId: string;
+    companyName: string;
+  } | null>(null);
   const [draft, setDraft] = React.useState<AddUserDraft>(buildEmptyDraft());
+
+  React.useEffect(() => {
+    void ensureCompanyContext().then(setActiveCompany);
+  }, []);
   const [wizardStep, setWizardStep] = React.useState(0);
   const [savedDraftCount, setSavedDraftCount] = React.useState(0);
   const [creatingUser, setCreatingUser] = React.useState(false);
@@ -849,17 +872,18 @@ export function AdminPage() {
   };
 
   const openAddUser = () => {
-    setDraft(buildEmptyDraft());
+    // Default to the admin's own company — adding a colleague is the common
+    // case, and typing the name again is how you get a typo'd second tenant.
+    setDraft({ ...buildEmptyDraft(), companyName: activeCompany?.companyName ?? "" });
     setWizardStep(0);
     setCreateUserError(null);
     setAddUserOpen(true);
+    void listKnownCompanies()
+      .then(setKnownCompanies)
+      .catch(() => setKnownCompanies([]));
   };
 
-  const updateUsersStatus = async (
-    userIds: string[],
-    status: UserStatus,
-    action: string,
-  ) => {
+  const updateUsersStatus = async (userIds: string[], status: UserStatus, action: string) => {
     const targets = users.filter((user) => userIds.includes(user.id));
     if (targets.length === 0) return;
 
@@ -1125,8 +1149,16 @@ export function AdminPage() {
     }));
   };
 
+  /** The existing company this name refers to, if any. Case/space insensitive. */
+  const matchedCompany = React.useMemo(() => {
+    const needle = normalizeCompanyName(draft.companyName);
+    if (!needle) return null;
+    return knownCompanies.find((c) => normalizeCompanyName(c.companyName) === needle) ?? null;
+  }, [draft.companyName, knownCompanies]);
+
   const stepCanContinue = React.useMemo(() => {
-    if (wizardStep === 0) return Boolean(draft.firstName && draft.lastName && draft.email);
+    if (wizardStep === 0)
+      return Boolean(draft.firstName && draft.lastName && draft.email && draft.companyName.trim());
     if (wizardStep === 1)
       return Boolean(draft.role && draft.department && draft.permissionTemplate);
     if (wizardStep === 2) return true;
@@ -1143,6 +1175,11 @@ export function AdminPage() {
     const inviteStatus: InviteStatus = sendInviteNow ? "Sent" : "Not Sent";
     const twoFAStatus: TwoFAStatus = draft.requireTwoFactor ? "Required" : "Optional";
 
+    // Reuse the existing company's id when the name matches one, otherwise mint
+    // a new one. The id — never the typed name — is what records are keyed by.
+    const companyName = draft.companyName.trim();
+    const company = matchedCompany ?? { companyId: newCompanyId(), companyName };
+
     setCreatingUser(true);
     setCreateUserError(null);
 
@@ -1152,6 +1189,8 @@ export function AdminPage() {
         lastName: draft.lastName,
         displayName: draft.displayName,
         email: draft.email,
+        companyId: company.companyId,
+        companyName: company.companyName,
         phone: draft.phone,
         jobTitle: draft.jobTitle,
         department: draft.department,
@@ -1277,31 +1316,31 @@ export function AdminPage() {
               {usersLoading && users.length === 0 ? (
                 <StatCardsSkeleton count={4} />
               ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricCard
-                  label="Total Users"
-                  value={users.length.toString()}
-                  hint="Across all portals"
-                />
-                <MetricCard
-                  label="Active Users"
-                  value={userMetrics.activeUsers.toString()}
-                  hint="Can access production"
-                  tone="success"
-                />
-                <MetricCard
-                  label="Pending Invites"
-                  value={userMetrics.pendingInvites.toString()}
-                  hint="Need onboarding"
-                  tone="info"
-                />
-                <MetricCard
-                  label="2FA Protected"
-                  value={userMetrics.twoFAEnabled.toString()}
-                  hint="Security coverage"
-                  tone="warning"
-                />
-              </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetricCard
+                    label="Total Users"
+                    value={users.length.toString()}
+                    hint="Across all portals"
+                  />
+                  <MetricCard
+                    label="Active Users"
+                    value={userMetrics.activeUsers.toString()}
+                    hint="Can access production"
+                    tone="success"
+                  />
+                  <MetricCard
+                    label="Pending Invites"
+                    value={userMetrics.pendingInvites.toString()}
+                    hint="Need onboarding"
+                    tone="info"
+                  />
+                  <MetricCard
+                    label="2FA Protected"
+                    value={userMetrics.twoFAEnabled.toString()}
+                    hint="Security coverage"
+                    tone="warning"
+                  />
+                </div>
               )}
 
               <Card className="border-border/70 shadow-sm">
@@ -1418,7 +1457,9 @@ export function AdminPage() {
                         size="sm"
                         className="h-8 gap-1.5"
                         disabled={selectedVisibleIds.length === 0}
-                        onClick={() => void updateUsersStatus(selectedVisibleIds, "Suspended", "User Suspended")}
+                        onClick={() =>
+                          void updateUsersStatus(selectedVisibleIds, "Suspended", "User Suspended")
+                        }
                       >
                         <PauseCircle className="h-3.5 w-3.5" /> Suspend
                       </Button>
@@ -1428,7 +1469,11 @@ export function AdminPage() {
                         className="h-8 gap-1.5"
                         disabled={selectedVisibleIds.length === 0}
                         onClick={() =>
-                          void updateUsersStatus(selectedVisibleIds, "Deactivated", "User Deactivated")
+                          void updateUsersStatus(
+                            selectedVisibleIds,
+                            "Deactivated",
+                            "User Deactivated",
+                          )
                         }
                       >
                         <UserX className="h-3.5 w-3.5" /> Deactivate
@@ -1563,7 +1608,11 @@ export function AdminPage() {
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                       onSelect={() =>
-                                        void updateUsersStatus([user.id], "Suspended", "User Suspended")
+                                        void updateUsersStatus(
+                                          [user.id],
+                                          "Suspended",
+                                          "User Suspended",
+                                        )
                                       }
                                     >
                                       <PauseCircle className="h-4 w-4" /> Suspend User
@@ -1796,9 +1845,7 @@ export function AdminPage() {
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
                   <CardTitle>Branch Permissions</CardTitle>
-                  <CardDescription>
-                    Branches from WorkspaceSettings orgStructure.
-                  </CardDescription>
+                  <CardDescription>Branches from WorkspaceSettings orgStructure.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {(orgStructure?.branches ?? []).map((branch) => (
@@ -1963,13 +2010,19 @@ export function AdminPage() {
                     <TableBody>
                       {usersLoading && loginActivityRows.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                          <TableCell
+                            colSpan={7}
+                            className="py-8 text-center text-sm text-muted-foreground"
+                          >
                             Loading Cognito directory…
                           </TableCell>
                         </TableRow>
                       ) : loginActivityRows.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                          <TableCell
+                            colSpan={7}
+                            className="py-8 text-center text-sm text-muted-foreground"
+                          >
                             No directory users yet. Invite a user to populate login activity.
                           </TableCell>
                         </TableRow>
@@ -2043,7 +2096,10 @@ export function AdminPage() {
                       ))
                     ) : auditLogs.length === 0 && !auditLogsLoading ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
+                        <TableCell
+                          colSpan={9}
+                          className="py-10 text-center text-sm text-muted-foreground"
+                        >
                           No admin actions logged yet. Create or edit a user to see entries here.
                         </TableCell>
                       </TableRow>
@@ -2073,7 +2129,9 @@ export function AdminPage() {
                               {row.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="max-w-md whitespace-normal">{row.details}</TableCell>
+                          <TableCell className="max-w-md whitespace-normal">
+                            {row.details}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -2264,7 +2322,9 @@ export function AdminPage() {
               ) : null}
               <p className="text-xs text-muted-foreground">
                 Method: <span className="font-mono">{passwordResetResult.method}</span>
-                {passwordResetResult.emailed ? " · email requested from Cognito" : " · manual share"}
+                {passwordResetResult.emailed
+                  ? " · email requested from Cognito"
+                  : " · manual share"}
               </p>
             </div>
           ) : null}
@@ -2366,6 +2426,31 @@ export function AdminPage() {
                       onChange={(e) => updateDraft("profilePhoto", e.target.value)}
                       placeholder="https://..."
                     />
+                  </Field>
+                  <Field
+                    label="Company"
+                    hint={
+                      matchedCompany
+                        ? `Joins ${matchedCompany.companyName} · ${matchedCompany.userCount} existing ${
+                            matchedCompany.userCount === 1 ? "user" : "users"
+                          }`
+                        : draft.companyName.trim()
+                          ? "New company — this user will not see any existing data."
+                          : "Required. Determines which data this user can see."
+                    }
+                  >
+                    <Input
+                      value={draft.companyName}
+                      onChange={(e) => updateDraft("companyName", e.target.value)}
+                      list="admin-known-companies"
+                      placeholder="Start typing to pick or create"
+                      autoComplete="off"
+                    />
+                    <datalist id="admin-known-companies">
+                      {knownCompanies.map((company) => (
+                        <option key={company.companyId} value={company.companyName} />
+                      ))}
+                    </datalist>
                   </Field>
                   <Field label="Job Title">
                     <Input
@@ -2813,7 +2898,11 @@ export function AdminPage() {
               {createUserError && <div className="text-destructive">{createUserError}</div>}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={() => setAddUserOpen(false)} disabled={creatingUser}>
+              <Button
+                variant="outline"
+                onClick={() => setAddUserOpen(false)}
+                disabled={creatingUser}
+              >
                 Cancel
               </Button>
               <Button variant="outline" onClick={saveDraft} disabled={creatingUser}>
@@ -2867,7 +2956,6 @@ export function AdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
@@ -2915,10 +3003,13 @@ function MetricCard({
 function Field({
   label,
   required = false,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  /** Helper line under the control — e.g. what a value will do. */
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -2928,6 +3019,7 @@ function Field({
         {required ? " *" : ""}
       </span>
       {children}
+      {hint ? <span className="block text-xs text-muted-foreground">{hint}</span> : null}
     </label>
   );
 }

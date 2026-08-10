@@ -396,10 +396,7 @@ function isEmailLike(value: string | undefined): boolean {
  * Cognito pools configured with email-as-username reject non-email `Username`
  * values ("Username should be an email"). Prefer the email attribute / alias.
  */
-function cognitoAdminUsername(
-  resolved: ResolvedCognitoUser,
-  fallbackEmail?: string,
-): string {
+function cognitoAdminUsername(resolved: ResolvedCognitoUser, fallbackEmail?: string): string {
   if (isEmailLike(resolved.username)) {
     return resolved.username.trim().toLowerCase();
   }
@@ -467,9 +464,7 @@ export async function resolveCognitoUsername(input: {
     throw describeCognitoAdminError(err, "ListUsers");
   }
 
-  throw new Error(
-    "User not found in Cognito. Confirm the email matches the User Pool account.",
-  );
+  throw new Error("User not found in Cognito. Confirm the email matches the User Pool account.");
 }
 
 export type AdminResetPasswordResult = {
@@ -643,7 +638,10 @@ export async function adminResetCognitoPassword(input: {
       try {
         return await sendResetCodeEmail();
       } catch (resetErr) {
-        console.warn("[cognito] Reset-code email failed; falling back to manual temp password", resetErr);
+        console.warn(
+          "[cognito] Reset-code email failed; falling back to manual temp password",
+          resetErr,
+        );
         try {
           return await setTemporaryPasswordManual();
         } catch {

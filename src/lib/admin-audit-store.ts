@@ -58,10 +58,7 @@ export function formatAuditWhen(iso: string): string {
 
 export function auditActorFromAuth(user: AuthUser | null | undefined): AdminAuditActor {
   const name =
-    user?.name?.trim() ||
-    user?.attributes?.given_name ||
-    user?.email?.split("@")[0] ||
-    "Unknown";
+    user?.name?.trim() || user?.attributes?.given_name || user?.email?.split("@")[0] || "Unknown";
   return {
     actorUserId: user?.userId ?? "unknown",
     actorName: name,
@@ -243,11 +240,15 @@ export async function recordAdminAuditLog(input: {
   return entry;
 }
 
-export function summarizeUserEditDiff(before: AdminUserEditDraft, after: AdminUserEditDraft): string {
+export function summarizeUserEditDiff(
+  before: AdminUserEditDraft,
+  after: AdminUserEditDraft,
+): string {
   const parts: string[] = [];
 
   const push = (label: string, from: string, to: string) => {
-    if (from.trim() !== to.trim()) parts.push(`${label}: ${from.trim() || "—"} → ${to.trim() || "—"}`);
+    if (from.trim() !== to.trim())
+      parts.push(`${label}: ${from.trim() || "—"} → ${to.trim() || "—"}`);
   };
 
   push("Name", `${before.firstName} ${before.lastName}`, `${after.firstName} ${after.lastName}`);

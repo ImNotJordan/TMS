@@ -1,5 +1,12 @@
-import { createDynamoEntityStore } from "./dynamo-entity-store";
-import { getTrucksTableName } from "./dynamodb";
+import { createResourceClient } from "./api/resource-client";
+import {
+  fetchOperationalListCached,
+  getOperationalCacheScope,
+  readOperationalItemFromListCache,
+  removeOperationalListItem,
+  upsertOperationalListItem,
+  type OperationalListKind,
+} from "./operational-data-cache";
 
 export type TruckRecord = {
   truckBoardId: string;
@@ -98,17 +105,90 @@ export type TruckRecord = {
 
 export type CreateTruckInput = Omit<TruckRecord, "createdAt" | "updatedAt">;
 
-const store = createDynamoEntityStore<TruckRecord>({
-  tableName: getTrucksTableName,
-  idKey: "truckBoardId",
-  label: "Trucks",
-  kind: "trucks",
+/**
+ * ## Transport
+ *
+ * `/api/trucks`, not DynamoDB. The server derives the tenant from the verified
+ * token and scopes every query; the browser holds no credentials for the
+ * TruckBoard table.
+ *
+ * Exported names and signatures are unchanged, so no screen moved. The list
+ * cache stays — it dedupes polling in front of an already-scoped fetch, and is
+ * not a substitute for scoping.
+ */
+const api = createResourceClient<TruckRecord>("trucks", {
+  collection: "trucks",
+  item: "truck",
 });
 
-export const createTruck = store.create;
-export const listAllTrucks = store.listAll;
-export const listAllTrucksCached = store.listAllCached;
-export const getTruckById = store.getById;
-export const getTruckByIdCached = store.getByIdCached;
-export const updateTruck = store.update;
-export const deleteTruck = store.remove;
+const CACHE_KIND: OperationalListKind = "trucks";
+const getTruckKey = (row: TruckRecord) => row.truckBoardId;
+
+export async function listAllTrucks(): Promise<TruckRecord[]> {
+  return api.list();
+}
+
+export async function listAllTrucksCached(options?: {
+  force?: boolean;
+  scope?: string;
+}): Promise<TruckRecord[]> {
+  return fetchOperationalListCached({
+    kind: CACHE_KIND,
+    scope: options?.scope,
+    force: options?.force,
+    getId: getTruckKey,
+    fetchRemote: () => api.list(),
+  });
+}
+
+export async function getTruckById(truckBoardId: string): Promise<TruckRecord | null> {
+  return api.get(truckBoardId);
+}
+
+export async function getTruckByIdCached(
+  truckBoardId: string,
+  options?: { force?: boolean; scope?: string },
+): Promise<TruckRecord | null> {
+  const id = truckBoardId?.trim();
+  if (!id) return null;
+  const scope = options?.scope ?? getOperationalCacheScope();
+
+  if (!options?.force) {
+    const cached = readOperationalItemFromListCache<TruckRecord>(
+      CACHE_KIND,
+      scope,
+      id,
+      getTruckKey,
+    );
+    if (cached) return cached;
+  }
+
+  const remote = await api.get(id);
+  if (remote) upsertOperationalListItem(CACHE_KIND, scope, remote, getTruckKey);
+  return remote;
+}
+
+export async function createTruck(input: CreateTruckInput): Promise<TruckRecord> {
+  const created = await api.create(input as unknown as Record<string, unknown>);
+  upsertOperationalListItem(CACHE_KIND, getOperationalCacheScope(), created, getTruckKey);
+  return created;
+}
+
+export async function updateTruck(record: TruckRecord): Promise<TruckRecord> {
+  const updated = await api.update(
+    record.truckBoardId,
+    record as unknown as Record<string, unknown>,
+  );
+  upsertOperationalListItem(CACHE_KIND, getOperationalCacheScope(), updated, getTruckKey);
+  return updated;
+}
+
+export async function deleteTruck(truckBoardId: string): Promise<void> {
+  await api.remove(truckBoardId);
+  removeOperationalListItem(
+    CACHE_KIND,
+    getOperationalCacheScope(),
+    truckBoardId,
+    getTruckKey as unknown as (row: { updatedAt: string }) => string,
+  );
+}

@@ -1,11 +1,8 @@
-import { fetchUserAttributes, getCurrentUser } from "aws-amplify/auth";
+import { fetchAuthSession, fetchUserAttributes, getCurrentUser } from "aws-amplify/auth";
 import { QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 import { fetchAdminDirectoryCached, prependAdminDirectoryCacheUser } from "./admin-users-cache";
-import {
-  formatStoredRole,
-  roleToStorageKey,
-} from "./admin-user-constants";
+import { formatStoredRole, normalizeRole, roleToStorageKey } from "./admin-user-constants";
 import {
   adminCreateCognitoUser,
   isCognitoAdminConfigured,
@@ -13,13 +10,26 @@ import {
 } from "./cognito-admin";
 import { configureAmplify } from "./amplify";
 import { getDynamoDocClient, getProfileTableName, isDynamoConfigured } from "./dynamodb";
-import { putSection } from "./profile-store";
+import { putSection, putSectionMerge } from "./profile-store";
 import { createRateLimitedExecutor } from "./rate-limit";
+import { ensureCompanyContext } from "./tenant/company-context";
+import { TENANT_EXEMPT_ROLES } from "./tenant/server-tenant-context";
 
 const ADMIN_DIRECTORY_READ_RATE_LIMIT_MS = 300;
 const ADMIN_DIRECTORY_AUTH_RATE_LIMIT_MS = 600;
 const runAdminReadLimited = createRateLimitedExecutor(ADMIN_DIRECTORY_READ_RATE_LIMIT_MS);
 const runAdminAuthLimited = createRateLimitedExecutor(ADMIN_DIRECTORY_AUTH_RATE_LIMIT_MS);
+
+/** Cognito bearer for the server admin routes. */
+async function getServerAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 type SectionData = Record<string, unknown>;
 
@@ -43,6 +53,16 @@ export type AdminUserDirectoryEntry = {
   inviteStatus?: string;
   twoFAStatus?: string;
   createdDate?: string;
+  /** Tenant assignment. Set by an admin at creation; never self-served. */
+  companyId?: string;
+  companyName?: string;
+};
+
+/** A company an admin may assign to, derived from users already in the directory. */
+export type KnownCompany = {
+  companyId: string;
+  companyName: string;
+  userCount: number;
 };
 
 export type CreateAdminUserPayload = {
@@ -69,6 +89,12 @@ export type CreateAdminUserPayload = {
   fieldPermissions?: Record<string, unknown>;
   temporaryPassword?: string;
   sendEmailInvite?: boolean;
+  /**
+   * Tenant assignment for the new user. Required for every role except the
+   * tenant-exempt ones (Driver), which are scoped by assignment instead.
+   */
+  companyId?: string;
+  companyName?: string;
 };
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -239,6 +265,8 @@ function mapSectionItemsToUsers(items: ProfileSectionItem[]): AdminUserDirectory
     const nickname = asString(personal.nickname);
     const email = asString(personal.email);
     const role = formatStoredRole(asString(permissions.role));
+    const companyId = asString(permissions.companyId);
+    const companyName = asString(permissions.companyName);
     const department = asString(personal.department);
     const teams = asString(permissions.teams);
     const accountStatus = asString(security.accountStatus) ?? asString(permissions.status);
@@ -262,6 +290,8 @@ function mapSectionItemsToUsers(items: ProfileSectionItem[]): AdminUserDirectory
       inviteStatus,
       twoFAStatus: twoFactor,
       createdDate: aggregate.createdAt,
+      companyId,
+      companyName,
     } satisfies AdminUserDirectoryEntry;
   });
 }
@@ -344,6 +374,16 @@ export async function createAdminDirectoryUser(
     throw new Error("First and last name are required.");
   }
 
+  // Rule B: Drivers are never assigned a company — their access is scoped to
+  // the loads assigned to them. Everyone else must have one, or the account
+  // looks broken rather than unassigned.
+  const isTenantExempt = TENANT_EXEMPT_ROLES.has(normalizeRole(payload.role));
+  const companyId = isTenantExempt ? "" : (payload.companyId?.trim() ?? "");
+  const companyName = isTenantExempt ? "" : (payload.companyName?.trim() ?? "");
+  if (!isTenantExempt && (!companyId || !companyName)) {
+    throw new Error("A company is required. Pick an existing one or add a new company.");
+  }
+
   const cognitoUser = await runAdminAuthLimited(() =>
     adminCreateCognitoUser({
       email,
@@ -388,6 +428,9 @@ export async function createAdminDirectoryUser(
       dataAccessScope: payload.dataAccessScope?.trim() || undefined,
       modulePermissions: payload.modulePermissions,
       fieldPermissions: payload.fieldPermissions,
+      // Tenant assignment — the one place a company is bound to a user.
+      companyId,
+      companyName,
     }),
   );
 
@@ -419,11 +462,13 @@ export async function createAdminDirectoryUser(
   };
 }
 
-export async function listAdminDirectoryUsers(): Promise<{
+type DirectoryResult = {
   users: AdminUserDirectoryEntry[];
   source: "dynamodb" | "cognito";
   warning?: string;
-}> {
+};
+
+async function listAdminDirectoryUsersUnscoped(): Promise<DirectoryResult> {
   const scanEnabled =
     String(import.meta.env.VITE_ADMIN_USERS_TABLE_SCAN ?? "").toLowerCase() === "true";
   const current = await buildCurrentCognitoUser();
@@ -511,11 +556,152 @@ export async function listAdminDirectoryUsers(): Promise<{
   return { users: [], source: "cognito", warning: "No Cognito session found." };
 }
 
+/**
+ * The user directory, narrowed to the signed-in admin's company.
+ *
+ * Two deliberate carve-outs:
+ *
+ * 1. **Unassigned users are always included.** This is the screen you use to
+ *    give someone a company, so hiding users who lack one would make the
+ *    assignment unreachable.
+ * 2. **An admin with no company of their own sees everyone**, with a warning.
+ *    Before the first company exists, scoping to it would leave the directory
+ *    empty and there would be no way to bootstrap. This is an open fail-open
+ *    path — it closes when a platform-admin role exists server-side in Stage 1.
+ *    Tracked in docs/security/stage-0-iam.md.
+ */
+export async function listAdminDirectoryUsers(): Promise<DirectoryResult> {
+  const result = await listAdminDirectoryUsersUnscoped();
+  const context = await ensureCompanyContext();
+
+  if (!context) {
+    return {
+      ...result,
+      warning:
+        result.warning ??
+        "Your account has no company assigned, so every user is listed. Assign yourself a company to scope this view.",
+    };
+  }
+
+  return {
+    ...result,
+    users: result.users.filter((user) => !user.companyId || user.companyId === context.companyId),
+  };
+}
+
+/**
+ * Companies already in use, for the Add User picker.
+ *
+ * Derived from the directory rather than a Companies table — the lightweight
+ * model. The trade-off is that a company with no users yet does not appear, and
+ * a rename has to be applied per user (`renameCompany`).
+ */
+export async function listKnownCompanies(): Promise<KnownCompany[]> {
+  const { users } = await listAdminDirectoryUsersUnscoped();
+  const byId = new Map<string, KnownCompany>();
+
+  for (const user of users) {
+    const companyId = user.companyId?.trim();
+    if (!companyId) continue;
+    const existing = byId.get(companyId);
+    if (existing) {
+      existing.userCount += 1;
+      // Keep the first non-empty name we see; renames land via `renameCompany`.
+      if (!existing.companyName && user.companyName) existing.companyName = user.companyName;
+      continue;
+    }
+    byId.set(companyId, {
+      companyId,
+      companyName: user.companyName?.trim() ?? "",
+      userCount: 1,
+    });
+  }
+
+  return [...byId.values()].sort((a, b) =>
+    a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }),
+  );
+}
+
+export type CompanyAssignmentResult = {
+  companyId: string | null;
+  companyName: string | null;
+  /** The target must re-authenticate before the change applies to them. */
+  tokenRefreshRequired: boolean;
+  /** False when `custom:sessionEpoch` is missing — old tokens stay valid. */
+  revocationActive: boolean;
+};
+
+/**
+ * Assign (or move) a user to a company.
+ *
+ * Goes through the server, which writes `custom:companyId` on the Cognito user
+ * under the server's own IAM principal. The browser deliberately does not make
+ * this call itself: doing so would require `cognito-idp:AdminUpdateUserAttributes`
+ * on the Identity Pool role, which is the permission that lets any signed-in
+ * user rewrite anyone's attributes.
+ *
+ * Pass an empty `companyId` to remove a user from their company.
+ */
+export async function assignUserCompany(
+  userId: string,
+  company: { companyId: string; companyName: string },
+): Promise<CompanyAssignmentResult> {
+  const companyId = company.companyId.trim();
+  const companyName = company.companyName.trim();
+  if (!userId.trim()) throw new Error("userId is required.");
+  if (companyId && !companyName) throw new Error("A company name is required.");
+
+  const response = await fetch("/api/admin/company-assignment", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(await getServerAuthHeaders()),
+    },
+    body: JSON.stringify({ userId: userId.trim(), companyId, companyName }),
+  });
+
+  const body = (await response.json().catch(() => null)) as
+    | (Partial<CompanyAssignmentResult> & { error?: string })
+    | null;
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? `Could not assign the company (HTTP ${response.status}).`);
+  }
+
+  return {
+    companyId: body?.companyId ?? null,
+    companyName: body?.companyName ?? null,
+    tokenRefreshRequired: body?.tokenRefreshRequired ?? true,
+    revocationActive: body?.revocationActive ?? false,
+  };
+}
+
+/**
+ * Rename a company across every user assigned to it.
+ *
+ * Only the display label changes, so this writes the Profile mirror directly —
+ * `custom:companyId` on the Cognito user is unaffected and no token goes stale.
+ *
+ * The cost of the lightweight model: the name is denormalized onto each user,
+ * so a rename is a fan-out rather than a single row update. Fine at this scale;
+ * revisit if company count grows.
+ */
+export async function renameCompany(companyId: string, nextName: string): Promise<number> {
+  const target = companyId.trim();
+  const companyName = nextName.trim();
+  if (!target || !companyName) throw new Error("A company id and new name are required.");
+
+  const { users } = await listAdminDirectoryUsersUnscoped();
+  const members = users.filter((user) => user.companyId === target);
+  for (const member of members) {
+    await putSectionMerge(member.id, "permissions", { companyId: target, companyName });
+  }
+  return members.length;
+}
+
 /** Cached directory list — reuses session/memory until force refresh or sign-out. */
-export async function listAdminDirectoryUsersCached(
-  scope: string,
-  options?: { force?: boolean },
-) {
+export async function listAdminDirectoryUsersCached(scope: string, options?: { force?: boolean }) {
   return fetchAdminDirectoryCached({
     scope,
     force: options?.force,
@@ -529,10 +715,7 @@ export function cacheAdminDirectoryUser(scope: string, user: AdminUserDirectoryE
 
 export type AssignableRoleKind = "dispatcher" | "driver" | "broker";
 
-function matchesAssignableRole(
-  role: string | undefined,
-  kind: AssignableRoleKind,
-): boolean {
+function matchesAssignableRole(role: string | undefined, kind: AssignableRoleKind): boolean {
   const normalized = (role ?? "").trim().toLowerCase();
   if (!normalized) return false;
   if (kind === "dispatcher") return normalized.includes("dispatch");

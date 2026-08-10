@@ -21,6 +21,8 @@ import { AuthGateSkeleton, RoutePageSkeleton } from "@/components/page-skeleton"
 import { GlobalScrollbar } from "@/components/global-scrollbar";
 import { PageTransition } from "@/components/page-transition";
 import { ModuleAccessGate } from "@/components/module-access-gate";
+import { CompanyRequired } from "@/components/tenant/company-required";
+import { useCompanyGate } from "@/lib/tenant/use-company-gate";
 import { DriverStatusNotificationsWatcher } from "@/components/driver-status-notifications-watcher";
 
 function NotFoundComponent() {
@@ -143,6 +145,9 @@ function AuthGate() {
   const location = useLocation();
   const navigate = useNavigate();
   const { status, user, signOut } = useAuth();
+  // Rule A. Evaluated here rather than per-route: the routed children below
+  // never mount without a company, so there is no URL that bypasses it.
+  const companyGate = useCompanyGate(status === "authenticated" ? user?.userId : null);
   const isLoginRoute = location.pathname === "/login";
   const isLandingRoute = location.pathname === "/landing";
   const isPublicRoute = isLoginRoute || isLandingRoute;
@@ -197,6 +202,21 @@ function AuthGate() {
 
   if (user?.audience === "driver") {
     return <AuthGateSkeleton message="Redirecting to driver app…" />;
+  }
+
+  // Before the app, not inside it — no sidebar, no topbar, nothing that would
+  // fire a scoped request the server is about to refuse anyway.
+  if (companyGate.state === "checking") {
+    return <AuthGateSkeleton message="Checking your workspace…" />;
+  }
+
+  if (companyGate.state === "needs-company") {
+    return (
+      <>
+        <CompanyRequired onRecheck={companyGate.recheck} rechecking={companyGate.rechecking} />
+        <Toaster />
+      </>
+    );
   }
 
   return (

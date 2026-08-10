@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { ArrowRight, CheckCircle2, FileCheck2, FileWarning, MessageSquare, Phone } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  FileCheck2,
+  FileWarning,
+  MessageSquare,
+  Phone,
+  UserCheck,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -109,14 +117,30 @@ function LoadDetailPage() {
       />
 
       {isOffer ? (
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={() => void declineLoad(load.id)}>
-            Decline
-          </Button>
-          <Button className="flex-1" onClick={() => void acceptLoad(load.id)}>
-            Accept load
-          </Button>
-        </div>
+        <>
+          {load.assignedByDispatch ? (
+            <div className="rounded-xl border border-primary/30 bg-primary/8 px-3 py-3">
+              <div className="flex items-start gap-2.5">
+                <UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">Dispatch assigned you this load</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    Accept to confirm you're taking it — dispatch tracks this load as waiting on
+                    you until then.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => void declineLoad(load.id)}>
+              Decline
+            </Button>
+            <Button className="flex-1" onClick={() => void acceptLoad(load.id)}>
+              Accept load
+            </Button>
+          </div>
+        </>
       ) : (
         <>
           <StatusTimelineCard

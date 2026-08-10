@@ -16,10 +16,7 @@ import {
   type TwoFAStatus,
   type UserStatus,
 } from "@/lib/admin-user-constants";
-import {
-  getAdminDirectoryUserById,
-  type AdminUserDirectoryEntry,
-} from "@/lib/admin-users-store";
+import { getAdminDirectoryUserById, type AdminUserDirectoryEntry } from "@/lib/admin-users-store";
 import { isDynamoConfigured } from "@/lib/dynamodb";
 import { getSection, putSection } from "@/lib/profile-store";
 
@@ -159,8 +156,7 @@ function entryToDraft(
     manager: asString(permissions.manager),
     assignedTeam: asString(permissions.teams) || entry?.team || "",
     assignedBranch: asString(permissions.branch) || "",
-    dataAccessScope:
-      (asString(permissions.dataAccessScope) as AccessScope) || "Assigned Team Only",
+    dataAccessScope: (asString(permissions.dataAccessScope) as AccessScope) || "Assigned Team Only",
     accountStatus,
     inviteStatus: normalizeInviteStatus(
       asString(security.inviteStatus) || entry?.inviteStatus,

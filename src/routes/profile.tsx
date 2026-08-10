@@ -84,6 +84,7 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { useProfileSection, type UseProfileSection } from "@/hooks/use-profile-section";
+import { ensureCompanyContext } from "@/lib/tenant/company-context";
 import { isDynamoConfigured } from "@/lib/dynamodb";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -148,9 +149,7 @@ function ProfilePage() {
   const address = parseAddressAttr(attrs.address);
   const sidebarLocation = [address.city, address.state].filter(Boolean).join(", ");
   const sidebarTimezone = attrs.zoneinfo || "";
-  const sidebarLastLogin = user?.authTime
-    ? `Last login · ${formatEpoch(user.authTime)}`
-    : "";
+  const sidebarLastLogin = user?.authTime ? `Last login · ${formatEpoch(user.authTime)}` : "";
   const sidebarRole = attrs["custom:role"] || attrs["custom:access_level"] || "";
 
   const handleSignOutAll = async () => {
@@ -172,7 +171,10 @@ function ProfilePage() {
         actions={
           <>
             {!isDynamoConfigured() && (
-              <Badge variant="outline" className="border-warning/30 bg-warning/15 text-warning-foreground">
+              <Badge
+                variant="outline"
+                className="border-warning/30 bg-warning/15 text-warning-foreground"
+              >
                 Cloud sync offline
               </Badge>
             )}
@@ -368,7 +370,13 @@ function ProfileSidebar({
           ? "[&>div]:bg-warning"
           : "[&>div]:bg-destructive";
 
-  const quickActions: { label: string; icon: typeof Edit3; tab?: TabId; onClick?: () => void; tone?: "danger" }[] = [
+  const quickActions: {
+    label: string;
+    icon: typeof Edit3;
+    tab?: TabId;
+    onClick?: () => void;
+    tone?: "danger";
+  }[] = [
     { label: "Edit Profile", icon: Edit3, tab: "personal" },
     { label: "Change Password", icon: KeyRound, tab: "security" },
     { label: "Enable 2FA", icon: Shield, tab: "security" },
@@ -407,9 +415,7 @@ function ProfileSidebar({
               <h2 className="text-base font-semibold tracking-tight">{displayName}</h2>
               <BadgeCheck className="h-4 w-4 text-info" />
             </div>
-            {subtitle ? (
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
-            ) : null}
+            {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
             {roleLabel ? (
               <div className="mt-2 flex items-center gap-2">
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -554,7 +560,9 @@ function StatTile({
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {label}
           </div>
-          <span className={`flex h-7 w-7 items-center justify-center rounded-md ${toneClass[tone]}`}>
+          <span
+            className={`flex h-7 w-7 items-center justify-center rounded-md ${toneClass[tone]}`}
+          >
             <Icon className="h-3.5 w-3.5" />
           </span>
         </div>
@@ -594,7 +602,10 @@ function SaveBar<T extends Record<string, unknown>>({
   return (
     <div className="flex items-center gap-2">
       {!hook.enabled && (
-        <Badge variant="outline" className="border-warning/30 bg-warning/15 text-warning-foreground">
+        <Badge
+          variant="outline"
+          className="border-warning/30 bg-warning/15 text-warning-foreground"
+        >
           Cloud sync offline
         </Badge>
       )}
@@ -604,7 +615,10 @@ function SaveBar<T extends Record<string, unknown>>({
         </Badge>
       )}
       {hook.dirty && (
-        <Badge variant="outline" className="border-warning/30 bg-warning/15 text-warning-foreground">
+        <Badge
+          variant="outline"
+          className="border-warning/30 bg-warning/15 text-warning-foreground"
+        >
           Unsaved changes
         </Badge>
       )}
@@ -723,18 +737,10 @@ function OverviewTab({
     (attrs.name ?? "").split(" ").slice(1).join(" ") ||
     "";
   const fullName =
-    [givenName, familyName].filter(Boolean).join(" ").trim() ||
-    attrs.name ||
-    fallbackDisplayName;
+    [givenName, familyName].filter(Boolean).join(" ").trim() || attrs.name || fallbackDisplayName;
 
-  const jobTitle =
-    personal.data.job_title ||
-    attrs["custom:job_title"] ||
-    "—";
-  const department =
-    personal.data.department ||
-    attrs["custom:department"] ||
-    "—";
+  const jobTitle = personal.data.job_title || attrs["custom:job_title"] || "—";
+  const department = personal.data.department || attrs["custom:department"] || "—";
   const emailValue = personal.data.email || attrs.email || fallbackEmail;
   const phoneValue =
     personal.data.phone_number ||
@@ -745,8 +751,7 @@ function OverviewTab({
   const timeZone = personal.data.zoneinfo || attrs.zoneinfo || "—";
   const city = personal.data.city || address.city;
   const state = personal.data.state || address.state;
-  const locationValue =
-    [city, state].filter(Boolean).join(", ") || address.country || "—";
+  const locationValue = [city, state].filter(Boolean).join(", ") || address.country || "—";
 
   const statusVerified = (attrs.email_verified ?? "").toString() === "true";
   const statusLabel = statusVerified ? "Active" : "Pending verification";
@@ -1012,7 +1017,10 @@ const LANGUAGE_OPTIONS = [
   { value: "fr-CA", label: "Français (CA)" },
 ];
 
-function buildFormFromUser(attrs: Record<string, string | undefined> | undefined, fallbackEmail: string): PersonalForm {
+function buildFormFromUser(
+  attrs: Record<string, string | undefined> | undefined,
+  fallbackEmail: string,
+): PersonalForm {
   const a = attrs ?? {};
   const fullName = a.name ?? "";
   const [firstFromName, ...restFromName] = fullName.split(" ");
@@ -1200,12 +1208,18 @@ function PersonalTab() {
         action={
           <div className="flex items-center gap-2">
             {!hook.enabled && (
-              <Badge variant="outline" className="border-warning/30 bg-warning/15 text-warning-foreground">
+              <Badge
+                variant="outline"
+                className="border-warning/30 bg-warning/15 text-warning-foreground"
+              >
                 Cloud sync offline
               </Badge>
             )}
             {hook.dirty && (
-              <Badge variant="outline" className="border-warning/30 bg-warning/15 text-warning-foreground">
+              <Badge
+                variant="outline"
+                className="border-warning/30 bg-warning/15 text-warning-foreground"
+              >
                 Unsaved changes
               </Badge>
             )}
@@ -1243,15 +1257,8 @@ function PersonalTab() {
           <Field label="Display name">
             <Input value={form.nickname} onChange={(e) => set("nickname", e.target.value)} />
           </Field>
-          <Field
-            label="Email address"
-            hint="Changing email triggers a Cognito verification code."
-          >
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => set("email", e.target.value)}
-            />
+          <Field label="Email address" hint="Changing email triggers a Cognito verification code.">
+            <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
           </Field>
           <Field label="Phone number" hint="E.164 format, e.g. +14045550142">
             <Input
@@ -1369,7 +1376,10 @@ const PERMISSIONS_DEFAULTS: PermissionsForm = {
 
 function countCsvEntries(value: string) {
   if (!value.trim()) return 0;
-  return value.split(",").map((s) => s.trim()).filter(Boolean).length;
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean).length;
 }
 
 function csvPreview(value: string) {
@@ -1412,19 +1422,27 @@ function PermissionsTab() {
           icon={LayoutDashboard}
           tone="default"
         />
-        <StatTile label="Branch" value={form.branch.trim() || "—"} icon={Building2} tone="default" />
+        <StatTile
+          label="Branch"
+          value={form.branch.trim() || "—"}
+          icon={Building2}
+          tone="default"
+        />
       </div>
 
       <SectionCard
         title="Role & access"
-        description="What you can do across the platform."
+        description="What you can do across the platform. Role and access level are set by an administrator — ask yours to change them."
         action={<SaveBar hook={hook} />}
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Read-only: these drive RBAC, so self-service edits are rejected at the
+              store (`sanitizeSelfServiceSection`). Showing them as editable would
+              be a save that silently does nothing. */}
           <Field label="User role">
-            <Select value={form.role || undefined} onValueChange={(v) => patch({ role: v })}>
+            <Select value={form.role || undefined} disabled>
               <SelectTrigger>
-                <SelectValue placeholder="Select role" />
+                <SelectValue placeholder="Not assigned" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Administrator</SelectItem>
@@ -1436,19 +1454,12 @@ function PermissionsTab() {
             </Select>
           </Field>
           <Field label="Permission group">
-            <Input
-              value={form.permissionGroup}
-              onChange={(e) => patch({ permissionGroup: e.target.value })}
-              placeholder="e.g. Ops · Tier 2"
-            />
+            <Input value={form.permissionGroup} readOnly disabled placeholder="Not assigned" />
           </Field>
           <Field label="Access level">
-            <Select
-              value={form.accessLevel || undefined}
-              onValueChange={(v) => patch({ accessLevel: v })}
-            >
+            <Select value={form.accessLevel || undefined} disabled>
               <SelectTrigger>
-                <SelectValue placeholder="Select access level" />
+                <SelectValue placeholder="Not assigned" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="full">Full access</SelectItem>
@@ -1471,13 +1482,12 @@ function PermissionsTab() {
               placeholder="Comma-separated teams"
             />
           </Field>
+          {/* Read-only for the same reason as role: `adminAccess` grants the Admin
+              module in rbac.ts, so it cannot be self-served. */}
           <Field label="Admin access">
             <div className="flex h-9 items-center justify-between rounded-md border border-input bg-background px-3">
               <span className="text-sm">{form.adminAccess ? "Enabled" : "Disabled"}</span>
-              <Switch
-                checked={form.adminAccess}
-                onCheckedChange={(v) => patch({ adminAccess: v })}
-              />
+              <Switch checked={form.adminAccess} disabled />
             </div>
           </Field>
           <Field label="Assigned customers" hint="Comma-separated list.">
@@ -1493,27 +1503,27 @@ function PermissionsTab() {
       </SectionCard>
 
       <SectionCard title="Assigned book of business" description="Accounts attached to you.">
-          <div className="space-y-3 text-sm">
-            <AssignedRow
-              icon={Users}
-              label="Customers"
-              count={countCsvEntries(form.customers)}
-              sample={csvPreview(form.customers)}
-            />
-            <AssignedRow
-              icon={Truck}
-              label="Carriers"
-              count={countCsvEntries(form.carriers)}
-              sample={csvPreview(form.carriers)}
-            />
-            <AssignedRow
-              icon={Building2}
-              label="Brokers"
-              count={countCsvEntries(form.brokers)}
-              sample={csvPreview(form.brokers)}
-            />
-          </div>
-        </SectionCard>
+        <div className="space-y-3 text-sm">
+          <AssignedRow
+            icon={Users}
+            label="Customers"
+            count={countCsvEntries(form.customers)}
+            sample={csvPreview(form.customers)}
+          />
+          <AssignedRow
+            icon={Truck}
+            label="Carriers"
+            count={countCsvEntries(form.carriers)}
+            sample={csvPreview(form.carriers)}
+          />
+          <AssignedRow
+            icon={Building2}
+            label="Brokers"
+            count={countCsvEntries(form.brokers)}
+            sample={csvPreview(form.brokers)}
+          />
+        </div>
+      </SectionCard>
     </>
   );
 }
@@ -1584,7 +1594,10 @@ function PreferencesTab() {
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Default landing page">
-            <Select value={form.landingPage || undefined} onValueChange={(v) => patch({ landingPage: v })}>
+            <Select
+              value={form.landingPage || undefined}
+              onValueChange={(v) => patch({ landingPage: v })}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select page" />
               </SelectTrigger>
@@ -1689,14 +1702,49 @@ type NotificationsForm = {
 };
 
 const NOTIFICATION_TOPICS = [
-  { key: "load", label: "Load updates", desc: "Booked, dispatched, in-transit, delivered", channels: ["Email", "In-app", "Push"] },
-  { key: "bid", label: "Bid updates", desc: "New bids, accepted, lost, expired", channels: ["Email", "In-app"] },
-  { key: "quote", label: "Quote updates", desc: "New quote requests, customer replies", channels: ["Email", "In-app"] },
+  {
+    key: "load",
+    label: "Load updates",
+    desc: "Booked, dispatched, in-transit, delivered",
+    channels: ["Email", "In-app", "Push"],
+  },
+  {
+    key: "bid",
+    label: "Bid updates",
+    desc: "New bids, accepted, lost, expired",
+    channels: ["Email", "In-app"],
+  },
+  {
+    key: "quote",
+    label: "Quote updates",
+    desc: "New quote requests, customer replies",
+    channels: ["Email", "In-app"],
+  },
   { key: "rfp", label: "RFP updates", desc: "Awards, rejections, deadlines", channels: ["Email"] },
-  { key: "tracking", label: "Tracking alerts", desc: "Geofence enter/exit, delays, exceptions", channels: ["SMS", "Push"] },
-  { key: "accounting", label: "Accounting alerts", desc: "Invoices, payments, settlements", channels: ["Email"] },
-  { key: "crm", label: "CRM reminders", desc: "Follow-ups, tasks, account changes", channels: ["In-app"] },
-  { key: "system", label: "System announcements", desc: "Releases, maintenance, security notices", channels: ["Email", "In-app"] },
+  {
+    key: "tracking",
+    label: "Tracking alerts",
+    desc: "Geofence enter/exit, delays, exceptions",
+    channels: ["SMS", "Push"],
+  },
+  {
+    key: "accounting",
+    label: "Accounting alerts",
+    desc: "Invoices, payments, settlements",
+    channels: ["Email"],
+  },
+  {
+    key: "crm",
+    label: "CRM reminders",
+    desc: "Follow-ups, tasks, account changes",
+    channels: ["In-app"],
+  },
+  {
+    key: "system",
+    label: "System announcements",
+    desc: "Releases, maintenance, security notices",
+    channels: ["Email", "In-app"],
+  },
 ];
 
 const NOTIFICATIONS_DEFAULTS: NotificationsForm = {
@@ -1708,12 +1756,13 @@ function NotificationsTab() {
   const hook = useProfileSection<NotificationsForm>("notifications", NOTIFICATIONS_DEFAULTS);
   const { data: form, setData } = hook;
 
-  const channels: { key: keyof NotificationsForm["channels"]; label: string; icon: typeof Mail }[] = [
-    { key: "email", label: "Email", icon: Mail },
-    { key: "sms", label: "SMS", icon: Smartphone },
-    { key: "inapp", label: "In-app", icon: MessageSquare },
-    { key: "push", label: "Push", icon: Bell },
-  ];
+  const channels: { key: keyof NotificationsForm["channels"]; label: string; icon: typeof Mail }[] =
+    [
+      { key: "email", label: "Email", icon: Mail },
+      { key: "sms", label: "SMS", icon: Smartphone },
+      { key: "inapp", label: "In-app", icon: MessageSquare },
+      { key: "push", label: "Push", icon: Bell },
+    ];
 
   return (
     <>
@@ -1774,7 +1823,11 @@ function NotificationsTab() {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {c.channels.map((ch) => (
-                        <Badge key={ch} variant="outline" className="border-info/20 bg-info/10 text-info">
+                        <Badge
+                          key={ch}
+                          variant="outline"
+                          className="border-info/20 bg-info/10 text-info"
+                        >
                           {ch}
                         </Badge>
                       ))}
@@ -1851,10 +1904,7 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
         <StatTile label="Trusted devices" value="—" icon={Fingerprint} tone="default" />
       </div>
 
-      <SectionCard
-        title="Password"
-        description="Use a strong password you don't use elsewhere."
-      >
+      <SectionCard title="Password" description="Use a strong password you don't use elsewhere.">
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Current password">
             <div className="relative">
@@ -1897,10 +1947,14 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
                 <div className="text-sm font-medium text-success">
                   {form.authenticatorApp ? "2FA is enabled" : "2FA is not enabled"}
                 </div>
-                <div className="text-xs text-muted-foreground">Authenticator app · 8 backup codes left</div>
+                <div className="text-xs text-muted-foreground">
+                  Authenticator app · 8 backup codes left
+                </div>
               </div>
             </div>
-            <Button size="sm" variant="outline">Manage</Button>
+            <Button size="sm" variant="outline">
+              Manage
+            </Button>
           </div>
           <Separator className="my-4" />
           <div className="space-y-3">
@@ -1930,10 +1984,7 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
           </div>
         </SectionCard>
 
-        <SectionCard
-          title="Session preferences"
-          description="Auto-lock and idle timeout."
-        >
+        <SectionCard title="Session preferences" description="Auto-lock and idle timeout.">
           <div className="space-y-3">
             <Field label="Session timeout">
               <Select
@@ -1989,39 +2040,43 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
               No active sessions.
             </p>
           ) : (
-          sessions.map((s) => {
-            const Icon = s.icon;
-            return (
-              <div
-                key={s.device}
-                className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card p-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-foreground">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      {s.device}
-                      {s.current && (
-                        <Badge variant="secondary" className="bg-success/15 text-success">
-                          This device
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {s.location} · {s.time}
+            sessions.map((s) => {
+              const Icon = s.icon;
+              return (
+                <div
+                  key={s.device}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-foreground">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        {s.device}
+                        {s.current && (
+                          <Badge variant="secondary" className="bg-success/15 text-success">
+                            This device
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {s.location} · {s.time}
+                      </div>
                     </div>
                   </div>
+                  {!s.current && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:bg-destructive/10"
+                    >
+                      Revoke
+                    </Button>
+                  )}
                 </div>
-                {!s.current && (
-                  <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10">
-                    Revoke
-                  </Button>
-                )}
-              </div>
-            );
-          })
+              );
+            })
           )}
         </div>
       </SectionCard>
@@ -2049,27 +2104,34 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
             <TableBody>
               {tokens.length === 0 ? (
                 <TableRow className="border-border/60">
-                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colSpan={5}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
                     No API tokens yet.
                   </TableCell>
                 </TableRow>
               ) : (
-              tokens.map((t) => (
-                <TableRow key={t.name} className="border-border/60">
-                  <TableCell className="pl-4 font-medium">{t.name}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{t.scopes}</TableCell>
-                  <TableCell className="text-muted-foreground">{t.created}</TableCell>
-                  <TableCell className="text-muted-foreground">{t.lastUsed}</TableCell>
-                  <TableCell className="pr-4 text-right">
-                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs">
-                      <Copy className="h-3.5 w-3.5" /> Copy
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10">
-                      <Trash2 className="h-3.5 w-3.5" /> Revoke
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                tokens.map((t) => (
+                  <TableRow key={t.name} className="border-border/60">
+                    <TableCell className="pl-4 font-medium">{t.name}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{t.scopes}</TableCell>
+                    <TableCell className="text-muted-foreground">{t.created}</TableCell>
+                    <TableCell className="text-muted-foreground">{t.lastUsed}</TableCell>
+                    <TableCell className="pr-4 text-right">
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs">
+                        <Copy className="h-3.5 w-3.5" /> Copy
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Revoke
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
@@ -2233,7 +2295,9 @@ function DocumentsTab() {
   const addDoc = () => {
     const name = window.prompt("Document name?");
     if (!name) return;
-    const type = window.prompt("Type? (Tax, Identity, Compliance, Training, Employment, Agreement)") ?? "Other";
+    const type =
+      window.prompt("Type? (Tax, Identity, Compliance, Training, Employment, Agreement)") ??
+      "Other";
     setData((f) => ({
       items: [
         ...f.items,
@@ -2241,7 +2305,11 @@ function DocumentsTab() {
           name,
           type,
           size: "—",
-          date: new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+          date: new Date().toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
           status: "Pending",
           tone: "default",
         },
@@ -2281,44 +2349,47 @@ function DocumentsTab() {
             <TableBody>
               {form.items.length === 0 ? (
                 <TableRow className="border-border/60">
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell
+                    colSpan={6}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
                     No documents uploaded yet.
                   </TableCell>
                 </TableRow>
               ) : (
-              form.items.map((d, idx) => (
-                <TableRow key={`${d.name}-${idx}`} className="border-border/60">
-                  <TableCell className="pl-4">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-                        <FileText className="h-4 w-4" />
-                      </span>
-                      <span className="font-medium">{d.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{d.type}</TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">{d.size}</TableCell>
-                  <TableCell className="text-muted-foreground">{d.date}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={toneClass[d.tone]}>
-                      {d.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="pr-4 text-right">
-                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs">
-                      <Eye className="h-3.5 w-3.5" /> View
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10"
-                      onClick={() => removeDoc(idx)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Remove
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                form.items.map((d, idx) => (
+                  <TableRow key={`${d.name}-${idx}`} className="border-border/60">
+                    <TableCell className="pl-4">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                          <FileText className="h-4 w-4" />
+                        </span>
+                        <span className="font-medium">{d.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{d.type}</TableCell>
+                    <TableCell className="tabular-nums text-muted-foreground">{d.size}</TableCell>
+                    <TableCell className="text-muted-foreground">{d.date}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={toneClass[d.tone]}>
+                        {d.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="pr-4 text-right">
+                      <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs">
+                        <Eye className="h-3.5 w-3.5" /> View
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10"
+                        onClick={() => removeDoc(idx)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Remove
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
@@ -2435,45 +2506,45 @@ function IntegrationsTab() {
               No webhooks configured yet.
             </p>
           ) : (
-          form.webhooks.map((w, idx) => (
-            <div
-              key={`${w.url}-${idx}`}
-              className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card p-3"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-foreground">
-                  <Webhook className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{w.url}</div>
-                  <div className="truncate text-xs text-muted-foreground">{w.events}</div>
+            form.webhooks.map((w, idx) => (
+              <div
+                key={`${w.url}-${idx}`}
+                className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-card p-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-foreground">
+                    <Webhook className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{w.url}</div>
+                    <div className="truncate text-xs text-muted-foreground">{w.events}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={
+                      w.status === "Active"
+                        ? "border-success/20 bg-success/15 text-success"
+                        : "border-warning/30 bg-warning/20 text-warning-foreground"
+                    }
+                  >
+                    {w.status}
+                  </Badge>
+                  <Button size="sm" variant="ghost" onClick={() => toggleWebhook(idx)}>
+                    {w.status === "Active" ? "Pause" : "Resume"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive/10"
+                    onClick={() => removeWebhook(idx)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="outline"
-                  className={
-                    w.status === "Active"
-                      ? "border-success/20 bg-success/15 text-success"
-                      : "border-warning/30 bg-warning/20 text-warning-foreground"
-                  }
-                >
-                  {w.status}
-                </Badge>
-                <Button size="sm" variant="ghost" onClick={() => toggleWebhook(idx)}>
-                  {w.status === "Active" ? "Pause" : "Resume"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive hover:bg-destructive/10"
-                  onClick={() => removeWebhook(idx)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))
+            ))
           )}
         </div>
       </SectionCard>
@@ -2515,12 +2586,47 @@ const COMPANY_DEFAULTS: CompanyForm = {
   equipment: [],
 };
 
+/**
+ * Company details are descriptive metadata the user maintains. The *tenant* —
+ * which company's data they see — is `permissions.companyId`, assigned by an
+ * admin and surfaced here read-only. Editing the name below does not and must
+ * not move the user between tenants.
+ */
+function AssignedCompanyBanner() {
+  const [company, setCompany] = useState<{ companyName: string } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    void ensureCompanyContext().then((value) => {
+      setCompany(value);
+      setLoaded(true);
+    });
+  }, []);
+
+  if (!loaded) return null;
+
+  return (
+    <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3">
+      <p className="text-xs font-medium text-muted-foreground">Assigned company</p>
+      <p className="mt-0.5 text-sm font-semibold">
+        {company?.companyName?.trim() || "Not assigned"}
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {company
+          ? "Set by an administrator. Determines which records you can see."
+          : "Ask an administrator to assign your account to a company — until then, lists will be empty."}
+      </p>
+    </div>
+  );
+}
+
 function CompanyTab() {
   const hook = useProfileSection<CompanyForm>("company", COMPANY_DEFAULTS);
   const { data: form, patch } = hook;
 
   return (
     <>
+      <AssignedCompanyBanner />
       <SectionCard
         title="Company profile"
         description="Visible to admins. Powers compliance and billing."
@@ -2660,7 +2766,11 @@ function CompanyTab() {
             />
             <div className="mt-2 flex flex-wrap gap-1.5">
               {form.equipment.map((r) => (
-                <Badge key={r} variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+                <Badge
+                  key={r}
+                  variant="outline"
+                  className="border-primary/20 bg-primary/5 text-primary"
+                >
                   {r}
                 </Badge>
               ))}

@@ -143,6 +143,9 @@ const TRACKING_STATE_SHORT: Record<TrackingState, string> = {
   exception: "Exception",
 };
 
+/** Matches the driver portal's poll cadence so both sides converge at the same rate. */
+const TRACKING_POLL_MS = 45_000;
+
 function prettyTimeShort(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -184,6 +187,7 @@ function Page() {
   const [driverId, setDriverId] = React.useState("d-101");
   const detailTab: TrackingTab = search.tab ?? "timeline";
   const sessionsListRef = React.useRef<HTMLDivElement>(null);
+  const inFlightRef = React.useRef(false);
   const sessions = React.useSyncExternalStore(
     subscribeTrackingSessions,
     getTrackingSessionsSnapshot,
@@ -196,23 +200,50 @@ function Page() {
 
   usePageReady(loading);
 
-  const fetchLoads = React.useCallback(async (force = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const all = await listAllLoadsCached({ force });
-      all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
-      setLoads(all);
-      syncTrackingSessionsForLoads(all, "Dispatcher", { force });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load tracking data.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchLoads = React.useCallback(
+    async (force = false, opts?: { silent?: boolean }) => {
+      // Background polls must not flip `loading` — usePageReady() would re-gate the
+      // whole page and flash the skeleton every tick.
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      if (!opts?.silent) setLoading(true);
+      setError(null);
+      try {
+        const all = await listAllLoadsCached({ force });
+        all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+        setLoads(all);
+        syncTrackingSessionsForLoads(all, "Dispatcher", { force });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load tracking data.");
+      } finally {
+        inFlightRef.current = false;
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [],
+  );
 
   React.useEffect(() => {
     void fetchLoads(true);
+  }, [fetchLoads]);
+
+  // Driver-app writes (status advances, BOL/POD uploads) land in Dynamo continuously;
+  // without this the board keeps rendering the snapshot it fetched on mount, so the
+  // close-out step never appears until someone hits Refresh.
+  React.useEffect(() => {
+    const poll = () => {
+      if (document.visibilityState === "hidden") return;
+      void fetchLoads(true, { silent: true });
+    };
+    const interval = window.setInterval(poll, TRACKING_POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void fetchLoads(true, { silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchLoads]);
 
   // Deep-link from notifications / toasts: /tracking?loadId=…&tab=messages

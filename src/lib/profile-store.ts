@@ -46,6 +46,91 @@ export type SectionLoadResult<T> = {
   updatedAt: string | null;
 };
 
+/**
+ * Fields inside the `permissions` section that confer privilege.
+ *
+ * `rbac.ts` reads `role`, `adminAccess` and `modulePermissions` to decide what a
+ * user may see and do, so anything that can write them is a privilege-escalation
+ * path. They are administered on another user's behalf, never self-served.
+ *
+ * `companyId`/`companyName` are here for the same reason: the company is the
+ * tenant key every record is stamped and filtered by, so a user who could set
+ * their own would be choosing whose data they see. Assignment is an admin
+ * action — see `createAdminDirectoryUser` and `assignUserCompany`.
+ */
+const PRIVILEGED_PERMISSION_FIELDS: ReadonlySet<string> = new Set([
+  "role",
+  "adminAccess",
+  "accessLevel",
+  "permissionGroup",
+  "dataAccessScope",
+  "modulePermissions",
+  "fieldPermissions",
+  "companyId",
+  "companyName",
+]);
+
+export type SanitizedSectionPayload = {
+  data: Record<string, unknown>;
+  /** Privileged keys the caller tried to write. Empty on a normal save. */
+  rejected: string[];
+};
+
+/**
+ * Strip privilege-bearing fields from a self-service profile write.
+ *
+ * Rejected rather than silently dropped: a save that carries `role` is either a
+ * UI wiring mistake or an escalation attempt, and both need to be visible.
+ */
+export function sanitizeSelfServiceSection(
+  section: SectionKey,
+  data: Record<string, unknown>,
+): SanitizedSectionPayload {
+  if (section !== "permissions") return { data, rejected: [] };
+
+  const sanitized: Record<string, unknown> = {};
+  const rejected: string[] = [];
+  for (const [key, value] of Object.entries(data)) {
+    if (PRIVILEGED_PERMISSION_FIELDS.has(key)) rejected.push(key);
+    else sanitized[key] = value;
+  }
+  return { data: sanitized, rejected };
+}
+
+/**
+ * Self-service profile write — the only path the signed-in user's own UI may use.
+ *
+ * `userId` is the caller's own id supplied by the auth context, and privileged
+ * fields are stripped before the write.
+ *
+ * NOTE: this is a correctness and accident guard, not a security boundary. The
+ * browser holds Identity Pool credentials with direct DynamoDB access, so a
+ * determined caller can still issue a raw PutItem against any user's row. That
+ * closes only when the Profile table is taken away from the browser's IAM role
+ * and writes move behind a server endpoint. See docs/security/stage-0-iam.md.
+ */
+export async function putOwnSection(
+  userId: string,
+  section: SectionKey,
+  data: Record<string, unknown>,
+  options?: { merge?: boolean },
+): Promise<Record<string, unknown>> {
+  const { data: sanitized, rejected } = sanitizeSelfServiceSection(section, data);
+
+  if (rejected.length > 0) {
+    // Security event: a self-service surface tried to write its own privilege.
+    console.error("[security] blocked self-service write to privileged fields", {
+      userId,
+      section,
+      fields: rejected,
+    });
+  }
+
+  if (options?.merge) return putSectionMerge(userId, section, sanitized);
+  await putSection(userId, section, sanitized);
+  return sanitized;
+}
+
 export async function getSection<T = Record<string, unknown>>(
   userId: string,
   section: SectionKey,
@@ -70,6 +155,15 @@ export async function getSection<T = Record<string, unknown>>(
   });
 }
 
+/**
+ * Privileged write — may target ANY user's row and set ANY field, including
+ * `permissions.role`. Reserved for admin flows (`admin-user-edit`,
+ * `admin-users-store`). Self-service UI must call `putOwnSection` instead.
+ *
+ * The admin/non-admin distinction is currently unenforced: the caller is the
+ * browser and there is no server to check the caller's role. Treat every call
+ * site as if it were reachable by any signed-in user, because it is.
+ */
 export async function putSection<T = Record<string, unknown>>(
   userId: string,
   section: SectionKey,

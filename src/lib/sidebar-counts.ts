@@ -2,10 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { listAllCarriersCached } from "@/lib/carriers-store";
 import { listAllLoadsCached } from "@/lib/loads-store";
-import {
-  getOperationalCacheScope,
-  peekOperationalListLength,
-} from "@/lib/operational-data-cache";
+import { getOperationalCacheScope, peekOperationalListLength } from "@/lib/operational-data-cache";
 import { listAllTrucksCached } from "@/lib/trucks-store";
 
 export const SIDEBAR_OPERATIONAL_COUNTS_QUERY_KEY = ["sidebar", "operational-counts"] as const;

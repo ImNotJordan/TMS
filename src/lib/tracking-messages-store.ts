@@ -1,13 +1,21 @@
-import { DeleteCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+/**
+ * Tracking messages — dispatch side.
+ *
+ * ## Transport
+ *
+ * `/api/tracking-messages`, not DynamoDB. The browser holds no credentials for
+ * the TrackingMessages table.
+ *
+ * The load id is still the thing being asked for, but the server now checks the
+ * caller may see that load before it returns the conversation. Previously this
+ * module queried on whatever `loadId` it was handed — so any signed-in user
+ * could read any load's dispatch/driver thread, attachments included, just by
+ * knowing or guessing an id.
+ *
+ * Exported names and signatures are unchanged so no screen moved.
+ */
+import { fetchAuthSession } from "aws-amplify/auth";
 
-import {
-  getAwsRegion,
-  getDynamoDocClient,
-  getTrackingMessagesTableName,
-  isDynamoResourceNotFound,
-  isTrackingMessagesConfigured,
-  queryAllItems,
-} from "./dynamodb";
 import { createRateLimitedExecutor } from "./rate-limit";
 
 export type TrackingMessageSender = "driver" | "ops" | "system";
@@ -23,12 +31,6 @@ export type TrackingMessageDto = {
   assetId?: string;
 };
 
-const MESSAGES_READ_RATE_LIMIT_MS = 300;
-const MESSAGES_WRITE_RATE_LIMIT_MS = 600;
-
-const runReadLimited = createRateLimitedExecutor(MESSAGES_READ_RATE_LIMIT_MS);
-const runWriteLimited = createRateLimitedExecutor(MESSAGES_WRITE_RATE_LIMIT_MS);
-
 export type TrackingMessageRecord = {
   loadId: string;
   /** Sort key — ISO timestamp prefix keeps chronological order. */
@@ -42,28 +44,40 @@ export type TrackingMessageRecord = {
   assetId?: string;
 };
 
-function describeError(err: unknown, op: string): Error {
-  if (err instanceof Error) {
-    if (isDynamoResourceNotFound(err)) {
-      const table = getTrackingMessagesTableName();
-      const awsRegion = getAwsRegion() ?? "your AWS region";
-      console.error(`[DynamoDB TrackingMessages ${op}] table not found`, err);
-      return new Error(
-        `DynamoDB table "${table}" was not found in ${awsRegion}. ` +
-          `Create it with partition key "loadId" (String) and sort key "messageId" (String), ` +
-          `then set VITE_TRACKING_MESSAGES_TABLE_NAME=${table} in .env.`,
-      );
-    }
-    const awsName = (err as { name?: string }).name;
-    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-    const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
-      .filter(Boolean)
-      .join(" · ");
-    console.error(`[DynamoDB TrackingMessages ${op}]`, err);
-    return new Error(`DynamoDB TrackingMessages ${op} failed: ${detail}`);
+const PATH = "/api/tracking-messages";
+const MESSAGES_READ_RATE_LIMIT_MS = 300;
+const MESSAGES_WRITE_RATE_LIMIT_MS = 600;
+
+const runReadLimited = createRateLimitedExecutor(MESSAGES_READ_RATE_LIMIT_MS);
+const runWriteLimited = createRateLimitedExecutor(MESSAGES_WRITE_RATE_LIMIT_MS);
+
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
   }
-  console.error(`[DynamoDB TrackingMessages ${op}]`, err);
-  return new Error(`DynamoDB TrackingMessages ${op} failed`);
+}
+
+async function send(path: string, init?: RequestInit): Promise<Response> {
+  const headers = await authHeaders();
+  return fetch(path, {
+    ...init,
+    headers: { ...headers, ...(init?.body ? { "content-type": "application/json" } : {}) },
+  });
+}
+
+async function failure(response: Response, op: string): Promise<Error> {
+  let message = `Tracking messages ${op} failed (HTTP ${response.status})`;
+  try {
+    const body = (await response.json()) as { error?: string };
+    if (body?.error) message = body.error;
+  } catch {
+    /* non-JSON error body — the status line is enough */
+  }
+  return new Error(message);
 }
 
 export function createTrackingMessageId(loadId: string) {
@@ -85,21 +99,15 @@ function recordToMessage(record: TrackingMessageRecord): TrackingMessageDto {
 
 export async function listTrackingMessages(loadId: string): Promise<TrackingMessageDto[]> {
   if (!loadId.trim()) return [];
-  if (!isTrackingMessagesConfigured()) return [];
 
   return runReadLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const items = await queryAllItems<TrackingMessageRecord>(client, {
-        TableName: getTrackingMessagesTableName(),
-        KeyConditionExpression: "loadId = :loadId",
-        ExpressionAttributeValues: { ":loadId": loadId.trim() },
-        ScanIndexForward: true,
-      });
-      return items.map(recordToMessage);
-    } catch (err) {
-      throw describeError(err, "Query");
-    }
+    const response = await send(`${PATH}?loadId=${encodeURIComponent(loadId.trim())}`);
+    // A load the caller cannot see is indistinguishable from one that does not
+    // exist, and neither is an error worth surfacing — the thread is empty.
+    if (response.status === 404) return [];
+    if (!response.ok) throw await failure(response, "Query");
+    const body = (await response.json()) as { messages?: TrackingMessageRecord[] };
+    return (body.messages ?? []).map(recordToMessage);
   });
 }
 
@@ -111,11 +119,6 @@ export async function putTrackingMessage(
   }
   if (!input.text?.trim()) {
     throw new Error("text is required");
-  }
-  if (!isTrackingMessagesConfigured()) {
-    throw new Error(
-      "Tracking messages table is not configured. Set VITE_TRACKING_MESSAGES_TABLE_NAME in .env.",
-    );
   }
 
   const timestamp = input.timestamp ?? new Date().toISOString();
@@ -132,18 +135,10 @@ export async function putTrackingMessage(
   };
 
   return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new PutCommand({
-          TableName: getTrackingMessagesTableName(),
-          Item: item,
-        }),
-      );
-      return recordToMessage(item);
-    } catch (err) {
-      throw describeError(err, "PutItem");
-    }
+    const response = await send(PATH, { method: "POST", body: JSON.stringify(item) });
+    if (!response.ok) throw await failure(response, "PutItem");
+    const body = (await response.json()) as { message?: TrackingMessageRecord };
+    return recordToMessage(body.message ?? item);
   });
 }
 
@@ -154,23 +149,12 @@ export async function deleteTrackingMessageRecord(
   if (!loadId.trim() || !messageId.trim()) {
     throw new Error("loadId and messageId are required");
   }
-  if (!isTrackingMessagesConfigured()) {
-    throw new Error(
-      "Tracking messages table is not configured. Set VITE_TRACKING_MESSAGES_TABLE_NAME in .env.",
-    );
-  }
 
   return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new DeleteCommand({
-          TableName: getTrackingMessagesTableName(),
-          Key: { loadId: loadId.trim(), messageId: messageId.trim() },
-        }),
-      );
-    } catch (err) {
-      throw describeError(err, "DeleteItem");
-    }
+    const query = `loadId=${encodeURIComponent(loadId.trim())}&messageId=${encodeURIComponent(messageId.trim())}`;
+    const response = await send(`${PATH}?${query}`, { method: "DELETE" });
+    // Already gone is the desired end state.
+    if (response.status === 404) return;
+    if (!response.ok) throw await failure(response, "DeleteItem");
   });
 }

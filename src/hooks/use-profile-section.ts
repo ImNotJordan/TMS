@@ -10,7 +10,7 @@ import {
   readProfileSectionCache,
   writeProfileSectionCache,
 } from "@/lib/profile-section-cache";
-import { getSection, putSection, putSectionMerge, type SectionKey } from "@/lib/profile-store";
+import { getSection, putOwnSection, type SectionKey } from "@/lib/profile-store";
 
 export type UseProfileSection<T> = {
   data: T;
@@ -138,17 +138,16 @@ export function useProfileSection<T extends Record<string, unknown>>(
     setError(null);
     try {
       const payload = serverPayload(data);
+      // Self-service path: own userId, privileged fields stripped at the store.
+      const written = await putOwnSection(userId, section, payload, { merge: mergeOnSave });
+      const updatedAt = new Date().toISOString();
       if (mergeOnSave) {
-        const merged = await putSectionMerge(userId, section, payload);
-        const updatedAt = new Date().toISOString();
-        writeProfileSectionCache(userId, section, merged, updatedAt);
-        const next = mergeProfileDefaults(defaultsRef.current, merged);
+        writeProfileSectionCache(userId, section, written, updatedAt);
+        const next = mergeProfileDefaults(defaultsRef.current, written);
         setData(next);
         setInitial(next);
       } else {
-        await putSection(userId, section, data);
-        const updatedAt = new Date().toISOString();
-        writeProfileSectionCache(userId, section, payload, updatedAt);
+        writeProfileSectionCache(userId, section, written, updatedAt);
         setInitial(data);
       }
     } catch (e) {

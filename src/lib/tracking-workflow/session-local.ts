@@ -1,4 +1,15 @@
-import { isDynamoResourceNotFound, isTrackingMessagesConfigured } from "../dynamodb";
+import { isDynamoResourceNotFound } from "../dynamodb";
+
+/**
+ * Message persistence is always available now.
+ *
+ * This used to read `VITE_TRACKING_MESSAGES_TABLE_NAME` to decide whether the
+ * browser could reach the table. Messages go through `/api/tracking-messages`
+ * today, so the table name is a server concern and that variable no longer has
+ * to exist in the browser build — but the gates below still read well as
+ * "should we persist?", so they stay and this answers yes.
+ */
+const isTrackingMessagesConfigured = () => true;
 import { isDriverGpsFresh } from "../driver-gps";
 import type { LoadRecord } from "../loads-store";
 import { trackingDocumentsFromLoad } from "../load-documents";
@@ -36,7 +47,6 @@ export type {
   TrackingTimelineEvent,
 };
 export { DRIVER_ACTION_LABELS, TRACKING_STATE_LABELS };
-
 
 type TrackingListener = () => void;
 
@@ -90,9 +100,7 @@ function mergeCloudIntoSession(
     ...base,
     ...rest,
     messages: base.messages,
-    documents: base.documents.length
-      ? base.documents
-      : (documentMeta ?? []).map((d) => ({ ...d })),
+    documents: base.documents.length ? base.documents : (documentMeta ?? []).map((d) => ({ ...d })),
   };
 }
 
@@ -143,12 +151,12 @@ function flushPersist() {
   if (persistDirty) persist();
 }
 
-async function writeSessionToLoad(loadId: string) {
+async function writeSessionToLoad(loadId: string, propagateDriverStatus = false) {
   const session = sessionsByLoadId[loadId];
   if (!session || cloudPersistInFlight.has(loadId)) return;
   cloudPersistInFlight.add(loadId);
   try {
-    const { getLoadById, updateLoad } = await import("../loads-store");
+    const { getLoadById, patchLoad } = await import("../loads-store");
     const load = await getLoadById(loadId);
     if (!load) return;
     const cloud = toTrackingSessionCloud(session);
@@ -160,11 +168,16 @@ async function writeSessionToLoad(loadId: string) {
     ) {
       return;
     }
-    await updateLoad({
-      ...load,
-      trackingSession: cloud,
-      driverWorkflowStatus: cloud.trackingState,
-    });
+
+    // `driverWorkflowStatus` belongs to the driver portal. A background write-through
+    // (poll, ticker, session rebuild) must never touch it — GetItem is eventually
+    // consistent, so `load` can easily predate the driver's latest tap. Only an explicit
+    // dispatcher action on the Driver Actions row is allowed to speak for the driver.
+    const driverWorkflowStatus = propagateDriverStatus
+      ? driverWorkflowForCloudWrite(cloud.trackingState, load.driverWorkflowStatus)
+      : undefined;
+
+    await patchLoad(loadId, { trackingSession: cloud, driverWorkflowStatus });
   } catch (err) {
     console.warn("[tracking] cloud persist failed", loadId, err);
   } finally {
@@ -176,20 +189,22 @@ async function writeSessionToLoad(loadId: string) {
 export function scheduleCloudPersist(
   loadId: string,
   mode: "immediate" | "debounce" = "immediate",
+  opts?: { propagateDriverStatus?: boolean },
 ) {
   if (typeof window === "undefined") return;
+  const propagate = opts?.propagateDriverStatus ?? false;
   const existing = cloudPersistTimers.get(loadId);
   if (existing) {
     clearTimeout(existing);
     cloudPersistTimers.delete(loadId);
   }
   if (mode === "immediate") {
-    void writeSessionToLoad(loadId);
+    void writeSessionToLoad(loadId, propagate);
     return;
   }
   const timer = setTimeout(() => {
     cloudPersistTimers.delete(loadId);
-    void writeSessionToLoad(loadId);
+    void writeSessionToLoad(loadId, propagate);
   }, CLOUD_PERSIST_DEBOUNCE_MS);
   cloudPersistTimers.set(loadId, timer);
 }
@@ -202,10 +217,7 @@ function emit(persistMode: EmitMode = "immediate", cloudLoadId?: string) {
   if (persistMode === "immediate") persist();
   else if (persistMode === "debounce") schedulePersist();
   if (cloudLoadId) {
-    scheduleCloudPersist(
-      cloudLoadId,
-      persistMode === "debounce" ? "debounce" : "immediate",
-    );
+    scheduleCloudPersist(cloudLoadId, persistMode === "debounce" ? "debounce" : "immediate");
   }
   for (const listener of listeners) listener();
 }
@@ -262,11 +274,14 @@ function ensureTicker() {
       if (!MOVABLE_STATES.includes(session.trackingState)) continue;
 
       // Keep live driver GPS — don't overwrite with simulated route progress.
-      if (session.gps.source === "driver" && isDriverGpsFresh({
-        lat: session.gps.location.lat,
-        lng: session.gps.location.lng,
-        lastPingAt: session.gps.lastPingAt,
-      })) {
+      if (
+        session.gps.source === "driver" &&
+        isDriverGpsFresh({
+          lat: session.gps.location.lat,
+          lng: session.gps.location.lng,
+          lastPingAt: session.gps.lastPingAt,
+        })
+      ) {
         continue;
       }
 
@@ -509,6 +524,84 @@ const TRACKING_STATE_RANK: Record<TrackingState, number> = {
   exception: -1,
 };
 
+/**
+ * Ops `loadStatus` values that imply the driver is already moving, used when the
+ * driver app has not reported a `driverWorkflowStatus` yet. `driver-assigned`,
+ * `active`, `booked` and `tendered` are deliberately absent — they describe what
+ * dispatch did, not driver acceptance, and must stay on "waiting-driver".
+ */
+const TRACKING_STATE_BY_LOAD_STATUS: Record<string, TrackingState> = {
+  "driver-accepted": "driver-accepted",
+  dispatched: "en-route-pickup",
+  "en-route-pickup": "en-route-pickup",
+  en_route_pickup: "en-route-pickup",
+  "at-pickup": "at-pickup",
+  at_pickup: "at-pickup",
+  loaded: "at-pickup",
+  "in-transit": "in-transit",
+  in_transit: "in-transit",
+  "en-route-delivery": "in-transit",
+  en_route_delivery: "in-transit",
+  "at-delivery": "at-delivery",
+  at_delivery: "at-delivery",
+  "pod-uploaded": "pod-uploaded",
+  exception: "exception",
+};
+
+/**
+ * `driverWorkflowStatus` is written by both apps but PARSED by the driver portal against
+ * its own `ActiveLoadStatus` vocabulary — not `TrackingState`. Stamping raw tracking
+ * states into it ("driver-accepted", "in-transit", "waiting-driver") leaves the portal
+ * unable to recognise the value, so it falls back to "assigned" and the driver watches
+ * their progress revert. Translate before writing; states with no driver-side
+ * equivalent write nothing at all.
+ */
+const DRIVER_WORKFLOW_BY_TRACKING_STATE: Partial<Record<TrackingState, string>> = {
+  "driver-accepted": "assigned",
+  "en-route-pickup": "en-route-pickup",
+  "at-pickup": "at-pickup",
+  "in-transit": "en-route-delivery",
+  "at-delivery": "at-delivery",
+  delivered: "delivered",
+  "pod-uploaded": "pod-uploaded",
+  completed: "completed",
+  // "waiting-driver" and "exception" are intentionally absent: neither describes a step
+  // the driver reported, so neither may overwrite what the driver last said.
+};
+
+/** Driver-portal step order, mirroring apps/driver-portal `STATUS_STEPS`. */
+const DRIVER_WORKFLOW_ORDER = [
+  "assigned",
+  "en-route-pickup",
+  "at-pickup",
+  "loaded",
+  "en-route-delivery",
+  "at-delivery",
+  "delivered",
+  "pod-uploaded",
+  "completed",
+];
+
+/**
+ * The `driverWorkflowStatus` an ops write-through may safely set, or undefined to leave
+ * the field untouched.
+ */
+export function driverWorkflowForCloudWrite(
+  state: TrackingState,
+  current?: string,
+): string | undefined {
+  const mapped = DRIVER_WORKFLOW_BY_TRACKING_STATE[state];
+  if (!mapped) return undefined;
+  const now = (current ?? "").trim().toLowerCase();
+  if (!now) return mapped;
+  const from = DRIVER_WORKFLOW_ORDER.indexOf(now);
+  const to = DRIVER_WORKFLOW_ORDER.indexOf(mapped);
+  // Tracking collapses some driver steps (both "loaded" and "at-pickup" derive to
+  // at-pickup), so a naive write-back would walk the driver backwards. Never regress.
+  if (from >= 0 && to >= 0 && to < from) return undefined;
+  return mapped;
+}
+
 const PROGRESS_BY_STATE: Record<TrackingState, number> = {
   "waiting-driver": 0,
   "driver-accepted": 5,
@@ -562,6 +655,9 @@ export function deriveTrackingStateFromLoad(load: LoadRecord): TrackingState {
     case "pod-uploaded":
     case "completed":
       return workflow === "completed" ? "completed" : "pod-uploaded";
+    case "declined":
+      // Driver rejected the assignment — surface it as an exception so dispatch reassigns.
+      return "exception";
     default:
       break;
   }
@@ -579,15 +675,19 @@ export function deriveTrackingStateFromLoad(load: LoadRecord): TrackingState {
     if (fromHistory !== "waiting-driver") return fromHistory;
   }
 
-  if (load.assignedDriver?.trim()) {
-    // Assigned in ops but driver has not accepted / no portal workflow yet
-    return "waiting-driver";
-  }
+  // Dispatch can also advance a load by hand on the Loads page; honour that so the
+  // board does not sit on "Waiting for Driver" for a truck that is already rolling.
+  const fromLoadStatus = TRACKING_STATE_BY_LOAD_STATUS[loadStatus];
+  if (fromLoadStatus) return fromLoadStatus;
 
+  // Assigned in ops but the driver has not accepted / no portal workflow yet.
   return "waiting-driver";
 }
 
-function applyDerivedTrackingState(session: TrackingSession, state: TrackingState): TrackingSession {
+function applyDerivedTrackingState(
+  session: TrackingSession,
+  state: TrackingState,
+): TrackingSession {
   if (session.trackingState === "exception" && state === "waiting-driver") {
     return session;
   }
@@ -1083,7 +1183,9 @@ export function applyDriverAction(
     ];
     sessionsByLoadId = { ...sessionsByLoadId, [loadId]: next };
     emit("immediate");
-    scheduleCloudPersist(loadId, "immediate");
+    // Explicit dispatcher action on the Driver Actions row — allowed to speak for
+    // the driver, unlike background write-throughs.
+    scheduleCloudPersist(loadId, "immediate", { propagateDriverStatus: true });
     ensureTicker();
     return next;
   }
@@ -1178,7 +1280,7 @@ export function applyDriverAction(
 
   sessionsByLoadId = { ...sessionsByLoadId, [loadId]: next };
   emit("immediate");
-  scheduleCloudPersist(loadId, "immediate");
+  scheduleCloudPersist(loadId, "immediate", { propagateDriverStatus: true });
   ensureTicker();
   return next;
 }
@@ -1199,10 +1301,9 @@ export async function completeTrackingLoadAfterPod(
   loadId: string,
   opts?: { user?: string; notes?: string },
 ) {
-  const { getLoadById, updateLoad } = await import("../loads-store");
-  const { upsertOperationalListItem, getOperationalCacheScope } = await import(
-    "../operational-data-cache"
-  );
+  const { getLoadById, patchLoad } = await import("../loads-store");
+  const { upsertOperationalListItem, getOperationalCacheScope } =
+    await import("../operational-data-cache");
 
   const load = await getLoadById(loadId);
   if (!load) {
@@ -1217,21 +1318,23 @@ export async function completeTrackingLoadAfterPod(
     throw new Error("POD is not on file yet. Ask the driver to upload Proof of Delivery first.");
   }
 
-  const updated = await updateLoad({
-    ...load,
+  const session = applyDriverAction(loadId, "complete-load", {
+    user: opts?.user ?? "Dispatcher",
+    source: "dispatcher",
+    notes:
+      opts?.notes ??
+      "POD verified by dispatch. Load marked completed — ready for billing / invoice.",
+  });
+
+  // Close-out owns exactly these three attributes. A whole-item Put here would rewrite
+  // the driver's docs and GPS from a read that may already be out of date.
+  const changes = {
     loadStatus: "completed",
     driverWorkflowStatus: "completed",
-    trackingSession: (() => {
-      const session = applyDriverAction(loadId, "complete-load", {
-        user: opts?.user ?? "Dispatcher",
-        source: "dispatcher",
-        notes:
-          opts?.notes ??
-          "POD verified by dispatch. Load marked completed — ready for billing / invoice.",
-      });
-      return session ? toTrackingSessionCloud(session) : load.trackingSession;
-    })(),
-  });
+    trackingSession: session ? toTrackingSessionCloud(session) : load.trackingSession,
+  };
+  await patchLoad(loadId, changes);
+  const updated = { ...load, ...changes, updatedAt: new Date().toISOString() };
   upsertOperationalListItem("loads", getOperationalCacheScope(), updated, (row) => row.loadId);
 
   // Force session off the live board

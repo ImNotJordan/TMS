@@ -41,6 +41,9 @@ function LoadsPage() {
   const [declineTarget, setDeclineTarget] = useState<Load | null>(null);
   const { offeredLoads, myLoads, recordsById, acceptLoad, declineLoad } = useLoads();
 
+  // Dispatch-assigned loads live in "Available" until accepted — badge the tab so the
+  // driver doesn't go looking for them under "My loads".
+  const pendingAssignments = offeredLoads.filter((l) => l.assignedByDispatch).length;
   const activeMyLoads = myLoads.filter((l) => l.status !== "delivered");
   const completedLoads = myLoads
     .filter((l) => l.status === "delivered")
@@ -72,6 +75,11 @@ function LoadsPage() {
           )}
         >
           Available <span className="font-mono normal-case tracking-normal">({offeredLoads.length})</span>
+          {pendingAssignments > 0 ? (
+            <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[9px] font-bold normal-case tracking-normal text-primary-foreground">
+              {pendingAssignments}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"

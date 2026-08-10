@@ -10,7 +10,8 @@ export type OperationalListKind =
   | "crmLeads"
   | "crmActivities"
   | "crmCampaigns"
-  | "crmProspecting";
+  | "crmProspecting"
+  | "riskModels";
 
 type VersionedRecord = { updatedAt: string };
 
@@ -40,6 +41,7 @@ const ALL_KINDS: OperationalListKind[] = [
   "crmActivities",
   "crmCampaigns",
   "crmProspecting",
+  "riskModels",
 ];
 
 function emptyKindMaps(): Record<
@@ -77,6 +79,7 @@ const STORAGE_PREFIX: Record<OperationalListKind, string> = {
   crmActivities: "titan-freight:crm-activities-list:",
   crmCampaigns: "titan-freight:crm-campaigns-list:",
   crmProspecting: "titan-freight:crm-prospecting-list:",
+  riskModels: "titan-freight:risk-models-list:",
 };
 
 const LIST_ID_GETTERS: Record<OperationalListKind, (item: VersionedRecord) => string> = {
@@ -92,6 +95,7 @@ const LIST_ID_GETTERS: Record<OperationalListKind, (item: VersionedRecord) => st
   crmActivities: (item) => (item as unknown as { activityId: string }).activityId,
   crmCampaigns: (item) => (item as unknown as { campaignId: string }).campaignId,
   crmProspecting: (item) => (item as unknown as { runId: string }).runId,
+  riskModels: (item) => (item as unknown as { id: string }).id,
 };
 
 let cacheScope = "_";
