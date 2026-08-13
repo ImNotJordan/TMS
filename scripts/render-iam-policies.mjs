@@ -94,10 +94,18 @@ const ALL_TABLES = [
   "CrmProspectingRuns",
 ];
 
-/** Still reached directly from the browser, plus the two shared tables. */
+/**
+ * Still reached directly from the browser.
+ *
+ * `UsersTable` is gone: profile sections and the admin audit trail moved behind
+ * /api/profile and /api/admin/audit. While the browser held it, any signed-in
+ * user could Scan every colleague's PII across every tenant and delete audit
+ * entries — the self-service sanitizer was an accident guard, not a boundary.
+ *
+ * `WorkspaceSettings` remains, minus its `secrets` partition (denied below).
+ */
 const BROWSER_TABLES = [
   ...ALL_TABLES.filter((name) => !API_TABLES.includes(name)),
-  "UsersTable",
   "WorkspaceSettings",
 ];
 
@@ -134,21 +142,48 @@ function serverPolicy(account, withMigrationScan = false) {
         Resource: table(account, "WorkspaceSettings"),
       },
       {
+        // The profile table is now server-only: /api/profile and
+        // /api/admin/audit are the sole ways in, and the browser has no grant
+        // on it at all.
+        //
+        // Each action is listed because DynamoDB does not imply between them —
+        // BatchGetItem is not covered by GetItem, and Query is not covered by
+        // either. Scan is deliberately absent: every access here is keyed by a
+        // known userId, so there is nothing to scan for.
         Sid: "ProfileTable",
         Effect: "Allow",
-        Action: ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+        Action: [
+          "dynamodb:GetItem",
+          "dynamodb:BatchGetItem",
+          "dynamodb:Query",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+        ],
         Resource: table(account, "UsersTable"),
       },
       {
         // ListUsers is needed to resolve a Cognito `sub` (what the app carries)
         // to a `Username` (what the admin APIs key on) — they differ in this
         // pool because email sign-in makes Cognito generate its own username.
+        // The group actions back /api/admin/user-role. They live here and
+        // nowhere else: a group is only trustworthy because no browser can
+        // change it, so granting AdminAddUserToGroup to the Identity Pool role
+        // would let any signed-in user put themselves in `superadmin`.
+        //
+        // CreateGroup is included so the first assignment of a role works on a
+        // pool where that group has never existed, rather than failing until
+        // someone hand-provisions ten groups in the console.
         Sid: "CompanyAssignment",
         Effect: "Allow",
         Action: [
           "cognito-idp:AdminGetUser",
           "cognito-idp:AdminUpdateUserAttributes",
           "cognito-idp:ListUsers",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminRemoveUserFromGroup",
+          "cognito-idp:CreateGroup",
+          "cognito-idp:GetGroup",
         ],
         Resource: `arn:aws:cognito-idp:${REGION}:${account}:userpool/${USER_POOL_ID}`,
       },
@@ -209,22 +244,6 @@ function browserPolicy(account) {
         Condition: {
           "ForAnyValue:StringEquals": { "dynamodb:LeadingKeys": ["secrets"] },
         },
-      },
-      {
-        // Interim. Still lets any signed-in user rewrite anyone's attributes —
-        // narrowed to one pool, not fixed. Delete once create-user, password
-        // reset and resend-invite move behind server endpoints.
-        Sid: "CognitoAdminScopedToOwnPool",
-        Effect: "Allow",
-        Action: [
-          "cognito-idp:ListUsers",
-          "cognito-idp:AdminCreateUser",
-          "cognito-idp:AdminGetUser",
-          "cognito-idp:AdminUpdateUserAttributes",
-          "cognito-idp:AdminSetUserPassword",
-          "cognito-idp:AdminResetUserPassword",
-        ],
-        Resource: `arn:aws:cognito-idp:${REGION}:${account}:userpool/${USER_POOL_ID}`,
       },
     ],
   };

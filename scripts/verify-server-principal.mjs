@@ -14,14 +14,18 @@
 import { readFileSync } from "node:fs";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  BatchGetCommand,
+  DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
+  PutCommand,
   QueryCommand,
   ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import {
   AdminGetUserCommand,
+  AdminListGroupsForUserCommand,
   CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 
@@ -143,6 +147,85 @@ async function main() {
     record("dynamodb:GetItem on the Profile table", true, "readable");
   } catch (err) {
     record("dynamodb:GetItem on the Profile table", false, describe(err));
+  }
+
+  // 3b. The actions /api/profile and /api/admin/audit need.
+  //
+  // DynamoDB does not imply between these: Query is not covered by GetItem,
+  // and BatchGetItem is covered by neither. Each one is a separate grant and
+  // each one is load-bearing for a different endpoint, so each is probed.
+  try {
+    await ddb.send(
+      new QueryCommand({
+        TableName: profileTable,
+        KeyConditionExpression: "userId = :u",
+        ExpressionAttributeValues: { ":u": "__healthcheck__" },
+      }),
+    );
+    record("dynamodb:Query on the Profile table", true, "permitted — /api/profile, /api/admin/audit");
+  } catch (err) {
+    record("dynamodb:Query on the Profile table", false, describe(err));
+  }
+
+  try {
+    await ddb.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [profileTable]: { Keys: [{ userId: "__healthcheck__", section: "permissions" }] },
+        },
+      }),
+    );
+    record("dynamodb:BatchGetItem on the Profile table", true, "permitted — /api/admin/users");
+  } catch (err) {
+    record("dynamodb:BatchGetItem on the Profile table", false, describe(err));
+  }
+
+  // Writes a throwaway row and removes it again. Uses a reserved userId that no
+  // real account can hold, so a failure to clean up is inert.
+  try {
+    await ddb.send(
+      new PutCommand({
+        TableName: profileTable,
+        Item: {
+          userId: "__healthcheck__",
+          section: "__probe__",
+          data: {},
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+    );
+    record("dynamodb:PutItem on the Profile table", true, "permitted — profile saves, audit entries");
+    try {
+      await ddb.send(
+        new DeleteCommand({
+          TableName: profileTable,
+          Key: { userId: "__healthcheck__", section: "__probe__" },
+        }),
+      );
+    } catch {
+      // DeleteItem is deliberately not granted on this table — the audit trail
+      // is append-only. Leaving the probe row behind is the correct outcome.
+    }
+  } catch (err) {
+    record("dynamodb:PutItem on the Profile table", false, describe(err));
+  }
+
+  // 3c. Group management, for /api/admin/user-role.
+  try {
+    await idp.send(
+      new AdminListGroupsForUserCommand({
+        UserPoolId: userPoolId,
+        Username: "__healthcheck__",
+      }),
+    );
+    record("cognito-idp:AdminListGroupsForUser", true, "permitted");
+  } catch (err) {
+    const name = err?.name;
+    if (name === "UserNotFoundException") {
+      record("cognito-idp:AdminListGroupsForUser", true, "permitted (test user absent, as expected)");
+    } else {
+      record("cognito-idp:AdminListGroupsForUser", false, describe(err));
+    }
   }
 
   // 4. Cognito admin read — how company assignment finds the target user.

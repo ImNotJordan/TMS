@@ -2,8 +2,11 @@ import type { AdminUserDirectoryEntry } from "@/lib/admin-users-store";
 
 export type AdminDirectoryListResult = {
   users: AdminUserDirectoryEntry[];
-  source: "dynamodb" | "cognito";
+  source: "server" | "dynamodb" | "cognito";
   warning?: string;
+  scope?: "platform" | "company";
+  companyCount?: number;
+  canViewAllCompanies?: boolean;
 };
 
 type AdminDirectoryCacheEntry = AdminDirectoryListResult & {
@@ -85,9 +88,9 @@ export function prependAdminDirectoryCacheUser(scope: string, user: AdminUserDir
   const cached = readAdminDirectoryCache(scope);
   const users = [user, ...(cached?.users.filter((row) => row.id !== user.id) ?? [])];
   writeAdminDirectoryCache(scope, {
+    ...cached,
     users,
-    source: cached?.source ?? "dynamodb",
-    warning: cached?.warning,
+    source: cached?.source ?? "server",
   });
 }
 
@@ -129,11 +132,7 @@ export async function fetchAdminDirectoryCached(options: {
   const cached = readAdminDirectoryCache(options.scope);
 
   if (cached && !options.force) {
-    return {
-      users: [...cached.users],
-      source: cached.source,
-      warning: cached.warning,
-    };
+    return { ...cached, users: [...cached.users] };
   }
 
   const pending = inflight.get(options.scope);
@@ -144,19 +143,13 @@ export async function fetchAdminDirectoryCached(options: {
     const remoteFp = directoryFingerprint(remote.users);
 
     if (cached && options.force && cached.fingerprint === remoteFp) {
-      return {
-        users: [...cached.users],
-        source: cached.source,
-        warning: cached.warning,
-      };
+      // Unchanged data, but the *scope* may have moved (a group change, or a
+      // company assignment). Take the fresh metadata, keep the cached rows.
+      return { ...cached, ...remote, users: [...cached.users] };
     }
 
     writeAdminDirectoryCache(options.scope, remote);
-    return {
-      users: [...remote.users],
-      source: remote.source,
-      warning: remote.warning,
-    };
+    return { ...remote, users: [...remote.users] };
   })();
 
   inflight.set(options.scope, promise);

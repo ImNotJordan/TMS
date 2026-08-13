@@ -305,15 +305,56 @@ describe("Rule B — tenant-exempt roles", () => {
     });
   }
 
-  it("refuses to give a Driver a company", async () => {
+  // A Driver assignment records the *employer* on the Profile row. Rule B is
+  // about the token claim, and the claim is still never written — see
+  // directory-scope.ts for why the directory needs the second field.
+  it("records a Driver's employer instead of a company", async () => {
     callerIs();
     targetHas({});
     targetRoleIs("driver");
     const res = await handleCompanyAssignmentRequest(
       post({ userId: "user-9", companyId: ACME, companyName: "Acme Logistics" }),
     );
-    expect(res.status).toBe(409);
-    await expect(res.json()).resolves.toMatchObject({ code: "role_is_tenant_exempt" });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ scope: "employer" });
+
+    const update = dynamoSend.mock.calls
+      .map(([c]) => c as { constructor: { name: string }; input: Record<string, unknown> })
+      .find((c) => String(c.input?.UpdateExpression ?? "").includes("employerId"));
+    expect(update?.input.ExpressionAttributeNames).toMatchObject({
+      "#employerId": "employerCompanyId",
+    });
+    expect(update?.input.ExpressionAttributeValues).toMatchObject({ ":employerId": ACME });
+  });
+
+  it("never writes the Cognito company claim for a Driver", async () => {
+    callerIs();
+    targetHas({});
+    targetRoleIs("driver");
+    await handleCompanyAssignmentRequest(
+      post({ userId: "user-9", companyId: ACME, companyName: "Acme Logistics" }),
+    );
+
+    // This is the whole of Rule B: no claim, so requireCompanyId still fails
+    // closed for them and no tenant-scoped query will ever return their rows.
+    const wroteAttributes = cognitoSend.mock.calls.some(
+      ([c]) => (c as object).constructor.name === "AdminUpdateUserAttributesCommand",
+    );
+    expect(wroteAttributes).toBe(false);
+  });
+
+  it("refuses to set a Driver's employer to another company", async () => {
+    callerIs();
+    targetHas({});
+    targetRoleIs("driver");
+    const res = await handleCompanyAssignmentRequest(
+      post({ userId: "user-9", companyId: RIVAL, companyName: "Rival Freight" }),
+    );
+
+    // The employer path sits below the cross-tenant guard on purpose.
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({ code: "cross_company_assignment" });
   });
 
   // Clearing a company off someone who became a Driver is the corrective action

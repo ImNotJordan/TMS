@@ -51,6 +51,14 @@ import {
   handleBiddingWorkspaceRequest,
   isBiddingWorkspaceRequest,
 } from "./lib/bidding-workspace-proxy";
+import { handleAdminUsersRequest, isAdminUsersRequest } from "./lib/admin-users-proxy";
+import { handleUserRoleRequest, isUserRoleRequest } from "./lib/admin-role-proxy";
+import { handleProfileRequest, isProfileRequest } from "./lib/profile-proxy";
+import { handleAdminAuditRequest, isAdminAuditRequest } from "./lib/admin-audit-proxy";
+import {
+  handleAdminCredentialsRequest,
+  isAdminCredentialsRequest,
+} from "./lib/admin-credentials-proxy";
 import { handleGeocodeSearchRequest, isGeocodeSearchRequest } from "./lib/geocode-proxy";
 import {
   handleGoogleDirectionsRequest,
@@ -151,6 +159,21 @@ export default {
       }
       if (isGoogleDirectionsRequest(url, request.method)) {
         return handleGoogleDirectionsRequest(url, request);
+      }
+      if (isProfileRequest(url, request.method)) {
+        return handleProfileRequest(request);
+      }
+      if (isAdminAuditRequest(url, request.method)) {
+        return handleAdminAuditRequest(request);
+      }
+      if (isAdminCredentialsRequest(url, request.method)) {
+        return handleAdminCredentialsRequest(request);
+      }
+      if (isUserRoleRequest(url, request.method)) {
+        return handleUserRoleRequest(request);
+      }
+      if (isAdminUsersRequest(url, request.method)) {
+        return handleAdminUsersRequest(request);
       }
       if (isCompanyAssignmentRequest(url, request.method)) {
         return handleCompanyAssignmentRequest(request);

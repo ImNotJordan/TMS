@@ -11,6 +11,12 @@
  * - SENDGRID_FROM_EMAIL
  */
 
+import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
+import {
+  logTenantDenial,
+  tenantErrorResponse,
+  type TenantContext,
+} from "@/lib/tenant/server-tenant-context";
 import {
   agentDraftSchema,
   emailSendSchema,
@@ -22,8 +28,19 @@ type WorkerEnv = {
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
   TWILIO_FROM_NUMBER?: string;
+  /**
+   * Per-company sending numbers, as JSON: `{"<companyId>": "+15555550123"}`.
+   *
+   * One shared number for every tenant means a recipient cannot tell which
+   * company messaged them, and one tenant's spam complaints damage everyone
+   * else's delivery reputation. Configure this and each company sends as
+   * itself; leave it unset and the shared number is used, which is recorded on
+   * every send so the exposure stays visible rather than implicit.
+   */
+  TWILIO_FROM_NUMBERS?: string;
   SENDGRID_API_KEY?: string;
   SENDGRID_FROM_EMAIL?: string;
+  SENDGRID_FROM_EMAILS?: string;
   OPENAI_API_KEY?: string;
 };
 
@@ -48,6 +65,94 @@ function readEnv(request: Request): WorkerEnv {
   return { ...globalEnv, ...cf };
 }
 
+/**
+ * Authenticate the caller, or produce the response to send instead.
+ *
+ * `requireCurrentTenantContext` rather than `tryVerifiedIdClaims`: it verifies
+ * the token *and* refuses one issued before the user's session was revoked. The
+ * weaker check let a stale token keep working after a company reassignment.
+ *
+ * Drivers pass — they carry no company but do use messaging — so this asserts
+ * identity, not tenancy. Per-endpoint authorization is separate and stricter.
+ */
+async function requireCaller(request: Request): Promise<TenantContext | Response> {
+  try {
+    return await requireCurrentTenantContext(request);
+  } catch (err) {
+    return (
+      tenantErrorResponse(err) ??
+      jsonError("Sign in required to use messaging.", 401, "not_authenticated")
+    );
+  }
+}
+
+/**
+ * May this caller send outbound messages on a company's behalf?
+ *
+ * One rule rather than a role allowlist: **you may only send as a company you
+ * belong to.** Drivers are tenant-exempt and carry no `companyId`, so this
+ * denies them by construction — messaging a customer from the company's number
+ * is not a driver capability, and no list has to be maintained to say so. A
+ * user awaiting company assignment is denied for the same reason.
+ *
+ * Finer-grained control already exists in the `Communications` module
+ * permissions (`rbac.ts`) if it is wanted later. It is deliberately not used as
+ * the boundary here: those live in the Profile mirror, whereas the company
+ * claim is signed into the token.
+ */
+function authorizeSender(ctx: TenantContext): Response | null {
+  if (ctx.isTenantExempt) {
+    logTenantDenial(ctx, "outbound message from a tenant-exempt role", "/api/comms");
+    return jsonError(
+      "Your role cannot send outbound messages. Use the load conversation instead.",
+      403,
+      "forbidden",
+    );
+  }
+  if (!ctx.companyId) {
+    logTenantDenial(ctx, "outbound message without a company", "/api/comms");
+    return jsonError(
+      "Your account has no company assigned, so it cannot send messages yet.",
+      403,
+      "no_company_context",
+    );
+  }
+  return null;
+}
+
+/** Parse a `{ companyId: value }` JSON map from env, tolerating a bad value. */
+function parseSenderMap(raw: string | undefined): Record<string, string> {
+  if (!raw?.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, string>;
+  } catch {
+    // Misconfiguration must not take messaging down; the shared fallback still
+    // works and the warning says why the per-company identity was ignored.
+    console.warn("[comms] sender map is not valid JSON — falling back to the shared identity");
+    return {};
+  }
+}
+
+/**
+ * The sending identity for a company, and whether it is that company's own.
+ *
+ * `shared: true` means the message goes out under the default identity, which
+ * is a real cross-tenant leak of a lesser kind: the recipient attributes it to
+ * whoever else uses that number.
+ */
+function resolveSender(
+  env: WorkerEnv,
+  companyId: string,
+  mapRaw: string | undefined,
+  fallback: string | undefined,
+): { identity?: string; shared: boolean } {
+  const dedicated = parseSenderMap(mapRaw)[companyId]?.trim();
+  if (dedicated) return { identity: dedicated, shared: false };
+  return { identity: fallback?.trim(), shared: true };
+}
+
 function clientKey(request: Request): string {
   return (
     request.headers.get("cf-connecting-ip") ??
@@ -56,8 +161,15 @@ function clientKey(request: Request): string {
   );
 }
 
-function enforceRateLimit(request: Request, bucket: string): Response | null {
-  const key = `${bucket}:${clientKey(request)}`;
+/**
+ * Rate limit, keyed by caller when we know who they are.
+ *
+ * An IP key is close to useless for an authenticated endpoint: one caller
+ * rotates addresses to escape it, and users behind a shared egress IP throttle
+ * each other. `identity` is the account, so the budget follows the actor.
+ */
+function enforceRateLimit(request: Request, bucket: string, identity?: string): Response | null {
+  const key = `${bucket}:${identity ?? clientKey(request)}`;
   const now = Date.now();
   const current = rateBuckets.get(key);
   if (!current || current.resetAt <= now) {
@@ -126,10 +238,10 @@ async function sendViaTwilio(
   env: WorkerEnv,
   to: string,
   body: string,
+  from?: string,
 ): Promise<{ providerMessageId: string; status: string; mock?: boolean }> {
   const sid = env.TWILIO_ACCOUNT_SID?.trim();
   const token = env.TWILIO_AUTH_TOKEN?.trim();
-  const from = env.TWILIO_FROM_NUMBER?.trim();
 
   if (!sid || !token || !from) {
     // Dev / disconnected: mock success without exposing missing secrets.
@@ -197,12 +309,13 @@ export function isCommsAgentDraftRequest(url: URL, method: string) {
 }
 
 export async function handleCommsSmsSendRequest(request: Request): Promise<Response> {
-  const { tryVerifiedIdClaims } = await import("@/lib/ai/cognito-request-credentials");
-  if (!(await tryVerifiedIdClaims(request))?.sub) {
-    return jsonError("Sign in required to send messages.", 401, "not_authenticated");
-  }
+  const caller = await requireCaller(request);
+  if (caller instanceof Response) return caller;
 
-  const limited = enforceRateLimit(request, "sms-send");
+  const denied = authorizeSender(caller);
+  if (denied) return denied;
+
+  const limited = enforceRateLimit(request, "sms-send", caller.userId);
   if (limited) return limited;
 
   pruneIdempotency();
@@ -233,7 +346,33 @@ export async function handleCommsSmsSendRequest(request: Request): Promise<Respo
   }
 
   try {
-    const result = await sendViaTwilio(readEnv(request), parsed.data.to, parsed.data.body);
+    const env = readEnv(request);
+    const sender = resolveSender(
+      env,
+      caller.companyId!,
+      env.TWILIO_FROM_NUMBERS,
+      env.TWILIO_FROM_NUMBER,
+    );
+    if (sender.shared) {
+      console.warn("[comms] sending under the shared number", {
+        companyId: caller.companyId,
+        hint: "set TWILIO_FROM_NUMBERS to give this company its own identity",
+      });
+    }
+
+    const result = await sendViaTwilio(env, parsed.data.to, parsed.data.body, sender.identity);
+
+    // Every outbound message is attributable. Recipient digits are truncated:
+    // the audit needs to identify the send, not retain the contact.
+    console.info("[audit] sms sent", {
+      actor: caller.userId,
+      actorRole: caller.role,
+      companyId: caller.companyId,
+      toSuffix: parsed.data.to.slice(-4),
+      providerMessageId: result.providerMessageId,
+      sharedSenderIdentity: sender.shared,
+      at: new Date().toISOString(),
+    });
     idempotencyCache.set(idempotencyKey, {
       providerMessageId: result.providerMessageId,
       status: result.status,
@@ -314,12 +453,13 @@ export async function handleCommsSmsInboundRequest(request: Request): Promise<Re
 }
 
 export async function handleCommsEmailSendRequest(request: Request): Promise<Response> {
-  const { tryVerifiedIdClaims } = await import("@/lib/ai/cognito-request-credentials");
-  if (!(await tryVerifiedIdClaims(request))?.sub) {
-    return jsonError("Sign in required to send messages.", 401, "not_authenticated");
-  }
+  const caller = await requireCaller(request);
+  if (caller instanceof Response) return caller;
 
-  const limited = enforceRateLimit(request, "email-send");
+  const denied = authorizeSender(caller);
+  if (denied) return denied;
+
+  const limited = enforceRateLimit(request, "email-send", caller.userId);
   if (limited) return limited;
 
   const idempotencyKey = request.headers.get("Idempotency-Key")?.trim();
@@ -344,7 +484,22 @@ export async function handleCommsEmailSendRequest(request: Request): Promise<Res
 
   const env = readEnv(request);
   const apiKey = env.SENDGRID_API_KEY?.trim();
-  const fromEmail = env.SENDGRID_FROM_EMAIL?.trim() ?? "noreply@example.com";
+  // Same per-company identity as SMS: a shared From address means the recipient
+  // cannot tell which company wrote to them, and one tenant's complaints hurt
+  // everyone's deliverability.
+  const sender = resolveSender(
+    env,
+    caller.companyId!,
+    env.SENDGRID_FROM_EMAILS,
+    env.SENDGRID_FROM_EMAIL,
+  );
+  const fromEmail = sender.identity ?? "noreply@example.com";
+  if (sender.shared) {
+    console.warn("[comms] sending under the shared email identity", {
+      companyId: caller.companyId,
+      hint: "set SENDGRID_FROM_EMAILS to give this company its own identity",
+    });
+  }
 
   if (!apiKey) {
     const providerMessageId = `SG_MOCK_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
@@ -387,7 +542,14 @@ export async function handleCommsEmailSendRequest(request: Request): Promise<Res
 }
 
 export async function handleCommsTranslateRequest(request: Request): Promise<Response> {
-  const limited = enforceRateLimit(request, "translate");
+  // Was reachable with no token at all: the handler validated the body and did
+  // the work, so an empty request answered 400 and a well-formed one answered
+  // 200. Authentication belongs before rate limiting and before the schema —
+  // an anonymous caller should never reach either.
+  const caller = await requireCaller(request);
+  if (caller instanceof Response) return caller;
+
+  const limited = enforceRateLimit(request, "translate", caller.userId);
   if (limited) return limited;
 
   const raw = await parseJsonBody(request);
@@ -414,7 +576,13 @@ export async function handleCommsTranslateRequest(request: Request): Promise<Res
 }
 
 export async function handleCommsAgentDraftRequest(request: Request): Promise<Response> {
-  const limited = enforceRateLimit(request, "agent-draft");
+  // Same hole as translate, and a costlier one: this accepts 8 KB of thread
+  // summary plus 4 KB of inbound text and is the endpoint a real model gets
+  // wired into.
+  const caller = await requireCaller(request);
+  if (caller instanceof Response) return caller;
+
+  const limited = enforceRateLimit(request, "agent-draft", caller.userId);
   if (limited) return limited;
 
   const raw = await parseJsonBody(request);

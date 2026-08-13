@@ -7,8 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { assignUserCompany, listKnownCompanies, type KnownCompany } from "@/lib/admin-users-store";
 import { newCompanyId, normalizeCompanyName } from "@/lib/tenant/company-context";
-import { TENANT_EXEMPT_ROLES } from "@/lib/tenant/server-tenant-context";
-import { normalizeRole } from "@/lib/admin-user-constants";
+import { isRoleTenantExempt } from "@/lib/tenant/tenant-exemption";
+import { strictRole } from "@/lib/tenant/strict-role";
 
 /**
  * Assign a user to a company.
@@ -28,6 +28,8 @@ export function CompanyAssignmentCard({
   role,
   currentCompanyId,
   currentCompanyName,
+  currentEmployerCompanyId,
+  currentEmployerCompanyName,
   onAssigned,
 }: {
   userId: string;
@@ -35,15 +37,29 @@ export function CompanyAssignmentCard({
   role?: string;
   currentCompanyId?: string;
   currentCompanyName?: string;
-  onAssigned?: (company: { companyId: string | null; companyName: string | null }) => void;
+  /**
+   * Employer, for tenant-exempt roles. A Profile field, never a token claim —
+   * it decides directory visibility, not data access.
+   */
+  currentEmployerCompanyId?: string;
+  currentEmployerCompanyName?: string;
+  onAssigned?: (company: {
+    companyId: string | null;
+    companyName: string | null;
+    scope?: string;
+  }) => void;
 }) {
-  const [companyName, setCompanyName] = React.useState(currentCompanyName ?? "");
+  // One input serves both cards; which value seeds it depends on the role.
+  const tenantExemptRole = isRoleTenantExempt(strictRole(role));
+  const seededName = tenantExemptRole ? currentEmployerCompanyName : currentCompanyName;
+
+  const [companyName, setCompanyName] = React.useState(seededName ?? "");
   const [knownCompanies, setKnownCompanies] = React.useState<KnownCompany[]>([]);
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    setCompanyName(currentCompanyName ?? "");
-  }, [currentCompanyName]);
+    setCompanyName(seededName ?? "");
+  }, [seededName]);
 
   React.useEffect(() => {
     void listKnownCompanies()
@@ -71,7 +87,16 @@ export function CompanyAssignmentCard({
       const result = await assignUserCompany(userId, company);
       onAssigned?.(result);
 
-      if (!result.companyId) {
+      // An employer write touches no token, so none of the sign-in-again copy
+      // applies — saying it anyway would send admins chasing a step that does
+      // not exist.
+      if (result.scope === "employer") {
+        toast.success(result.companyId ? `Employer set to ${result.companyName}` : "Employer cleared", {
+          description: result.companyId
+            ? "They now appear in that company's directory. Their own access is unchanged."
+            : "They no longer appear in any company's directory. Their own access is unchanged.",
+        });
+      } else if (!result.companyId) {
         toast.success("Removed from company", {
           description: "They will lose access to that company's records when they next sign in.",
         });
@@ -83,7 +108,7 @@ export function CompanyAssignmentCard({
         });
       }
     } catch (err) {
-      toast.error("Could not assign company", {
+      toast.error(tenantExemptRole ? "Could not set employer" : "Could not assign company", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
     } finally {
@@ -91,43 +116,116 @@ export function CompanyAssignmentCard({
     }
   };
 
-  // Rule B: a Driver never carries a companyId. Offering the field would invite
-  // an assignment the server will refuse anyway.
-  const tenantExempt = TENANT_EXEMPT_ROLES.has(normalizeRole(role ?? ""));
+  /**
+   * Rule B still holds: a Driver never carries a `companyId` claim, so this card
+   * writes their **employer** instead — a Profile field that decides which
+   * company's admin sees them in the directory and nothing else.
+   *
+   * Resolved with `strictRole`, matching the server. `normalizeRole` answers
+   * "Operations Manager" for anything it does not recognise, which would quietly
+   * show the wrong card for an unexpected role.
+   */
+  const tenantExempt = isRoleTenantExempt(strictRole(role));
+
   if (tenantExempt) {
+    const employerUnchanged =
+      matched?.companyId === currentEmployerCompanyId && Boolean(currentEmployerCompanyId);
+    const employerRemoval = !trimmed && Boolean(currentEmployerCompanyId);
+
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Building2 className="h-4 w-4" /> Company
+            <Building2 className="h-4 w-4" /> Employer
           </CardTitle>
           <CardDescription>
-            Drivers are not assigned to a company. Their access is scoped to the loads assigned to
-            them, so a company would give them records they should not see.
+            Which company this driver works for. This controls who sees them in the user directory
+            and in load-assignment pickers — it grants no access to that company&apos;s records.
+            Their own access stays scoped to the loads assigned to them.
           </CardDescription>
         </CardHeader>
-        {currentCompanyId ? (
-          <CardContent className="space-y-3">
-            <p className="text-xs text-warning">
-              This driver still carries a company from before that rule applied. Remove it.
-            </p>
+        <CardContent className="space-y-3">
+          <label className="space-y-1 block">
+            <span className="text-xs font-medium text-muted-foreground">Employer</span>
+            <Input
+              value={companyName}
+              onChange={(event) => setCompanyName(event.target.value)}
+              list="admin-edit-known-companies"
+              placeholder="Start typing to pick or create"
+              autoComplete="off"
+              disabled={saving}
+            />
+            <datalist id="admin-edit-known-companies">
+              {knownCompanies.map((company) => (
+                <option key={company.companyId} value={company.companyName} />
+              ))}
+            </datalist>
+          </label>
+
+          <p className="text-xs text-muted-foreground">
+            {employerRemoval
+              ? "Clearing this hides the driver from every company's directory until an employer is set again."
+              : matched
+                ? `Existing company · ${matched.userCount} ${matched.userCount === 1 ? "user" : "users"}`
+                : trimmed
+                  ? "New company."
+                  : "No employer set — this driver is not listed in any company's directory."}
+          </p>
+
+          <div className="flex gap-2">
             <Button
               type="button"
               size="sm"
-              variant="outline"
-              disabled={saving}
-              onClick={() => void apply(true)}
+              disabled={saving || employerUnchanged || (!trimmed && !currentEmployerCompanyId)}
+              onClick={() => void apply(employerRemoval)}
             >
               {saving ? (
                 <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Removing…
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Applying…
                 </>
+              ) : employerRemoval ? (
+                "Clear employer"
               ) : (
-                "Remove from company"
+                "Set employer"
               )}
             </Button>
-          </CardContent>
-        ) : null}
+            {currentEmployerCompanyName && companyName !== currentEmployerCompanyName ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={saving}
+                onClick={() => setCompanyName(currentEmployerCompanyName)}
+              >
+                Cancel
+              </Button>
+            ) : null}
+          </div>
+
+          {currentCompanyId ? (
+            <div className="space-y-2 rounded-md border border-warning/40 bg-warning/5 p-3">
+              <p className="text-xs text-warning">
+                This driver still carries a company claim from before Rule B applied. That claim
+                grants them access to that company&apos;s records — remove it.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={saving}
+                onClick={() => void apply(true)}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Removing…
+                  </>
+                ) : (
+                  "Remove company claim"
+                )}
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
       </Card>
     );
   }

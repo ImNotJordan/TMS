@@ -50,6 +50,9 @@ function AdminEditUserPage() {
   const [company, setCompany] = React.useState<{
     companyId?: string;
     companyName?: string;
+    /** Tenant-exempt roles carry an employer instead — directory only. */
+    employerCompanyId?: string;
+    employerCompanyName?: string;
   }>({});
 
   usePageReady(fetchState === "loading");
@@ -80,7 +83,12 @@ function AdminEditUserPage() {
         void getAdminDirectoryUserById(userId)
           .then((entry) => {
             if (cancelled || !entry) return;
-            setCompany({ companyId: entry.companyId, companyName: entry.companyName });
+            setCompany({
+              companyId: entry.companyId,
+              companyName: entry.companyName,
+              employerCompanyId: entry.employerCompanyId,
+              employerCompanyName: entry.employerCompanyName,
+            });
           })
           .catch(() => {
             /* leave unassigned — the card shows "Not assigned" */
@@ -237,11 +245,23 @@ function AdminEditUserPage() {
           role={draft.role}
           currentCompanyId={company.companyId}
           currentCompanyName={company.companyName}
+          currentEmployerCompanyId={company.employerCompanyId}
+          currentEmployerCompanyName={company.employerCompanyName}
           onAssigned={(assigned) =>
-            setCompany({
-              companyId: assigned.companyId ?? undefined,
-              companyName: assigned.companyName ?? undefined,
-            })
+            setCompany((prev) =>
+              // An employer write leaves the tenant claim alone, and vice versa.
+              assigned.scope === "employer"
+                ? {
+                    ...prev,
+                    employerCompanyId: assigned.companyId ?? undefined,
+                    employerCompanyName: assigned.companyName ?? undefined,
+                  }
+                : {
+                    ...prev,
+                    companyId: assigned.companyId ?? undefined,
+                    companyName: assigned.companyName ?? undefined,
+                  },
+            )
           }
         />
 

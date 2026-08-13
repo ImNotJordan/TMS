@@ -56,6 +56,15 @@ import {
 } from "@/lib/tenant/server-tenant-context";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
 import { invalidateCachedRole } from "@/lib/ai/ai-authz";
+import {
+  EMPLOYER_COMPANY_ID_FIELD,
+  EMPLOYER_COMPANY_NAME_FIELD,
+} from "@/lib/tenant/directory-scope";
+import {
+  findNameCollision,
+  listKnownCompanies,
+  type KnownCompany,
+} from "@/lib/tenant/known-companies";
 
 const MAX_COMPANY_ID_LENGTH = 128;
 const MAX_COMPANY_NAME_LENGTH = 200;
@@ -252,33 +261,24 @@ export async function handleCompanyAssignmentRequest(request: Request): Promise<
 
   const { username, companyId: currentCompanyId, sessionEpoch: currentEpoch } = target;
 
-  // Rule B: a Driver must never carry a companyId. Their access is scoped by
-  // assignment, not tenancy — giving one a company would hand them that
-  // company's entire dataset through the ordinary tenant filter.
+  // Rule B: a Driver must never carry a `custom:companyId` claim. Their access
+  // is scoped by assignment, not tenancy — giving one the claim would hand them
+  // that company's entire dataset through the ordinary tenant filter.
   //
-  // Removal (empty companyId) stays allowed: clearing a company off a user who
-  // became a Driver is exactly the corrective action this rule wants.
-  if (companyId) {
-    let targetRole: Role | null;
-    try {
-      targetRole = await readTargetRole(request, targetUserId);
-    } catch {
-      return jsonError("Could not load that user.", 502, "error");
-    }
-    if (targetRole && TENANT_EXEMPT_ROLES.has(targetRole)) {
-      logTenantDenial(
-        ctx,
-        `refused company assignment for tenant-exempt role ${targetRole}`,
-        "/api/admin/company-assignment",
-      );
-      return jsonError(
-        `${targetRole}s are not assigned to a company — their access is scoped to the loads ` +
-          `assigned to them. Change their role first if this is not a ${targetRole}.`,
-        409,
-        "role_is_tenant_exempt",
-      );
-    }
+  // But a Driver still has an employer, and the directory has to be able to
+  // scope on it: without one, every company's admin sees every driver in the
+  // pool, because the "no company yet" carve-out never expires for them.
+  //
+  // So a Driver assignment writes `employerCompanyId` to the Profile row and
+  // stops there. No claim, no epoch bump — nothing about their token changes,
+  // and `requireCompanyId` still fails closed for them exactly as before.
+  let targetRole: Role | null = null;
+  try {
+    targetRole = await readTargetRole(request, targetUserId);
+  } catch {
+    return jsonError("Could not load that user.", 502, "error");
   }
+  const targetIsTenantExempt = Boolean(targetRole && TENANT_EXEMPT_ROLES.has(targetRole));
 
   // 3. Cross-tenant guard.
   //
@@ -331,6 +331,119 @@ export async function handleCompanyAssignmentRequest(request: Request): Promise<
       by: ctx.userId,
       target: targetUserId,
     });
+  }
+
+  // 3b. Driver: record the employer and stop. Deliberately below the
+  //     cross-tenant guard, so an admin can only set a Driver's employer to
+  //     their own company — the same rule as a tenant assignment.
+  if (targetIsTenantExempt) {
+    try {
+      const client = await getAiDynamoClient(request);
+      await client.send(
+        new UpdateCommand({
+          TableName: getProfileTable(),
+          Key: { userId: targetUserId, section: "permissions" },
+          UpdateExpression: "SET #data = if_not_exists(#data, :empty)",
+          ExpressionAttributeNames: { "#data": "data" },
+          ExpressionAttributeValues: { ":empty": {} },
+        }) as never,
+      );
+      await client.send(
+        new UpdateCommand({
+          TableName: getProfileTable(),
+          Key: { userId: targetUserId, section: "permissions" },
+          UpdateExpression:
+            "SET #data.#employerId = :employerId, #data.#employerName = :employerName, " +
+            "#updatedAt = :now, #data.#assignedBy = :by",
+          ExpressionAttributeNames: {
+            "#data": "data",
+            "#employerId": EMPLOYER_COMPANY_ID_FIELD,
+            "#employerName": EMPLOYER_COMPANY_NAME_FIELD,
+            "#assignedBy": "employerAssignedBy",
+            "#updatedAt": "updatedAt",
+          },
+          ExpressionAttributeValues: {
+            ":employerId": companyId,
+            ":employerName": companyName,
+            ":now": new Date().toISOString(),
+            ":by": ctx.userId,
+          },
+        }) as never,
+      );
+    } catch (err) {
+      const name = err && typeof err === "object" ? (err as { name?: string }).name : undefined;
+      console.error("[admin] employer assignment failed", name ?? err);
+      return jsonError("Could not update that user.", 502, "error");
+    }
+
+    console.info("[audit] employer assignment", {
+      action: companyId ? "assign" : "remove",
+      actor: ctx.userId,
+      actorRole: ctx.role,
+      target: targetUserId,
+      targetRole,
+      companyId: companyId || null,
+      sourceIp: request.headers.get("cf-connecting-ip") ?? null,
+      at: new Date().toISOString(),
+    });
+
+    return Response.json({
+      ok: true,
+      userId: targetUserId,
+      companyId: companyId || null,
+      companyName: companyName || null,
+      // Nothing about their token changed, so there is nothing to refresh and
+      // no session to revoke.
+      tokenRefreshRequired: false,
+      revocationActive: false,
+      mirrored: true,
+      /** Distinguishes this from a tenant assignment for the UI's message. */
+      scope: "employer",
+    });
+  }
+
+  // 3c. Refuse to mint a second company under an existing name.
+  //
+  // This is the check that was missing when "HHI" came to exist twice. The
+  // client decides whether a typed name matches an existing company, and it can
+  // only match against companies it can see — so an admin scoped to their own
+  // tenant, or one looking at a directory that had not loaded, minted a fresh
+  // id for a name that was already taken. Two tenants, one label, and no screen
+  // shows the id that actually separates them.
+  //
+  // Only new ids are checked. Assigning someone to a company that already has
+  // users is the normal path and stays untouched.
+  if (companyId) {
+    let known: KnownCompany[] = [];
+    try {
+      known = await listKnownCompanies(request);
+    } catch (err) {
+      // A failure here must not block a legitimate assignment; log loudly and
+      // let it through rather than making company management depend on a
+      // best-effort lookup.
+      console.warn(
+        "[admin] could not check company names for collisions",
+        err instanceof Error ? err.message : err,
+      );
+    }
+
+    const isNewCompany = !known.some((c) => c.companyId === companyId);
+    const collision = isNewCompany ? findNameCollision(known, companyId, companyName) : null;
+    if (collision) {
+      logTenantDenial(
+        ctx,
+        "attempted to create a duplicate company name",
+        "/api/admin/company-assignment",
+      );
+      return jsonError(
+        `A company named "${collision.companyName}" already exists with ` +
+          `${collision.userCount} user${collision.userCount === 1 ? "" : "s"}. ` +
+          `Pick it from the list instead of creating a second one — two companies ` +
+          `sharing a name are separate tenants that cannot see each other's data.`,
+        409,
+        "duplicate_company_name",
+      );
+    }
   }
 
   // 4. Write the authoritative copy, and bump the epoch so the target's existing

@@ -343,8 +343,16 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
       }
       try {
         const { history } = appendStatusHistory(existing, "assigned", driver);
+        // No `assignedDriver` here, deliberately.
+        //
+        // Every load this portal can see is already assigned to this driver —
+        // the listing queries `assignedDriver = <their sub>` — so writing it
+        // would set the value the row already holds. The API rejects the field
+        // outright, and that is the right call: a driver who could write it
+        // could hand their load to another driver, or to a string matching
+        // nobody, which would orphan it. Accepting is a workflow transition,
+        // not a claim of ownership.
         const updated = await patchLoadRecord(id, {
-          assignedDriver: driver.userId,
           loadStatus: "driver-assigned",
           driverWorkflowStatus: "assigned",
           driverStatusHistory: history,

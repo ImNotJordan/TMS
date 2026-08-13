@@ -40,6 +40,11 @@ export const TENANT_EXEMPT_ROLES: ReadonlySet<string> = new Set(["Driver"]);
  */
 export const PLATFORM_ADMIN_GROUPS: ReadonlySet<string> = new Set([
   "SuperAdmin",
+  // The storage-key form, which is what role/group sync creates. Both are
+  // listed because pools provisioned before that sync may carry either. Being
+  // too broad here refuses nothing and grants nothing extra; being too narrow
+  // would silently fail to recognise a platform admin — see role-groups.ts.
+  "superadmin",
   "platform-admin",
 ]);
 

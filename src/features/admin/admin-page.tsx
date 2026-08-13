@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  ShieldAlert,
   BellRing,
   Building2,
   Clock3,
@@ -143,6 +144,12 @@ type UserRecord = {
   role: Role;
   department: string;
   status: UserStatus;
+  /**
+   * Company label for the list. For a Driver this is their *employer* — a
+   * directory field — because Rule B means they carry no companyId. See
+   * lib/tenant/directory-scope.ts.
+   */
+  company: string;
   team: string;
   lastLogin: string;
   inviteStatus: InviteStatus;
@@ -572,6 +579,7 @@ function mapLiveUser(entry: AdminUserDirectoryEntry, index: number): UserRecord 
     role: normalizeRole(entry.role),
     department: entry.department || "Operations",
     status,
+    company: entry.companyName || entry.employerCompanyName || "—",
     team: entry.team || "Unassigned",
     lastLogin: prettyDateTime(entry.lastLogin),
     inviteStatus: normalizeInviteStatus(entry.inviteStatus, status),
@@ -592,6 +600,22 @@ export function AdminPage() {
   const [users, setUsers] = React.useState<UserRecord[]>([]);
   const [usersLoading, setUsersLoading] = React.useState(true);
   const [usersWarning, setUsersWarning] = React.useState<string | null>(null);
+  /**
+   * Set when the caller is a platform admin, so the list spans every company.
+   * Without this the view is indistinguishable from a broken tenant filter —
+   * an admin sees another company's users and reasonably assumes a leak.
+   */
+  const [directoryScope, setDirectoryScope] = React.useState<{
+    scope?: "platform" | "company";
+    companyCount?: number;
+    canViewAllCompanies?: boolean;
+  }>({});
+  /**
+   * Opt-in cross-company view. Off by default even for platform admins —
+   * holding the privilege is not the same as wanting to use it, and defaulting
+   * to every tenant makes an ordinary screen look like a leak.
+   */
+  const [showAllCompanies, setShowAllCompanies] = React.useState(false);
   const [usersError, setUsersError] = React.useState<string | null>(null);
   const [userSearch, setUserSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | UserStatus>("all");
@@ -724,12 +748,20 @@ export function AdminPage() {
         return;
       }
 
-      const cached = readAdminDirectoryCache(cacheScope);
+      // Must match the key listAdminDirectoryUsersCached writes to, or the
+      // scoped view would be served the wider list straight from the cache.
+      const effectiveScope = showAllCompanies ? `${cacheScope}:all` : cacheScope;
+      const cached = readAdminDirectoryCache(effectiveScope);
       const hadCache = Boolean(cached?.users.length);
 
       if (hadCache && !options?.force) {
         setUsers(cached!.users.map(mapLiveUser));
         if (cached!.warning) setUsersWarning(cached!.warning);
+        setDirectoryScope({
+          scope: cached!.scope,
+          companyCount: cached!.companyCount,
+          canViewAllCompanies: cached!.canViewAllCompanies,
+        });
         setUsersLoading(false);
         return;
       }
@@ -743,10 +775,16 @@ export function AdminPage() {
       try {
         const result = await listAdminDirectoryUsersCached(cacheScope, {
           force: options?.force,
+          allCompanies: showAllCompanies,
         });
         const liveUsers = result.users.map(mapLiveUser);
         setUsers(liveUsers);
         if (result.warning) setUsersWarning(result.warning);
+        setDirectoryScope({
+          scope: result.scope,
+          companyCount: result.companyCount,
+          canViewAllCompanies: result.canViewAllCompanies,
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Could not load users";
         if (!hadCache) setUsers([]);
@@ -755,7 +793,7 @@ export function AdminPage() {
         setUsersLoading(false);
       }
     },
-    [authUser?.userId, cacheScope],
+    [authUser?.userId, cacheScope, showAllCompanies],
   );
 
   React.useLayoutEffect(() => {
@@ -822,7 +860,8 @@ export function AdminPage() {
         query.length === 0 ||
         user.name.toLowerCase().includes(query) ||
         user.email.toLowerCase().includes(query) ||
-        user.team.toLowerCase().includes(query);
+        user.team.toLowerCase().includes(query) ||
+        user.company.toLowerCase().includes(query);
 
       const matchesStatus = statusFilter === "all" || user.status === statusFilter;
       const matchesRole = roleFilter === "all" || user.role === roleFilter;
@@ -1265,6 +1304,18 @@ export function AdminPage() {
         description="Complete user management, permissions, invitation workflows, security controls, and audit visibility."
         actions={
           <>
+            {/* Only rendered for a platform admin, and only while scoped —
+                the way back out lives in the banner. */}
+            {directoryScope.canViewAllCompanies && !showAllCompanies ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowAllCompanies(true)}
+              >
+                <ShieldAlert className="h-4 w-4" /> View all companies
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" className="gap-1.5">
               <Filter className="h-4 w-4" /> Filters
             </Button>
@@ -1356,6 +1407,28 @@ export function AdminPage() {
                     <div className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                       <LoaderCircle className="h-4 w-4 animate-spin" />
                       Loading users from UsersTable / Cognito...
+                    </div>
+                  )}
+                  {directoryScope.scope === "platform" && (
+                    <div className="flex flex-wrap items-start gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm">
+                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <span className="flex-1 min-w-[16rem]">
+                        <span className="font-medium">All companies.</span> You are viewing
+                        {directoryScope.companyCount && directoryScope.companyCount > 1
+                          ? ` all ${directoryScope.companyCount} companies`
+                          : " every company"}
+                        , not just your own — a platform-administrator view.
+                      </span>
+                      {showAllCompanies ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowAllCompanies(false)}
+                        >
+                          Show only my company
+                        </Button>
+                      ) : null}
                     </div>
                   )}
                   {usersWarning && (
@@ -1497,6 +1570,7 @@ export function AdminPage() {
                           <TableHead>Email</TableHead>
                           <TableHead>Phone</TableHead>
                           <TableHead>Role</TableHead>
+                          <TableHead>Company</TableHead>
                           <TableHead>Department</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Assigned Team</TableHead>
@@ -1511,8 +1585,8 @@ export function AdminPage() {
                         {usersLoading && filteredUsers.length === 0 ? (
                           Array.from({ length: 6 }).map((_, i) => (
                             <TableRow key={`skel-${i}`} className="border-border/60">
-                              {Array.from({ length: 13 }).map((__, j) => (
-                                <TableCell key={j} className={j === 12 ? "text-right" : ""}>
+                              {Array.from({ length: 14 }).map((__, j) => (
+                                <TableCell key={j} className={j === 13 ? "text-right" : ""}>
                                   <Skeleton
                                     className={j === 0 ? "h-4 w-4" : "h-4 w-full max-w-[110px]"}
                                   />
@@ -1523,7 +1597,7 @@ export function AdminPage() {
                         ) : filteredUsers.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={13}
+                              colSpan={14}
                               className="py-10 text-center text-sm text-muted-foreground"
                             >
                               No users match your filters.
@@ -1544,6 +1618,7 @@ export function AdminPage() {
                               <TableCell>{user.email}</TableCell>
                               <TableCell>{user.phone}</TableCell>
                               <TableCell>{user.role}</TableCell>
+                              <TableCell>{user.company}</TableCell>
                               <TableCell>{user.department}</TableCell>
                               <TableCell>
                                 <Badge variant="outline" className={statusTone(user.status)}>
