@@ -130,7 +130,7 @@ function ChatPage() {
 
   if (!activeLoad) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
         <p className="text-sm font-medium text-foreground">No active load for chat</p>
         <p className="text-xs text-muted-foreground">
           Accept or open a load first. Messages sync to the TrackingMessages table for that load.
@@ -143,7 +143,7 @@ function ChatPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-background">
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 flex min-h-0 flex-1 flex-col bg-background">
       <div className="shrink-0 border-b border-border/70 bg-background/90 px-4 py-2.5 backdrop-blur-sm">
         <p className="text-[11px] text-muted-foreground">
           Thread for <span className="font-mono font-medium text-foreground">{activeLoad.id}</span>

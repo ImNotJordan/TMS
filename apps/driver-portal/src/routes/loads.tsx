@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Outlet, createFileRoute, Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { Outlet, createFileRoute, Link, useRouterState, useSearch } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,22 @@ import { useLoads } from "@/lib/loads-store";
 import { STATUS_LABELS, type Load } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
+type LoadsTab = "available" | "mine" | "recent";
+
+type LoadsSearch = {
+  tab?: LoadsTab;
+  highlight?: string;
+};
+
 export const Route = createFileRoute("/loads")({
   component: LoadsPage,
+  validateSearch: (search: Record<string, unknown>): LoadsSearch => ({
+    tab:
+      search.tab === "available" || search.tab === "mine" || search.tab === "recent"
+        ? search.tab
+        : undefined,
+    highlight: typeof search.highlight === "string" ? search.highlight : undefined,
+  }),
 });
 
 /** Any status where the truck is actively moving reads as "live" — amber, same
@@ -37,9 +51,23 @@ function LoadsPage() {
     document.title = "Loads — Titan Freight Driver";
   }, []);
 
-  const [tab, setTab] = useState<"available" | "mine" | "recent">("available");
+  const search = useSearch({ from: "/loads" });
+  const [tab, setTab] = useState<LoadsTab>(search.tab ?? "available");
   const [declineTarget, setDeclineTarget] = useState<Load | null>(null);
   const { offeredLoads, myLoads, recordsById, acceptLoad, declineLoad } = useLoads();
+  const highlightId = search.highlight;
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+
+  // A deep link (e.g. from a notification) can arrive while this route is
+  // already mounted — sync the tab/scroll instead of only reading it once.
+  useEffect(() => {
+    if (search.tab) setTab(search.tab);
+  }, [search.tab]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, offeredLoads]);
 
   // Dispatch-assigned loads live in "Available" until accepted — badge the tab so the
   // driver doesn't go looking for them under "My loads".
@@ -111,12 +139,20 @@ function LoadsPage() {
             </p>
           ) : (
             offeredLoads.map((load) => (
-              <LoadOfferCard
+              <div
                 key={load.id}
-                load={load}
-                onAccept={() => void acceptLoad(load.id)}
-                onDecline={() => setDeclineTarget(load)}
-              />
+                ref={load.id === highlightId ? highlightRef : undefined}
+                className={cn(
+                  "rounded-2xl transition-shadow",
+                  load.id === highlightId && "ring-2 ring-amber ring-offset-2 ring-offset-background",
+                )}
+              >
+                <LoadOfferCard
+                  load={load}
+                  onAccept={() => void acceptLoad(load.id)}
+                  onDecline={() => setDeclineTarget(load)}
+                />
+              </div>
             ))
           )}
         </div>
