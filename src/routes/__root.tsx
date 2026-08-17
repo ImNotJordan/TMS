@@ -17,7 +17,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { AuthGateSkeleton, RoutePageSkeleton } from "@/components/page-skeleton";
+import { RoutePageSkeleton } from "@/components/page-skeleton";
+import { AuthGate as SessionGate } from "@/components/auth/RouteLoader";
 import { GlobalScrollbar } from "@/components/global-scrollbar";
 import { PageTransition } from "@/components/page-transition";
 import { ModuleAccessGate } from "@/components/module-access-gate";
@@ -88,10 +89,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Logistics Software — Operations Console" },
-      { name: "description", content: "Premium logistics operating system for dispatch, brokerage, tracking, analytics, and accounting." },
+      {
+        name: "description",
+        content:
+          "Premium logistics operating system for dispatch, brokerage, tracking, analytics, and accounting.",
+      },
       { name: "author", content: "Logistics Software" },
       { property: "og:title", content: "Logistics Software — Operations Console" },
-      { property: "og:description", content: "Premium logistics operating system for dispatch, brokerage, tracking, analytics, and accounting." },
+      {
+        property: "og:description",
+        content:
+          "Premium logistics operating system for dispatch, brokerage, tracking, analytics, and accounting.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
@@ -144,7 +153,7 @@ function RootComponent() {
 function AuthGate() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { status, user, signOut } = useAuth();
+  const { status, user, signOut, refresh } = useAuth();
   // Rule A. Evaluated here rather than per-route: the routed children below
   // never mount without a company, so there is no URL that bypasses it.
   const companyGate = useCompanyGate(status === "authenticated" ? user?.userId : null);
@@ -179,14 +188,18 @@ function AuthGate() {
     })();
   }, [status, user, signOut, navigate]);
 
+  // The escape hatch on the stalled loader. /login is a public route, so
+  // landing there is what clears the resolving state — the branch below returns
+  // before any gate runs. No sign-out needed first: `signIn` already calls
+  // `safeLocalSignOut` to drop a wedged or half-finished challenge.
+  const goToLogin = () => {
+    void navigate({ to: "/login", replace: true });
+  };
+
   if (isPublicRoute) {
     return (
       <>
-        <Suspense
-          fallback={
-            <RoutePageSkeleton pathname={location.pathname} bare />
-          }
-        >
+        <Suspense fallback={<RoutePageSkeleton pathname={location.pathname} bare />}>
           <PageTransition bare>
             <Outlet />
           </PageTransition>
@@ -197,17 +210,40 @@ function AuthGate() {
   }
 
   if (status !== "authenticated") {
-    return <AuthGateSkeleton message="Signing you in…" />;
+    // `anon` renders nothing: the effect above is already navigating to
+    // /landing, and holding a loader over an answered question would strand
+    // the app on a screen it has no reason to leave.
+    return (
+      <SessionGate
+        status={status === "loading" ? "resolving" : "anon"}
+        onRetry={() => void refresh()}
+        onSignIn={goToLogin}
+      />
+    );
   }
 
   if (user?.audience === "driver") {
-    return <AuthGateSkeleton message="Redirecting to driver app…" />;
+    return (
+      <SessionGate
+        status="resolving"
+        message="Redirecting to driver app"
+        onRetry={() => void refresh()}
+        onSignIn={goToLogin}
+      />
+    );
   }
 
   // Before the app, not inside it — no sidebar, no topbar, nothing that would
   // fire a scoped request the server is about to refuse anyway.
   if (companyGate.state === "checking") {
-    return <AuthGateSkeleton message="Checking your workspace…" />;
+    return (
+      <SessionGate
+        status="resolving"
+        message="Checking your workspace"
+        onRetry={() => void companyGate.recheck()}
+        onSignIn={goToLogin}
+      />
+    );
   }
 
   if (companyGate.state === "needs-company") {

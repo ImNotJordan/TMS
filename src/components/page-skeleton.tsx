@@ -11,7 +11,13 @@ import {
 import { cn } from "@/lib/utils";
 
 /** Grid of KPI/stat card placeholders matching the dashboard stat tiles. */
-export function StatCardsSkeleton({ count = 4, className }: { count?: number; className?: string }) {
+export function StatCardsSkeleton({
+  count = 4,
+  className,
+}: {
+  count?: number;
+  className?: string;
+}) {
   return (
     <div className={cn("grid gap-4 sm:grid-cols-2 lg:grid-cols-4", className)}>
       {Array.from({ length: count }).map((_, i) => (
@@ -116,7 +122,13 @@ export function ListSkeleton({ items = 4, className }: { items?: number; classNa
 }
 
 /** Chart-shaped placeholder block. */
-export function ChartSkeleton({ height = 260, className }: { height?: number; className?: string }) {
+export function ChartSkeleton({
+  height = 260,
+  className,
+}: {
+  height?: number;
+  className?: string;
+}) {
   return (
     <div className={cn("flex flex-col justify-end gap-2", className)} style={{ height }}>
       <div className="flex h-full items-end gap-3 px-2">
@@ -386,39 +398,9 @@ export function RoutePageSkeleton({
   );
 }
 
-/** Full-screen skeleton while auth session is resolving. */
-export function AuthGateSkeleton({
-  message = "Signing you in…",
-  className,
-}: {
-  message?: string;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex min-h-screen w-full items-center justify-center bg-background px-4",
-        className,
-      )}
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label={message}
-    >
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center gap-3">
-          <Skeleton className="h-12 w-12 rounded-xl" />
-          <Skeleton className="h-5 w-44" />
-          <Skeleton className="h-3.5 w-56 max-w-full" />
-        </div>
-        <div className="space-y-3 rounded-xl border border-border/70 bg-card p-5 shadow-sm">
-          <Skeleton className="h-3.5 w-20" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-3.5 w-24" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      </div>
-    </div>
-  );
-}
+/*
+ * AuthGateSkeleton lived here. Removed: a login-card skeleton is a guess about
+ * what comes next, and it is wrong for every already-authenticated user. See
+ * `@/components/auth/RouteLoader`, which renders nothing under 200ms and has a
+ * timeout.
+ */

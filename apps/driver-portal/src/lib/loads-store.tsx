@@ -50,24 +50,6 @@ function writeLocationSharingPref(userId: string, value: boolean) {
   }
 }
 
-function appendStatusHistory(
-  existing: DriverLoadRecord,
-  status: string,
-  driver: { userId: string; name: string },
-) {
-  const at = new Date().toISOString();
-  const entry = {
-    status,
-    at,
-    by: driver.userId,
-    byName: driver.name,
-  };
-  return {
-    entry,
-    history: [...(existing.driverStatusHistory ?? []), entry].slice(-40),
-  };
-}
-
 async function notifyDispatchChat(
   loadId: string,
   text: string,
@@ -342,7 +324,6 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        const { history } = appendStatusHistory(existing, "assigned", driver);
         // No `assignedDriver` here, deliberately.
         //
         // Every load this portal can see is already assigned to this driver —
@@ -355,7 +336,6 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
         const updated = await patchLoadRecord(id, {
           loadStatus: "driver-assigned",
           driverWorkflowStatus: "assigned",
-          driverStatusHistory: history,
         });
         rememberLocalWrite(updated);
         setRecordsById((prev) => ({ ...prev, [id]: updated }));
@@ -396,10 +376,8 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const { history } = appendStatusHistory(existing, "declined", driver);
         const updated = await patchLoadRecord(id, {
           driverWorkflowStatus: "declined",
-          driverStatusHistory: history,
         });
         rememberLocalWrite(updated);
         setRecordsById((prev) => ({ ...prev, [id]: updated }));
@@ -434,11 +412,9 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
       advancing.current.add(id);
 
       try {
-        const { history } = appendStatusHistory(existing, next, driver);
         const label = STATUS_STEPS.find((s) => s.key === next)?.label ?? next;
         const updated = await patchLoadRecord(id, {
           driverWorkflowStatus: next,
-          driverStatusHistory: history,
           loadStatus:
             next === "delivered"
               ? "delivered"

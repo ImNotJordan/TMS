@@ -17,7 +17,11 @@
  * rather than ignored, cross-tenant misses answer 404 with no detail, and no
  * AWS error text reaches the client.
  */
-import { RecordNotFoundError, createTenantRepository } from "@/lib/server/tenant-repository";
+import {
+  RecordAlreadyExistsError,
+  RecordNotFoundError,
+  createTenantRepository,
+} from "@/lib/server/tenant-repository";
 import { ServerDataPrincipalMissingError } from "@/lib/server/server-dynamo";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
 import { logTenantDenial, tenantErrorResponse } from "@/lib/tenant/server-tenant-context";
@@ -161,6 +165,9 @@ export async function handleResourceApiRequest(request: Request): Promise<Respon
         return jsonError("Method not allowed.", 405);
     }
   } catch (err) {
+    if (err instanceof RecordAlreadyExistsError) {
+      return jsonError(err.message, err.status, err.code);
+    }
     if (err instanceof RecordNotFoundError) {
       logTenantDenial(ctx, "scoped operation matched no record", url.pathname);
       return jsonError(err.message, err.status, err.code);

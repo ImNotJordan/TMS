@@ -89,6 +89,11 @@ export type LoadRecord = {
   documentAssets?: import("./load-documents").LoadDocumentAsset[];
   driverGps?: import("./driver-gps").DriverGpsPing;
   trackingSession?: import("./tracking-workflow-store").TrackingSessionCloud;
+  /**
+   * Append-only record of who changed this load. Server-owned: the API refuses a
+   * request that supplies it. See `load-audit`.
+   */
+  loadAuditTrail?: import("./load-audit").LoadAuditEntry[];
   insuranceVerified?: boolean;
   authorityVerified?: boolean;
   highValueFlag?: boolean;
@@ -96,10 +101,45 @@ export type LoadRecord = {
 
 export type DriverStatusHistoryEntry = {
   status: string;
+  /** What the driver's device said. Retained as reported — never overwritten. */
   at: string;
+  /**
+   * When the server accepted the write. Stamped by `driver-loads-proxy`.
+   *
+   * Ordering reads this in preference to `at`, because `at` comes from a phone
+   * whose clock can be wrong by hours; a backdated entry would otherwise be read
+   * as the driver's latest status. Absent on rows written before this existed,
+   * which is why readers fall back rather than requiring it.
+   */
+  serverAt?: string;
   by?: string;
   byName?: string;
 };
+
+/**
+ * The driver's latest reported status, ordered by server time where available.
+ *
+ * `driverStatusHistory` is an append-only array from the device, so "last
+ * element" is only the latest entry if the device appended in order and its clock
+ * was right. Neither is guaranteed.
+ */
+export function latestDriverStatus(
+  history: DriverStatusHistoryEntry[] | undefined,
+): DriverStatusHistoryEntry | undefined {
+  if (!history?.length) return undefined;
+  let latest = history[0]!;
+  let latestKey = latest.serverAt ?? latest.at ?? "";
+  for (const entry of history.slice(1)) {
+    const key = entry.serverAt ?? entry.at ?? "";
+    // >= keeps the later array position on a tie, preserving the device's own
+    // ordering for entries stamped in the same millisecond.
+    if (key >= latestKey) {
+      latest = entry;
+      latestKey = key;
+    }
+  }
+  return latest;
+}
 
 export type CreateLoadInput = Omit<LoadRecord, "createdAt" | "updatedAt">;
 

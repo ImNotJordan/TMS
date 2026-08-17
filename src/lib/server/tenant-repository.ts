@@ -62,6 +62,47 @@ export class RecordNotFoundError extends Error {
   }
 }
 
+/**
+ * A record with this id already exists.
+ *
+ * `create` guards with `attribute_not_exists`, which is correct and stops the
+ * duplicate. What was wrong was the reporting: the resulting
+ * `ConditionalCheckFailedException` fell through to the generic handler and the
+ * caller got `502 Could not complete that request` — so a double-clicked "create
+ * invoice" looked like a server outage rather than "you already made this one",
+ * and a client had no way to tell a retryable fault from a settled duplicate.
+ */
+export class RecordAlreadyExistsError extends Error {
+  readonly code = "already_exists";
+  readonly status = 409;
+
+  constructor(label: string) {
+    super(`That ${label.toLowerCase()} already exists.`);
+    this.name = "RecordAlreadyExistsError";
+  }
+}
+
+/**
+ * The record exists and is the caller's, but it is no longer in the state the
+ * caller's write assumed.
+ *
+ * Distinct from `RecordNotFoundError` on purpose: the id-probing argument for
+ * collapsing "absent" into "not yours" does not apply here. The caller has
+ * already proven entitlement to this record, so telling them their copy is stale
+ * leaks nothing and is the only answer they can act on — refetch and retry.
+ */
+export class RecordPreconditionFailedError extends Error {
+  readonly code = "STALE_RECORD";
+  readonly status = 409;
+
+  constructor(label: string, detail?: string) {
+    super(
+      detail ?? `This ${label.toLowerCase()} changed since it was loaded. Reload and try again.`,
+    );
+    this.name = "RecordPreconditionFailedError";
+  }
+}
+
 export type TenantEntity = {
   createdAt: string;
   updatedAt: string;
@@ -106,6 +147,25 @@ async function queryAll<T>(input: QueryCommandInput): Promise<T[]> {
 function isConditionFailure(err: unknown): boolean {
   return (err as { name?: string })?.name === "ConditionalCheckFailedException";
 }
+
+export type UpdateOptions<T> = {
+  /**
+   * Attribute values the record must still hold for the write to apply. An
+   * expected `undefined` means "this attribute must not be set".
+   */
+  expect?: Partial<Record<keyof T & string, unknown>>;
+  /** Message for the 409 when `expect` does not match. */
+  staleMessage?: string;
+  /**
+   * List attributes to append to rather than assign, as `{ attribute: [entries] }`.
+   *
+   * Appending in the update expression rather than read-modify-write is what makes
+   * an append-only trail actually append-only: two concurrent writers both land,
+   * and no caller can replace the list by sending a shorter one. A patch may not
+   * assign these attributes at all — see `rejectAppendOnlyAssignment`.
+   */
+  append?: Partial<Record<keyof T & string, unknown[]>>;
+};
 
 export function createTenantRepository<T extends TenantEntity>(spec: TenantRepositorySpec<T>) {
   const { idKey, label, companyIndex } = spec;
@@ -179,14 +239,21 @@ export function createTenantRepository<T extends TenantEntity>(spec: TenantRepos
       [COMPANY_ID_ATTRIBUTE]: companyId,
     } as T;
 
-    const client = getServerDataClient();
-    await client.send(
-      new PutCommand({
-        TableName: table(),
-        Item: item as Record<string, unknown>,
-        ConditionExpression: `attribute_not_exists(${idKey})`,
-      }) as never,
-    );
+    try {
+      const client = getServerDataClient();
+      await client.send(
+        new PutCommand({
+          TableName: table(),
+          Item: item as Record<string, unknown>,
+          ConditionExpression: `attribute_not_exists(${idKey})`,
+        }) as never,
+      );
+    } catch (err) {
+      // The guard did its job; say so plainly instead of letting it surface as a
+      // generic 502.
+      if (isConditionFailure(err)) throw new RecordAlreadyExistsError(label);
+      throw err;
+    }
     return item;
   }
 
@@ -197,16 +264,25 @@ export function createTenantRepository<T extends TenantEntity>(spec: TenantRepos
    * record cannot be moved between tenants, or have its identity rewritten, by
    * an ordinary edit.
    */
-  async function update(ctx: TenantContext, id: string, patch: Partial<T>): Promise<T> {
+  async function update(
+    ctx: TenantContext,
+    id: string,
+    patch: Partial<T>,
+    opts?: UpdateOptions<T>,
+  ): Promise<T> {
     const companyId = requireCompanyId(ctx);
     const trimmed = id?.trim();
     if (!trimmed) throw new RecordNotFoundError(label);
+
+    const appends = Object.entries(opts?.append ?? {}).filter(
+      ([, entries_]) => Array.isArray(entries_) && entries_.length > 0,
+    ) as [string, unknown[]][];
 
     const entries = Object.entries(patch).filter(
       ([key, value]) =>
         key !== idKey && key !== COMPANY_ID_ATTRIBUTE && key !== "createdAt" && value !== undefined,
     );
-    if (entries.length === 0) return getOrThrow(ctx, trimmed);
+    if (entries.length === 0 && appends.length === 0) return getOrThrow(ctx, trimmed);
 
     const names: Record<string, string> = { "#updatedAt": "updatedAt" };
     const values: Record<string, unknown> = {
@@ -220,6 +296,39 @@ export function createTenantRepository<T extends TenantEntity>(spec: TenantRepos
       sets.push(`#a${i} = :a${i}`);
     });
 
+    appends.forEach(([key, added], i) => {
+      names[`#p${i}`] = key;
+      values[`:p${i}`] = added;
+      values[`:pEmpty${i}`] = [];
+      sets.push(`#p${i} = list_append(if_not_exists(#p${i}, :pEmpty${i}), :p${i})`);
+    });
+
+    // Exists AND is ours, in one statement.
+    const conditions = [`attribute_exists(${idKey})`, `${COMPANY_ID_ATTRIBUTE} = :ctxCompany`];
+
+    /**
+     * Optimistic concurrency, in the same statement as the write.
+     *
+     * Without this, two concurrent patches interleave per attribute and the
+     * later one wins — so a status transition validated against a record read a
+     * moment ago could be applied to a record that has since moved on. The
+     * check has to travel *with* the write; validating after a separate read is
+     * the bug, not the fix.
+     *
+     * `attribute_not_exists` is accepted as a match for an expected `undefined`
+     * so a caller can say "only if this was never set".
+     */
+    const expectEntries = Object.entries(opts?.expect ?? {});
+    expectEntries.forEach(([key, expected], i) => {
+      names[`#e${i}`] = key;
+      if (expected === undefined) {
+        conditions.push(`attribute_not_exists(#e${i})`);
+        return;
+      }
+      values[`:e${i}`] = expected;
+      conditions.push(`#e${i} = :e${i}`);
+    });
+
     try {
       const client = getServerDataClient();
       const out = (await client.send(
@@ -229,15 +338,22 @@ export function createTenantRepository<T extends TenantEntity>(spec: TenantRepos
           UpdateExpression: `SET ${sets.join(", ")}`,
           ExpressionAttributeNames: names,
           ExpressionAttributeValues: values,
-          // Exists AND is ours, in one statement.
-          ConditionExpression: `attribute_exists(${idKey}) AND ${COMPANY_ID_ATTRIBUTE} = :ctxCompany`,
+          ConditionExpression: conditions.join(" AND "),
           ReturnValues: "ALL_NEW",
         }) as never,
       )) as { Attributes?: T };
       return out.Attributes as T;
     } catch (err) {
-      if (isConditionFailure(err)) throw new RecordNotFoundError(label);
-      throw err;
+      if (!isConditionFailure(err)) throw err;
+      // DynamoDB does not say which clause failed. With no precondition there is
+      // only one possible cause, so skip the extra read.
+      if (expectEntries.length === 0) throw new RecordNotFoundError(label);
+      // One scoped read, on the failure path only, to tell "gone or not yours"
+      // from "yours but stale" — the two need different answers and different
+      // client behaviour.
+      const current = await get(ctx, trimmed);
+      if (!current) throw new RecordNotFoundError(label);
+      throw new RecordPreconditionFailedError(label, opts?.staleMessage);
     }
   }
 

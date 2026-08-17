@@ -19,11 +19,28 @@
  * genuine wiring mistake would go unnoticed for months. The same applies to
  * `createdBy` and the audit timestamps — all server-owned.
  */
-import { RecordNotFoundError, createTenantRepository } from "@/lib/server/tenant-repository";
+import {
+  RecordAlreadyExistsError,
+  RecordNotFoundError,
+  RecordPreconditionFailedError,
+  createTenantRepository,
+} from "@/lib/server/tenant-repository";
 import { ServerDataPrincipalMissingError } from "@/lib/server/server-dynamo";
 import { readServerEnv } from "@/lib/server-env";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
-import { logTenantDenial, tenantErrorResponse } from "@/lib/tenant/server-tenant-context";
+import {
+  logTenantDenial,
+  tenantErrorResponse,
+  type TenantContext,
+} from "@/lib/tenant/server-tenant-context";
+import { checkLoadTransition, normalizeLoadStatus } from "@/lib/load-status";
+import { SERVER_OWNED_LOAD_FIELDS, buildLoadAuditEntry } from "@/lib/load-audit";
+import {
+  checkLoadCreate,
+  checkLoadDelete,
+  checkLoadUpdate,
+  type LoadWriteCheck,
+} from "@/lib/tenant/load-permissions";
 import type { LoadRecord } from "@/lib/loads-store";
 
 const LOADS_PATH = "/api/loads";
@@ -92,6 +109,63 @@ function rejectServerOwnedFields(body: Record<string, unknown>): Response | null
   );
 }
 
+/**
+ * Refuse a request that tries to write a server-owned trail.
+ *
+ * Separate from `rejectServerOwnedFields` so the message can say *why* — a client
+ * sending `loadAuditTrail` is not reaching for someone else's field, it is trying
+ * to write the record of its own behaviour.
+ */
+function rejectServerOwnedTrails(body: Record<string, unknown>): Response | null {
+  const offending = SERVER_OWNED_LOAD_FIELDS.filter((field) => field in body);
+  if (offending.length === 0) return null;
+  return jsonError(
+    `${offending.join(", ")} is recorded by the server and cannot be supplied.`,
+    403,
+    "server_owned_field",
+  );
+}
+
+/** A permission or freeze denial as a response, with the attempt logged. */
+function denialResponse(ctx: TenantContext, check: LoadWriteCheck, path: string): Response | null {
+  if (check.ok) return null;
+  logTenantDenial(ctx, `${check.code}: ${check.message}`, path);
+  return Response.json(
+    { error: check.message, code: check.code, fields: check.fields },
+    { status: check.status },
+  );
+}
+
+/**
+ * Canonicalise `loadStatus` on the way in, or refuse it.
+ *
+ * Writing the caller's spelling straight through is how `"Booked"` ended up in
+ * the table alongside `booked`: every reader lowercases, so it worked until the
+ * first reader that did not. Normalising at the boundary means there is exactly
+ * one spelling of each status in storage from here on.
+ *
+ * Returns `undefined` when the body does not mention status at all — distinct
+ * from `null`, which cannot happen because an unrecognised value is a 400.
+ */
+function canonicalStatusFromBody(
+  body: Record<string, unknown>,
+): { status: string } | { error: Response } | undefined {
+  if (!("loadStatus" in body)) return undefined;
+  const raw = body.loadStatus;
+  if (raw === undefined || raw === null || raw === "") {
+    return {
+      error: jsonError("loadStatus cannot be cleared.", 400, "unknown_status"),
+    };
+  }
+  const status = normalizeLoadStatus(typeof raw === "string" ? raw : String(raw));
+  if (!status) {
+    return {
+      error: jsonError(`"${String(raw)}" is not a load status.`, 400, "unknown_status"),
+    };
+  }
+  return { status };
+}
+
 export async function handleLoadsApiRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const loadId = loadIdFromPath(url);
@@ -127,6 +201,31 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
         if (typeof body.loadId !== "string" || !body.loadId.trim()) {
           return jsonError("loadId is required.", 400, "invalid_payload");
         }
+
+        const trail = rejectServerOwnedTrails(body);
+        if (trail) {
+          logTenantDenial(ctx, "create carried a server-owned trail", LOADS_PATH);
+          return trail;
+        }
+
+        const denied = denialResponse(ctx, checkLoadCreate(ctx, body), LOADS_PATH);
+        if (denied) return denied;
+
+        const status = canonicalStatusFromBody(body);
+        if (status && "error" in status) return status.error;
+        // A new load starts at draft unless the caller names a reachable
+        // starting status. `checkLoadTransition(null, …)` decides what that is.
+        if (status) {
+          const check = checkLoadTransition(null, status.status);
+          if (!check.ok) {
+            logTenantDenial(ctx, `${check.code}: ${check.message}`, LOADS_PATH);
+            return jsonError(check.message, 400, check.code);
+          }
+          body.loadStatus = status.status;
+        } else {
+          body.loadStatus = "draft";
+        }
+
         const created = await loads.create(ctx, body as never);
         return Response.json({ load: created }, { status: 201 });
       }
@@ -140,12 +239,72 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
           logTenantDenial(ctx, "update carried server-owned fields", `${LOADS_PATH}/:id`);
           return rejected;
         }
-        const updated = await loads.update(ctx, loadId, body as Partial<LoadRecord>);
+
+        const trail = rejectServerOwnedTrails(body);
+        if (trail) {
+          logTenantDenial(ctx, "update carried a server-owned trail", `${LOADS_PATH}/:id`);
+          return trail;
+        }
+
+        // The stored record, read inside the same request that writes. Needed for
+        // three decisions: is the caller allowed to touch these fields in this
+        // status, is the status move legal, and what does the conditional write
+        // expect to still be true. A cross-tenant or absent load reads as null
+        // and 404s here, before any of that.
+        const current = await loads.get(ctx, loadId);
+        if (!current) {
+          logTenantDenial(ctx, "load not found or not in company", `${LOADS_PATH}/:id`);
+          return jsonError("Load not found.", 404, "not_found");
+        }
+
+        const denied = denialResponse(
+          ctx,
+          checkLoadUpdate(ctx, body, current),
+          `${LOADS_PATH}/:id`,
+        );
+        if (denied) return denied;
+
+        const status = canonicalStatusFromBody(body);
+        if (status && "error" in status) return status.error;
+
+        let expect: Partial<Record<keyof LoadRecord & string, unknown>> | undefined;
+        if (status) {
+          const check = checkLoadTransition(current.loadStatus, status.status);
+          if (!check.ok) {
+            logTenantDenial(ctx, `${check.code}: ${check.message}`, `${LOADS_PATH}/:id`);
+            return jsonError(check.message, 409, check.code);
+          }
+          body.loadStatus = status.status;
+          // Only pin the status when the write actually moves it. Pinning on a
+          // no-op would fail every whole-record save from an editor screen whose
+          // copy of `loadStatus` is a normalised alias of what is stored.
+          if (check.from !== check.to) {
+            expect = { loadStatus: current.loadStatus ?? undefined };
+          }
+        }
+
+        // Built from the stored record and the verified token, and appended in the
+        // same statement as the write — so a change cannot land without its entry.
+        const auditEntry = buildLoadAuditEntry({
+          ctx,
+          patch: body,
+          current: current as unknown as Record<string, unknown>,
+          via: "ops-api",
+        });
+
+        const updated = await loads.update(ctx, loadId, body as Partial<LoadRecord>, {
+          expect,
+          staleMessage:
+            "This load moved to a different status while you were editing it. Reload and try again.",
+          append: auditEntry ? { loadAuditTrail: [auditEntry] } : undefined,
+        });
         return Response.json({ load: updated });
       }
 
       case "DELETE": {
         if (!loadId) return jsonError("Method not allowed.", 405);
+        const denied = denialResponse(ctx, checkLoadDelete(ctx), `${LOADS_PATH}/:id`);
+        if (denied) return denied;
         await loads.remove(ctx, loadId);
         return new Response(null, { status: 204 });
       }
@@ -155,8 +314,15 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
     }
   } catch (err) {
     // A cross-tenant miss surfaces here as not-found, with no detail.
+    if (err instanceof RecordAlreadyExistsError) {
+      return jsonError(err.message, err.status, err.code);
+    }
     if (err instanceof RecordNotFoundError) {
       logTenantDenial(ctx, "scoped operation matched no record", url.pathname);
+      return jsonError(err.message, err.status, err.code);
+    }
+    // The load is theirs but moved under them — a retryable 409, not a 404.
+    if (err instanceof RecordPreconditionFailedError) {
       return jsonError(err.message, err.status, err.code);
     }
     if (err instanceof ServerDataPrincipalMissingError) {

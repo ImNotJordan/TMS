@@ -27,10 +27,23 @@ function load(overrides: Partial<LoadRecord> = {}): LoadRecord {
 
 describe("deriveTrackingStateFromLoad", () => {
   it("waits on the driver while only dispatch has acted", () => {
+    // The intent here is unchanged and still the point: dispatch assigning a
+    // driver is not the driver accepting. What changed is the answer's precision —
+    // this used to collapse into "waiting-driver", the same value a load with no
+    // driver at all got, so the board read "Waiting for Driver" for both and
+    // dispatch could not tell which loads still needed chasing.
     expect(deriveTrackingStateFromLoad(load({ loadStatus: "driver-assigned" }))).toBe(
-      "waiting-driver",
+      "driver-assigned",
     );
-    expect(deriveTrackingStateFromLoad(load({ loadStatus: "active" }))).toBe("waiting-driver");
+    expect(deriveTrackingStateFromLoad(load({ loadStatus: "active" }))).toBe("driver-assigned");
+    // Neither is "driver-accepted" — that remains the thing only the driver can say.
+    expect(deriveTrackingStateFromLoad(load({ loadStatus: "active" }))).not.toBe("driver-accepted");
+  });
+
+  it("still says waiting-driver when there is genuinely no driver on the load", () => {
+    expect(
+      deriveTrackingStateFromLoad(load({ assignedDriver: undefined, loadStatus: "tendered" })),
+    ).toBe("waiting-driver");
   });
 
   it("advances as soon as the driver portal records an acceptance", () => {

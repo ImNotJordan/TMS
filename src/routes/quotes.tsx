@@ -18,10 +18,7 @@ import { toast } from "sonner";
 
 import { PageHeader } from "@/components/page-header";
 import { useAuth } from "@/lib/auth";
-import {
-  auditActorFromAuth,
-  recordAdminAuditLog,
-} from "@/lib/admin-audit-store";
+import { auditActorFromAuth, recordAdminAuditLog } from "@/lib/admin-audit-store";
 import { createLoad } from "@/lib/loads-store";
 import {
   createQuote,
@@ -497,7 +494,9 @@ function Page() {
           await createLoad({
             loadId,
             loadType: "FTL",
-            loadStatus: "Booked",
+            // Canonical lowercase. This was "Booked" and worked only because every
+            // reader happened to lowercase first; the API normalises now either way.
+            loadStatus: "booked",
             customer: row.customer,
             pickupCity: row.origin,
             deliveryCity: row.destination,
@@ -661,7 +660,10 @@ function Page() {
                     ))
                   ) : filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
+                      <TableCell
+                        colSpan={11}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
                         No quotes found.
                       </TableCell>
                     </TableRow>
