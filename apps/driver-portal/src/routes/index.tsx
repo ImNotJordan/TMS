@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Package, RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveLoadCard } from "@/components/home/active-load-card";
+import { NoActiveLoadCard } from "@/components/home/no-active-load-card";
 import { QuickStats } from "@/components/home/quick-stats";
 import { LocationShareCard } from "@/components/home/location-share-card";
 import { LoadOfferCard } from "@/components/loads/load-offer-card";
@@ -34,15 +35,19 @@ function HomePage() {
   const milesProxy = myLoads.reduce((sum, l) => sum + (l.distanceMiles || 0), 0);
 
   return (
-    <div className="space-y-5 px-4 py-5">
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-5 px-4 py-5">
       {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-          <div className="font-medium">Couldn’t sync with AWS</div>
-          <p className="mt-1 opacity-90">{error}</p>
+        <div className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+          </span>
+          <p className="min-w-0 flex-1 truncate text-xs font-medium text-destructive">
+            Couldn't sync with AWS — {error}
+          </p>
           <Button
             size="sm"
             variant="outline"
-            className="mt-2 h-8 gap-1.5"
+            className="h-8 shrink-0 gap-1.5"
             onClick={() => void refresh()}
             disabled={refreshing}
           >
@@ -55,16 +60,11 @@ function HomePage() {
       {activeLoad ? (
         <ActiveLoadCard load={activeLoad} />
       ) : (
-        <div className="rounded-2xl border border-dashed border-border p-6 text-center">
-          <Package className="mx-auto h-8 w-8 text-muted-foreground" />
-          <p className="mt-2 text-sm font-medium text-foreground">No active load</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Browse available loads and accept one to get rolling.
-          </p>
-          <Button asChild className="mt-4" size="sm">
-            <Link to="/loads">Browse loads</Link>
-          </Button>
-        </div>
+        <NoActiveLoadCard
+          offeredLoads={offeredLoads}
+          onAccept={(id) => void acceptLoad(id)}
+          onDecline={(id) => void declineLoad(id)}
+        />
       )}
 
       <QuickStats
@@ -74,41 +74,39 @@ function HomePage() {
       />
       <LocationShareCard />
 
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-heading text-sm font-bold uppercase tracking-wide text-foreground">
-            Available near you
-          </h2>
-          <Link to="/loads" className="text-xs font-semibold text-amber-dim hover:underline">
-            See all
-          </Link>
-        </div>
-        <div className="space-y-3">
-          {offeredLoads.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              No new load offers right now.
-            </p>
-          ) : (
-            offeredLoads.slice(0, 2).map((load) => (
-              <LoadOfferCard
-                key={load.id}
-                load={load}
-                onAccept={() => void acceptLoad(load.id)}
-                onDecline={() => void declineLoad(load.id)}
-              />
-            ))
-          )}
-        </div>
-      </section>
+      {activeLoad ? (
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-heading text-sm font-bold text-foreground">Available near you</h2>
+            <Link to="/loads" className="text-xs font-semibold text-amber-dim hover:underline">
+              See all
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {offeredLoads.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                No new load offers right now
+              </p>
+            ) : (
+              offeredLoads.slice(0, 2).map((load) => (
+                <LoadOfferCard
+                  key={load.id}
+                  load={load}
+                  onAccept={() => void acceptLoad(load.id)}
+                  onDecline={() => void declineLoad(load.id)}
+                />
+              ))
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <section className="pb-2">
-        <h2 className="mb-2 font-heading text-sm font-bold uppercase tracking-wide text-foreground">
-          Recent activity
-        </h2>
+        <h2 className="mb-2 font-heading text-sm font-bold text-foreground">Recent activity</h2>
         <div className="space-y-2">
           {activity.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              Activity from your assigned loads will show up here.
+              Activity from your assigned loads will show up here
             </p>
           ) : (
             activity.map((item) => (

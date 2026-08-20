@@ -16,8 +16,7 @@ const loadsTableName = (import.meta.env.VITE_LOADS_TABLE_NAME as string | undefi
 const trucksTableName =
   (import.meta.env.VITE_TRUCKS_TABLE_NAME as string | undefined) ?? "TruckBoard";
 const rfpsTableName = (import.meta.env.VITE_RFPS_TABLE_NAME as string | undefined) ?? "RFPs";
-const quotesTableName =
-  (import.meta.env.VITE_QUOTES_TABLE_NAME as string | undefined) ?? "Quotes";
+const quotesTableName = (import.meta.env.VITE_QUOTES_TABLE_NAME as string | undefined) ?? "Quotes";
 const invoicesTableName =
   (import.meta.env.VITE_INVOICES_TABLE_NAME as string | undefined) ?? "Invoices";
 const trackingMessagesTableName =

@@ -15,7 +15,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:tenant": "node scripts/check-tenant-guard.mjs",
+    "verify": "tsc --noEmit && vitest run && node scripts/check-tenant-guard.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.27",

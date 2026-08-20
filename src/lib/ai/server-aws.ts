@@ -13,15 +13,7 @@ import {
   getAwsRegionForDynamo,
   type RequestAwsCredentials,
 } from "@/lib/ai/cognito-request-credentials";
-
-function readEnv(name: string): string | undefined {
-  const fromProcess =
-    typeof process !== "undefined" ? (process.env?.[name] as string | undefined) : undefined;
-  if (fromProcess?.trim()) return fromProcess.trim();
-  // Vite may inject via define / loadEnv on the server bundle
-  const fromMeta = (import.meta.env as Record<string, string | undefined>)[name];
-  return fromMeta?.trim() || undefined;
-}
+import { readServerEnv as readEnv } from "@/lib/server-env";
 
 export function hasServerAiIamCredentials(): boolean {
   return Boolean(readEnv("TITAN_AWS_ACCESS_KEY_ID") && readEnv("TITAN_AWS_SECRET_ACCESS_KEY"));
@@ -103,11 +95,7 @@ export function getWorkspaceSettingsTable(): string {
 }
 
 export function getProfileTable(): string {
-  return (
-    readEnv("VITE_PROFILE_TABLE_NAME") ||
-    readEnv("TITAN_PROFILE_TABLE_NAME") ||
-    "Profile"
-  );
+  return readEnv("VITE_PROFILE_TABLE_NAME") || readEnv("TITAN_PROFILE_TABLE_NAME") || "Profile";
 }
 
 export function getAiDailyRequestBudget(): number {

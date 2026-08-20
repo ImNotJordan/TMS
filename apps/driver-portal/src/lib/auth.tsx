@@ -66,8 +66,7 @@ function resolveAudience(attributes: FetchUserAttributesOutput): DriverProfile["
     .toLowerCase();
   if (!raw.trim()) return "unknown";
   const isDriver = /\bdriver\b/.test(raw);
-  const isOps =
-    /\b(admin|superadmin|dispatcher|broker|ops|operations|manager|shipper)\b/.test(raw);
+  const isOps = /\b(admin|superadmin|dispatcher|broker|ops|operations|manager|shipper)\b/.test(raw);
   if (isDriver && !isOps) return "driver";
   if (isOps && !isDriver) return "ops";
   return "unknown";
@@ -84,9 +83,7 @@ function profileFromAttributes(
     email.split("@")[0] ||
     "Driver";
   const truck =
-    attributes["custom:truckNumber"]?.trim() ||
-    attributes["custom:truck_number"]?.trim() ||
-    "—";
+    attributes["custom:truckNumber"]?.trim() || attributes["custom:truck_number"]?.trim() || "—";
   const trailer =
     attributes["custom:trailerNumber"]?.trim() ||
     attributes["custom:trailer_number"]?.trim() ||

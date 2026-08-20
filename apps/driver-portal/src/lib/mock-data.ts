@@ -51,6 +51,8 @@ export type LoadDocument = {
 export type Load = {
   id: string;
   status: LoadStatus;
+  /** Dispatch assigned this driver directly and is waiting on their acceptance. */
+  assignedByDispatch?: boolean;
   equipment: string;
   distanceMiles: number;
   rate: number;

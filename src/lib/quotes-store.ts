@@ -1,4 +1,4 @@
-import { createDynamoEntityStore } from "./dynamo-entity-store";
+import { createApiBackedStore } from "./api/api-backed-store";
 import {
   getAwsRegion,
   getQuotesTableName,
@@ -55,7 +55,9 @@ function generateQuoteId(): string {
   return `Q-${Math.floor(100000 + Math.random() * 900000)}`;
 }
 
-export function totalRate(record: Pick<QuoteRecord, "baseRate" | "fuelSurcharge" | "accessorials">) {
+export function totalRate(
+  record: Pick<QuoteRecord, "baseRate" | "fuelSurcharge" | "accessorials">,
+) {
   return (record.baseRate || 0) + (record.fuelSurcharge || 0) + (record.accessorials || 0);
 }
 
@@ -79,10 +81,10 @@ function mapQuoteError(err: unknown, op: string): Error {
   return err instanceof Error ? err : new Error(`DynamoDB ${op} failed`);
 }
 
-const store = createDynamoEntityStore<QuoteRecord>({
-  tableName: getQuotesTableName,
+const store = createApiBackedStore<QuoteRecord>({
+  resource: "quotes",
+  keys: { collection: "quotes", item: "quote" },
   idKey: "quoteId",
-  label: "Quotes",
   kind: "quotes",
 });
 

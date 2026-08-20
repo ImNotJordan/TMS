@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Outlet, createFileRoute, Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { Outlet, createFileRoute, Link, useRouterState, useSearch } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,22 @@ import { useLoads } from "@/lib/loads-store";
 import { STATUS_LABELS, type Load } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
+type LoadsTab = "available" | "mine" | "recent";
+
+type LoadsSearch = {
+  tab?: LoadsTab;
+  highlight?: string;
+};
+
 export const Route = createFileRoute("/loads")({
   component: LoadsPage,
+  validateSearch: (search: Record<string, unknown>): LoadsSearch => ({
+    tab:
+      search.tab === "available" || search.tab === "mine" || search.tab === "recent"
+        ? search.tab
+        : undefined,
+    highlight: typeof search.highlight === "string" ? search.highlight : undefined,
+  }),
 });
 
 /** Any status where the truck is actively moving reads as "live" — amber, same
@@ -37,9 +51,35 @@ function LoadsPage() {
     document.title = "Loads — Titan Freight Driver";
   }, []);
 
-  const [tab, setTab] = useState<"available" | "mine">("available");
+  const search = useSearch({ from: "/loads" });
+  const [tab, setTab] = useState<LoadsTab>(search.tab ?? "available");
   const [declineTarget, setDeclineTarget] = useState<Load | null>(null);
-  const { offeredLoads, myLoads, acceptLoad, declineLoad } = useLoads();
+  const { offeredLoads, myLoads, recordsById, acceptLoad, declineLoad } = useLoads();
+  const highlightId = search.highlight;
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+
+  // A deep link (e.g. from a notification) can arrive while this route is
+  // already mounted — sync the tab/scroll instead of only reading it once.
+  useEffect(() => {
+    if (search.tab) setTab(search.tab);
+  }, [search.tab]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, offeredLoads]);
+
+  // Dispatch-assigned loads live in "Available" until accepted — badge the tab so the
+  // driver doesn't go looking for them under "My loads".
+  const pendingAssignments = offeredLoads.filter((l) => l.assignedByDispatch).length;
+  const activeMyLoads = myLoads.filter((l) => l.status !== "delivered");
+  const completedLoads = myLoads
+    .filter((l) => l.status === "delivered")
+    .sort((a, b) => {
+      const bAt = recordsById[b.id]?.updatedAt ?? "";
+      const aAt = recordsById[a.id]?.updatedAt ?? "";
+      return bAt.localeCompare(aAt);
+    });
 
   // /loads/$loadId is nested under this route (file-based routing) but is its
   // own full-screen view on mobile, not a persistent list+detail layout — so
@@ -63,6 +103,11 @@ function LoadsPage() {
           )}
         >
           Available <span className="font-mono normal-case tracking-normal">({offeredLoads.length})</span>
+          {pendingAssignments > 0 ? (
+            <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[9px] font-bold normal-case tracking-normal text-primary-foreground">
+              {pendingAssignments}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"
@@ -72,7 +117,17 @@ function LoadsPage() {
             tab === "mine" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
           )}
         >
-          My loads <span className="font-mono normal-case tracking-normal">({myLoads.length})</span>
+          My loads <span className="font-mono normal-case tracking-normal">({activeMyLoads.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("recent")}
+          className={cn(
+            "flex-1 rounded-full py-1.5 font-heading text-xs font-bold uppercase tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+            tab === "recent" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          Recent load <span className="font-mono normal-case tracking-normal">({completedLoads.length})</span>
         </button>
       </div>
 
@@ -84,37 +139,80 @@ function LoadsPage() {
             </p>
           ) : (
             offeredLoads.map((load) => (
-              <LoadOfferCard
+              <div
                 key={load.id}
-                load={load}
-                onAccept={() => void acceptLoad(load.id)}
-                onDecline={() => setDeclineTarget(load)}
-              />
+                ref={load.id === highlightId ? highlightRef : undefined}
+                className={cn(
+                  "rounded-2xl transition-shadow",
+                  load.id === highlightId && "ring-2 ring-amber ring-offset-2 ring-offset-background",
+                )}
+              >
+                <LoadOfferCard
+                  load={load}
+                  onAccept={() => void acceptLoad(load.id)}
+                  onDecline={() => setDeclineTarget(load)}
+                />
+              </div>
+            ))
+          )}
+        </div>
+      ) : tab === "mine" ? (
+        <div className="space-y-2.5">
+          {activeMyLoads.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+              No active loads right now.
+            </p>
+          ) : (
+            activeMyLoads.map((load) => (
+              <Link
+                key={load.id}
+                to="/loads/$loadId"
+                params={{ loadId: load.id }}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3.5 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <div className="min-w-0">
+                  <div className="font-heading text-sm font-bold text-foreground">
+                    {load.pickup.city} → {load.delivery.city}
+                  </div>
+                  <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                    {load.id} · {load.distanceMiles} mi
+                  </div>
+                </div>
+                <Badge variant="outline" className={cn("shrink-0 border-transparent", STATUS_TONE[load.status])}>
+                  {STATUS_LABELS[load.status]}
+                </Badge>
+              </Link>
             ))
           )}
         </div>
       ) : (
         <div className="space-y-2.5">
-          {myLoads.map((load) => (
-            <Link
-              key={load.id}
-              to="/loads/$loadId"
-              params={{ loadId: load.id }}
-              className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3.5 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <div className="min-w-0">
-                <div className="font-heading text-sm font-bold text-foreground">
-                  {load.pickup.city} → {load.delivery.city}
+          {completedLoads.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+              No completed loads yet.
+            </p>
+          ) : (
+            completedLoads.map((load) => (
+              <Link
+                key={load.id}
+                to="/loads/$loadId"
+                params={{ loadId: load.id }}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3.5 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <div className="min-w-0">
+                  <div className="font-heading text-sm font-bold text-foreground">
+                    {load.pickup.city} → {load.delivery.city}
+                  </div>
+                  <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                    {load.id} · {load.distanceMiles} mi
+                  </div>
                 </div>
-                <div className="mt-0.5 font-mono text-xs text-muted-foreground">
-                  {load.id} · {load.distanceMiles} mi
-                </div>
-              </div>
-              <Badge variant="outline" className={cn("shrink-0 border-transparent", STATUS_TONE[load.status])}>
-                {STATUS_LABELS[load.status]}
-              </Badge>
-            </Link>
-          ))}
+                <Badge variant="outline" className={cn("shrink-0 border-transparent", STATUS_TONE[load.status])}>
+                  {STATUS_LABELS[load.status]}
+                </Badge>
+              </Link>
+            ))
+          )}
         </div>
       )}
 

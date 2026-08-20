@@ -89,5 +89,19 @@ export default defineConfig({
   envDir: path.resolve(__dirname, "../.."),
   server: {
     port: 5174,
+    /**
+     * This app has no server of its own — it is a static SPA. The `/api/*`
+     * routes it calls live on the dispatcher console's Worker, so in dev they
+     * are proxied there.
+     *
+     * In production the two deploy to different origins, and the portal reaches
+     * the API through `VITE_API_BASE_URL` instead. See `src/lib/api-base.ts`.
+     */
+    proxy: {
+      "/api": {
+        target: process.env.VITE_DEV_API_ORIGIN || "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
   },
 });

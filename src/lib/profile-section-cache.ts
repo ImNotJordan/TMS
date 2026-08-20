@@ -128,7 +128,10 @@ export function getProfileSectionInflight(userId: string) {
   return inflightByUser.get(userId);
 }
 
-export function setProfileSectionInflight(userId: string, promise: Promise<ProfileSectionsSnapshot>) {
+export function setProfileSectionInflight(
+  userId: string,
+  promise: Promise<ProfileSectionsSnapshot>,
+) {
   inflightByUser.set(userId, promise);
 }
 
