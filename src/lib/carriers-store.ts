@@ -1,4 +1,5 @@
-import { createApiBackedStore } from "./api/api-backed-store";
+import { createDynamoEntityStore, describeDynamoError } from "./dynamo-entity-store";
+import { getCarriersTableName, getDynamoDocClient, queryAllItems } from "./dynamodb";
 import { auditActorFromAuth, recordAdminAuditLog, type AdminAuditActor } from "./admin-audit-store";
 import type { AuthUser } from "./auth";
 
@@ -80,10 +81,10 @@ export type CarrierRecord = {
 
 export type CreateCarrierInput = Omit<CarrierRecord, "createdAt" | "updatedAt">;
 
-const store = createApiBackedStore<CarrierRecord>({
-  resource: "carriers",
-  keys: { collection: "carriers", item: "carrier" },
+const store = createDynamoEntityStore<CarrierRecord>({
+  tableName: getCarriersTableName,
   idKey: "carrierId",
+  label: "Carriers",
   kind: "carriers",
 });
 
@@ -95,20 +96,20 @@ export const getCarrierByIdCached = store.getByIdCached;
 export const updateCarrier = store.update;
 export const deleteCarrier = store.remove;
 
-/**
- * Carriers created by one user.
- *
- * Filtered from the company's list rather than queried on `createdBy-index`.
- * The list is already tenant-scoped by the server, so this narrows within a
- * result set the caller is entitled to — one boundary, not two. If this ever
- * outgrows a client-side filter it becomes a server-side one, not an index
- * query from the browser.
- */
 export async function listCarriersByUser(userId: string): Promise<CarrierRecord[]> {
-  const owner = userId?.trim();
-  if (!owner) return [];
-  const all = await listAllCarriersCached();
-  return all.filter((carrier) => carrier.createdBy === owner);
+  return store.runReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      return await queryAllItems<CarrierRecord>(client, {
+        TableName: getCarriersTableName(),
+        IndexName: "createdBy-index",
+        KeyConditionExpression: "createdBy = :u",
+        ExpressionAttributeValues: { ":u": userId },
+      });
+    } catch (err) {
+      throw describeDynamoError(err, "Query", "Carriers");
+    }
+  });
 }
 
 // ---------- Eligibility rule: insurance expiry blocks auto-award unless Manager override ----------
@@ -147,10 +148,7 @@ export function evaluateAutoAwardEligibility(
     if (hasActiveAutoAwardOverride(carrier)) {
       return { eligible: true, reason: "Insurance expired — Manager override active." };
     }
-    return {
-      eligible: false,
-      reason: "Insurance expired — blocks auto-award until a Manager overrides.",
-    };
+    return { eligible: false, reason: "Insurance expired — blocks auto-award until a Manager overrides." };
   }
   return { eligible: true };
 }

@@ -1,21 +1,20 @@
-/**
- * Driver load access.
- *
- * Every call here goes to `/api/driver/loads`. The portal holds no DynamoDB
- * credentials for the Loads table and needs none: the server derives the driver
- * from the verified token and scopes every read and write to
- * `assignedDriver = <their sub>`.
- *
- * What used to be here — a full-table `Scan` filtered in the browser, plus a
- * patch that could write any attribute on any load — is now the server's job,
- * where a determined caller cannot edit it out.
- *
- * The exported names and signatures are unchanged so no screen had to move.
- */
-import { apiGetDriverLoad, apiListDriverLoads, apiPatchDriverLoad } from "./loads-api";
+import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+
+import {
+  getDynamoDocClient,
+  getLoadsTableName,
+  isLoadsConfigured,
+  scanAllTableItems,
+} from "./dynamodb";
+import { createRateLimitedExecutor } from "./rate-limit";
 import type { LoadDocumentAsset } from "./load-documents";
 
 export type { LoadDocumentAsset };
+
+const READ_MS = 300;
+const WRITE_MS = 1200;
+const runRead = createRateLimitedExecutor(READ_MS);
+const runWrite = createRateLimitedExecutor(WRITE_MS);
 
 /** Soft warn when document data-URLs approach Dynamo item size limits (mirrors ops loads-store). */
 const LOAD_DOCUMENT_DATA_URL_SOFT_LIMIT = 350_000;
@@ -97,33 +96,77 @@ export type DriverLoadRecord = {
   trackingRequired?: boolean;
 };
 
-/**
- * Loads assigned to the signed-in driver.
- *
- * `driverId` is no longer a parameter: the server takes it from the token, so
- * there is nothing for a caller to get wrong or substitute.
- */
-export async function listDriverLoads(): Promise<DriverLoadRecord[]> {
-  return apiListDriverLoads();
-}
-
-/** `null` when the load does not exist *or* is not assigned to this driver. */
-export async function getLoadById(loadId: string): Promise<DriverLoadRecord | null> {
-  return apiGetDriverLoad(loadId);
-}
-
-/**
- * Write the driver-owned attributes of an assigned load.
- *
- * The allowlist and the ownership condition both live on the server now. This
- * warns about oversized documents and passes the patch through.
- */
-export async function patchLoadRecord(
-  loadId: string,
-  attributes: Partial<DriverLoadRecord>,
-): Promise<DriverLoadRecord> {
-  if (attributes.documentAssets) {
-    warnIfLoadDocumentsOversized({ loadId, documentAssets: attributes.documentAssets });
+function describeError(err: unknown, op: string): Error {
+  if (err instanceof Error) {
+    const awsName = (err as { name?: string }).name;
+    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
+      .filter(Boolean)
+      .join(" · ");
+    console.error(`[DynamoDB Loads ${op}]`, err);
+    return new Error(`DynamoDB ${op} failed: ${detail}`);
   }
-  return apiPatchDriverLoad(loadId, attributes);
+  console.error(`[DynamoDB Loads ${op}]`, err);
+  return new Error(`DynamoDB ${op} failed`);
+}
+
+export async function listAllLoads(): Promise<DriverLoadRecord[]> {
+  if (!isLoadsConfigured()) {
+    throw new Error("Loads table / Identity Pool is not configured.");
+  }
+  return runRead(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      return await scanAllTableItems<DriverLoadRecord>(client, {
+        TableName: getLoadsTableName(),
+      });
+    } catch (err) {
+      throw describeError(err, "Scan");
+    }
+  });
+}
+
+export async function getLoadById(loadId: string): Promise<DriverLoadRecord | null> {
+  const id = loadId.trim();
+  if (!id) return null;
+  if (!isLoadsConfigured()) return null;
+
+  return runRead(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(
+        new GetCommand({
+          TableName: getLoadsTableName(),
+          Key: { loadId: id },
+        }),
+      );
+      return (out.Item as DriverLoadRecord | undefined) ?? null;
+    } catch (err) {
+      throw describeError(err, "GetItem");
+    }
+  });
+}
+
+export async function updateLoadRecord(record: DriverLoadRecord): Promise<DriverLoadRecord> {
+  if (!record.loadId?.trim()) throw new Error("loadId is required");
+  warnIfLoadDocumentsOversized(record);
+  return runWrite(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const item: DriverLoadRecord = {
+        ...record,
+        updatedAt: new Date().toISOString(),
+      };
+      await client.send(
+        new PutCommand({
+          TableName: getLoadsTableName(),
+          Item: item,
+          ConditionExpression: "attribute_exists(loadId)",
+        }),
+      );
+      return item;
+    } catch (err) {
+      throw describeError(err, "PutItem(update)");
+    }
+  });
 }

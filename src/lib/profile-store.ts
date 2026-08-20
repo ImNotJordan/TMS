@@ -1,176 +1,140 @@
-/**
- * Profile sections.
- *
- * ## Transport
- *
- * `/api/profile`, not DynamoDB. The browser holds no credentials for the
- * profile table.
- *
- * The self-service sanitizer used to run here, and the comment above it was
- * honest about what that was worth: an accident guard, not a boundary, because
- * the browser could issue a raw `PutItem` against any user's row instead. The
- * sanitizer now runs on the server, and the table is off the Identity Pool
- * role, so it finally means something.
- *
- * ## Who the server thinks you are
- *
- * `userId` is still a parameter on these functions, but it is no longer trusted.
- * The server compares it against the token: your own id is self-service, anyone
- * else's requires an admin role *and* that they are in your company. Passing a
- * colleague's id returns 404 unless you are entitled to it.
- *
- * Exported names and signatures are unchanged so no screen moved.
- */
-import { fetchAuthSession } from "aws-amplify/auth";
+import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
+import { getDynamoDocClient, getProfileTableName, queryAllItems } from "./dynamodb";
 import { createRateLimitedExecutor } from "./rate-limit";
-import {
-  sanitizeSelfServiceSection,
-  type SectionKey,
-  type SectionLoadResult,
-} from "./profile-schema";
 
-export type {
-  ProfileItem,
-  SanitizedSectionPayload,
-  SectionKey,
-  SectionLoadResult,
-} from "./profile-schema";
-export { sanitizeSelfServiceSection } from "./profile-schema";
-
-const PATH = "/api/profile";
 const PROFILE_READ_RATE_LIMIT_MS = 300;
 const PROFILE_WRITE_RATE_LIMIT_MS = 1200;
 const runProfileReadLimited = createRateLimitedExecutor(PROFILE_READ_RATE_LIMIT_MS);
 const runProfileWriteLimited = createRateLimitedExecutor(PROFILE_WRITE_RATE_LIMIT_MS);
 
-async function authHeaders(): Promise<Record<string, string>> {
-  try {
-    const session = await fetchAuthSession();
-    const token = session.tokens?.idToken?.toString();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
-    return {};
+export type SectionKey =
+  | "personal"
+  | "preferences"
+  | "notifications"
+  | "security"
+  | "permissions"
+  | "documents"
+  | "integrations"
+  | "company";
+
+export type ProfileItem<T> = {
+  userId: string;
+  section: SectionKey;
+  data: T;
+  updatedAt: string;
+};
+
+function describeError(err: unknown, op: string): Error {
+  if (err instanceof Error) {
+    // AWS SDK errors carry a `name` like "AccessDeniedException" and sometimes
+    // a `$metadata` blob; surface the most useful bits.
+    const awsName = (err as { name?: string }).name;
+    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
+      .filter(Boolean)
+      .join(" · ");
+    console.error(`[DynamoDB ${op}]`, err);
+    return new Error(`DynamoDB ${op} failed: ${detail}`);
   }
+  console.error(`[DynamoDB ${op}]`, err);
+  return new Error(`DynamoDB ${op} failed`);
 }
 
-async function send(path: string, init?: RequestInit): Promise<Response> {
-  const headers = await authHeaders();
-  return fetch(path, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...headers,
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-    },
-  });
-}
-
-async function failure(response: Response, op: string): Promise<Error> {
-  let message = `Profile ${op} failed (HTTP ${response.status})`;
-  try {
-    const body = (await response.json()) as { error?: string };
-    if (body?.error) message = body.error;
-  } catch {
-    /* non-JSON error body — the status line is enough */
-  }
-  console.error(`[Profile ${op}]`, message);
-  return new Error(message);
-}
+export type SectionLoadResult<T> = {
+  data: T | null;
+  updatedAt: string | null;
+};
 
 export async function getSection<T = Record<string, unknown>>(
   userId: string,
   section: SectionKey,
 ): Promise<SectionLoadResult<T>> {
   return runProfileReadLimited(async () => {
-    const query = `userId=${encodeURIComponent(userId)}&section=${encodeURIComponent(section)}`;
-    const response = await send(`${PATH}?${query}`);
-    // Not yours and not administrable reads the same as absent — the caller
-    // gets an empty section either way, and cannot tell them apart.
-    if (response.status === 404) return { data: null, updatedAt: null };
-    if (!response.ok) throw await failure(response, "GetItem");
-    const body = (await response.json()) as { data?: T; updatedAt?: string };
-    return { data: body.data ?? null, updatedAt: body.updatedAt ?? null };
+    try {
+      const client = await getDynamoDocClient();
+      const out = await client.send(
+        new GetCommand({
+          TableName: getProfileTableName(),
+          Key: { userId, section },
+        }),
+      );
+      const item = out.Item as ProfileItem<T> | undefined;
+      return {
+        data: (item?.data ?? null) as T | null,
+        updatedAt: item?.updatedAt ?? null,
+      };
+    } catch (err) {
+      throw describeError(err, "GetItem");
+    }
   });
 }
 
-export async function getAllSections(
-  userId: string,
-): Promise<Array<{ section: string; data: unknown; updatedAt?: string }>> {
-  return runProfileReadLimited(async () => {
-    const response = await send(`${PATH}?userId=${encodeURIComponent(userId)}`);
-    if (response.status === 404) return [];
-    if (!response.ok) throw await failure(response, "Query");
-    const body = (await response.json()) as {
-      sections?: Array<{ section: string; data: unknown; updatedAt?: string }>;
-    };
-    return body.sections ?? [];
-  });
-}
-
-async function writeSection(
-  userId: string,
-  section: SectionKey,
-  data: Record<string, unknown>,
-  options?: { merge?: boolean },
-): Promise<Record<string, unknown>> {
-  return runProfileWriteLimited(async () => {
-    const response = await send(PATH, {
-      method: "PUT",
-      body: JSON.stringify({ userId, section, data, ...(options?.merge ? { merge: true } : {}) }),
-    });
-    if (!response.ok) throw await failure(response, "PutItem");
-    const body = (await response.json()) as { data?: Record<string, unknown> };
-    return body.data ?? data;
-  });
-}
-
-/**
- * Administrative write to a user's section.
- *
- * The name is now slightly generous: the server decides whether this is an
- * admin write or a self-service one by comparing `userId` to the token, and
- * applies the sanitizer in the second case. There is no longer a client-side
- * distinction to get wrong.
- */
 export async function putSection<T = Record<string, unknown>>(
   userId: string,
   section: SectionKey,
   data: T,
 ): Promise<void> {
-  await writeSection(userId, section, data as Record<string, unknown>);
-}
-
-export async function putSectionMerge(
-  userId: string,
-  section: SectionKey,
-  data: Record<string, unknown>,
-): Promise<void> {
-  await writeSection(userId, section, data, { merge: true });
+  return runProfileWriteLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      await client.send(
+        new PutCommand({
+          TableName: getProfileTableName(),
+          Item: {
+            userId,
+            section,
+            data,
+            updatedAt: new Date().toISOString(),
+          } satisfies ProfileItem<T>,
+        }),
+      );
+    } catch (err) {
+      throw describeError(err, "PutItem");
+    }
+  });
 }
 
 /**
- * Self-service profile write.
- *
- * Still sanitizes locally, so a mis-wired form fails fast with a clear console
- * error rather than a 403 round-trip. The server sanitizes again and that copy
- * is the one that counts — this one is a convenience, and is allowed to be.
+ * Merge `patch` into the existing section document so partial UIs
+ * (e.g. Profile → Role & Permissions) cannot wipe RBAC matrices.
  */
-export async function putOwnSection(
+export async function putSectionMerge(
   userId: string,
   section: SectionKey,
-  data: Record<string, unknown>,
-  options?: { merge?: boolean },
+  patch: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const { data: sanitized, rejected } = sanitizeSelfServiceSection(section, data);
+  const existing = await getSection<Record<string, unknown>>(userId, section);
+  const base =
+    existing.data && typeof existing.data === "object" && !Array.isArray(existing.data)
+      ? existing.data
+      : {};
+  const merged = { ...base, ...patch };
+  await putSection(userId, section, merged);
+  return merged;
+}
 
-  if (rejected.length > 0) {
-    console.error("[security] blocked self-service write to privileged fields", {
-      userId,
-      section,
-      fields: rejected,
-    });
-  }
-
-  return writeSection(userId, section, sanitized, options);
+export async function getAllSections(
+  userId: string,
+): Promise<Partial<Record<SectionKey, unknown>>> {
+  return runProfileReadLimited(async () => {
+    try {
+      const client = await getDynamoDocClient();
+      const items = await queryAllItems<ProfileItem<unknown>>(client, {
+        TableName: getProfileTableName(),
+        KeyConditionExpression: "userId = :u",
+        ExpressionAttributeValues: { ":u": userId },
+      });
+      const map: Partial<Record<SectionKey, SectionLoadResult<unknown>>> = {};
+      for (const item of items) {
+        map[item.section] = {
+          data: item.data ?? null,
+          updatedAt: item.updatedAt ?? null,
+        };
+      }
+      return map;
+    } catch (err) {
+      throw describeError(err, "Query");
+    }
+  });
 }

@@ -66,7 +66,14 @@ import {
   type TrackingState,
 } from "@/lib/tracking-workflow-store";
 
-const TRACKING_TABS = ["timeline", "map", "alerts", "messages", "documents", "history"] as const;
+const TRACKING_TABS = [
+  "timeline",
+  "map",
+  "alerts",
+  "messages",
+  "documents",
+  "history",
+] as const;
 
 type TrackingTab = (typeof TRACKING_TABS)[number];
 
@@ -77,8 +84,7 @@ type TrackingSearch = {
 
 export const Route = createFileRoute("/tracking")({
   validateSearch: (search: Record<string, unknown>): TrackingSearch => {
-    const loadId =
-      typeof search.loadId === "string" && search.loadId.trim() ? search.loadId.trim() : undefined;
+    const loadId = typeof search.loadId === "string" && search.loadId.trim() ? search.loadId.trim() : undefined;
     const rawTab = typeof search.tab === "string" ? search.tab.trim() : undefined;
     const tab = TRACKING_TABS.includes(rawTab as TrackingTab) ? (rawTab as TrackingTab) : undefined;
     return { loadId, tab };
@@ -125,8 +131,7 @@ function prettyTime(iso?: string | null) {
 }
 
 const TRACKING_STATE_SHORT: Record<TrackingState, string> = {
-  "waiting-driver": "Unassigned",
-  "driver-assigned": "Awaiting driver",
+  "waiting-driver": "Waiting",
   "driver-accepted": "Accepted",
   "en-route-pickup": "To pickup",
   "at-pickup": "At pickup",
@@ -137,9 +142,6 @@ const TRACKING_STATE_SHORT: Record<TrackingState, string> = {
   completed: "Done",
   exception: "Exception",
 };
-
-/** Matches the driver portal's poll cadence so both sides converge at the same rate. */
-const TRACKING_POLL_MS = 45_000;
 
 function prettyTimeShort(iso?: string | null) {
   if (!iso) return "—";
@@ -182,78 +184,35 @@ function Page() {
   const [driverId, setDriverId] = React.useState("d-101");
   const detailTab: TrackingTab = search.tab ?? "timeline";
   const sessionsListRef = React.useRef<HTMLDivElement>(null);
-  const inFlightRef = React.useRef(false);
-  /**
-   * The deep-linked load, in a ref because `fetchLoads` is deliberately stable
-   * (empty deps) so the 45s poll does not tear down and rebuild its interval.
-   */
-  const pinnedLoadIdRef = React.useRef<string | null>(search.loadId ?? null);
   const sessions = React.useSyncExternalStore(
     subscribeTrackingSessions,
     getTrackingSessionsSnapshot,
     () => [],
   );
-  // A deep-linked load stays visible however finished it is — see
-  // `isTrackingSessionVisible`. Without this, /tracking?loadId=… from Accounting
-  // lands on an empty board, because every billable load is a finished one.
   const visibleSessions = React.useMemo(
-    () => sessions.filter((s) => isTrackingSessionVisible(s, search.loadId)),
-    [sessions, search.loadId],
+    () => sessions.filter(isTrackingSessionVisible),
+    [sessions],
   );
 
   usePageReady(loading);
 
-  const fetchLoads = React.useCallback(async (force = false, opts?: { silent?: boolean }) => {
-    // Background polls must not flip `loading` — usePageReady() would re-gate the
-    // whole page and flash the skeleton every tick.
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    if (!opts?.silent) setLoading(true);
+  const fetchLoads = React.useCallback(async (force = false) => {
+    setLoading(true);
     setError(null);
     try {
       const all = await listAllLoadsCached({ force });
       all.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
       setLoads(all);
-      syncTrackingSessionsForLoads(all, "Dispatcher", {
-        force,
-        pinnedLoadId: pinnedLoadIdRef.current,
-      });
+      syncTrackingSessionsForLoads(all, "Dispatcher", { force });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load tracking data.");
     } finally {
-      inFlightRef.current = false;
-      if (!opts?.silent) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
     void fetchLoads(true);
-  }, [fetchLoads]);
-
-  // Arriving on a deep link after mount: re-sync at once so the pinned load gets a
-  // session now rather than up to one poll interval later.
-  React.useEffect(() => {
-    pinnedLoadIdRef.current = search.loadId ?? null;
-    if (search.loadId) void fetchLoads(true, { silent: true });
-  }, [search.loadId, fetchLoads]);
-
-  // Driver-app writes (status advances, BOL/POD uploads) land in Dynamo continuously;
-  // without this the board keeps rendering the snapshot it fetched on mount, so the
-  // close-out step never appears until someone hits Refresh.
-  React.useEffect(() => {
-    const poll = () => {
-      if (document.visibilityState === "hidden") return;
-      void fetchLoads(true, { silent: true });
-    };
-    const interval = window.setInterval(poll, TRACKING_POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void fetchLoads(true, { silent: true });
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
   }, [fetchLoads]);
 
   // Deep-link from notifications / toasts: /tracking?loadId=…&tab=messages
@@ -443,9 +402,7 @@ function Page() {
                           </Badge>
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {s.pickup.city}, {s.pickup.state}
-                          {" → "}
-                          {s.delivery.city}, {s.delivery.state}
+                          {s.pickup.city}, {s.pickup.state}{" → "}{s.delivery.city}, {s.delivery.state}
                         </div>
                       </button>
                     ))
@@ -552,9 +509,9 @@ function Page() {
                         </Badge>
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
-                        {selected.pickup.city}, {selected.pickup.state}
-                        {" → "}
-                        {selected.delivery.city}, {selected.delivery.state}
+                        {selected.pickup.city}, {selected.pickup.state}{" → "}
+                        {selected.delivery.city},{" "}
+                        {selected.delivery.state}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         Driver: {selected.assignedDriverName} · Customer: {selected.customer ?? "-"}{" "}
@@ -569,8 +526,8 @@ function Page() {
                         {prettyTime(selected.eta)}
                       </div>
                       <div className="text-[11px] text-muted-foreground">
-                        {selected.gps.source === "driver" ? "Driver device" : "Estimated"} · Last
-                        ping {prettyTime(selected.gps.lastPingAt)}
+                        {selected.gps.source === "driver" ? "Driver device" : "Estimated"} · Last ping{" "}
+                        {prettyTime(selected.gps.lastPingAt)}
                       </div>
                     </div>
                   </div>
@@ -612,7 +569,9 @@ function Page() {
                         {selected.gps.source === "driver" ? "Driver · " : ""}
                         {selected.gps.location.lat.toFixed(4)},{" "}
                         {selected.gps.location.lng.toFixed(4)}
-                        {selected.gps.accuracyM ? ` · ±${selected.gps.accuracyM}m` : ""}
+                        {selected.gps.accuracyM
+                          ? ` · ±${selected.gps.accuracyM}m`
+                          : ""}
                       </span>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs">
@@ -649,8 +608,9 @@ function Page() {
                             if (action === "complete-load") {
                               void (async () => {
                                 try {
-                                  const { completeTrackingLoadAfterPod } =
-                                    await import("@/lib/tracking-workflow-store");
+                                  const { completeTrackingLoadAfterPod } = await import(
+                                    "@/lib/tracking-workflow-store"
+                                  );
                                   await completeTrackingLoadAfterPod(selected.loadId);
                                   toast.success("Load completed", {
                                     description: "POD verified. Ready for invoice.",
@@ -658,7 +618,8 @@ function Page() {
                                   void fetchLoads(true);
                                 } catch (err) {
                                   toast.error("Could not complete load", {
-                                    description: err instanceof Error ? err.message : "Try again",
+                                    description:
+                                      err instanceof Error ? err.message : "Try again",
                                   });
                                 }
                               })();
@@ -756,45 +717,42 @@ function Page() {
                         id={`tracking-timeline:${selected.loadId}`}
                         className="max-h-[520px] space-y-2 overflow-y-auto pr-1"
                       >
-                        {selected.timeline.map((event) => (
-                          <div
-                            key={event.id}
-                            className="rounded-md border border-border/70 bg-background/60 p-3"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-sm font-medium text-foreground">
-                                {event.action === "driver-assigned"
-                                  ? "Driver Assigned"
-                                  : event.action === "exception-reported"
-                                    ? "Exception Reported"
-                                    : event.action === "auto-completed"
-                                      ? "Tracking Completed"
-                                      : event.action === "complete-load"
-                                        ? "POD Verified · Load Completed"
-                                        : DRIVER_ACTION_LABELS[event.action]}
-                              </div>
-                              <Badge
-                                variant="outline"
-                                className={toneBadge[stateTone(event.state)]}
-                              >
-                                {TRACKING_STATE_LABELS[event.state]}
-                              </Badge>
+                      {selected.timeline.map((event) => (
+                        <div
+                          key={event.id}
+                          className="rounded-md border border-border/70 bg-background/60 p-3"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-medium text-foreground">
+                              {event.action === "driver-assigned"
+                                ? "Driver Assigned"
+                                : event.action === "exception-reported"
+                                  ? "Exception Reported"
+                                  : event.action === "auto-completed"
+                                    ? "Tracking Completed"
+                                    : event.action === "complete-load"
+                                      ? "POD Verified · Load Completed"
+                                      : DRIVER_ACTION_LABELS[event.action]}
                             </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {prettyTime(event.timestamp)} · {event.user} · {event.source}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {(event.location.label ??
-                                [event.location.city, event.location.state]
-                                  .filter(Boolean)
-                                  .join(", ")) ||
-                                `${event.location.lat.toFixed(3)}, ${event.location.lng.toFixed(3)}`}
-                            </div>
-                            {event.notes && (
-                              <div className="mt-2 text-sm text-foreground">{event.notes}</div>
-                            )}
+                            <Badge variant="outline" className={toneBadge[stateTone(event.state)]}>
+                              {TRACKING_STATE_LABELS[event.state]}
+                            </Badge>
                           </div>
-                        ))}
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {prettyTime(event.timestamp)} · {event.user} · {event.source}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {(event.location.label ??
+                              [event.location.city, event.location.state]
+                                .filter(Boolean)
+                                .join(", ")) ||
+                              `${event.location.lat.toFixed(3)}, ${event.location.lng.toFixed(3)}`}
+                          </div>
+                          {event.notes && (
+                            <div className="mt-2 text-sm text-foreground">{event.notes}</div>
+                          )}
+                        </div>
+                      ))}
                       </ScrollRegion>
                     </TabsContent>
 

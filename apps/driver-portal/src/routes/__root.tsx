@@ -7,7 +7,6 @@ import { AuthBootSkeleton } from "@/components/page-skeletons";
 import { DriverShell } from "@/components/shell/driver-shell";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadsProvider } from "@/lib/loads-store";
-import { NotificationsProvider } from "@/lib/notifications-store";
 import { DriverLocationWatcher } from "@/components/driver-location-watcher";
 import { DISPATCH_APP_URL } from "@/lib/external-links";
 
@@ -25,11 +24,9 @@ function RootComponent() {
   return (
     <AuthProvider>
       <LoadsProvider>
-        <NotificationsProvider>
-          <DriverLocationWatcher />
-          <AuthGate />
-          <Toaster position="top-center" richColors />
-        </NotificationsProvider>
+        <DriverLocationWatcher />
+        <AuthGate />
+        <Toaster position="top-center" richColors />
       </LoadsProvider>
     </AuthProvider>
   );

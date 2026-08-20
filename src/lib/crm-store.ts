@@ -1,4 +1,4 @@
-import { createApiBackedStore } from "./api/api-backed-store";
+import { createDynamoEntityStore } from "./dynamo-entity-store";
 import {
   getCrmAccountsTableName,
   getCrmActivitiesTableName,
@@ -15,27 +15,17 @@ type WithMeta = {
   createdBy?: string;
 };
 
-/**
- * Shared CRUD builder — every CRM entity has its own table but the same access
- * pattern, and now the same transport: `/api/crm-*`, scoped server-side.
- *
- * `tableName` is still accepted so the six call sites below did not have to
- * change; it is unused, because the server resolves the table from the resource
- * registry. The browser is not told which table backs a resource — it has no
- * permission to reach one directly and no need to know.
- */
+/** Shared CRUD builder — every CRM entity gets its own DynamoDB table but the same access pattern. */
 function makeCrudStore<T extends WithMeta>(opts: {
   tableName: string;
   idKey: keyof T & string;
   label: string;
   kind: OperationalListKind;
-  /** Resource segment and envelope keys, matching `resource-registry`. */
-  api: { resource: string; collection: string; item: string };
 }) {
-  return createApiBackedStore<T>({
-    resource: opts.api.resource,
-    keys: { collection: opts.api.collection, item: opts.api.item },
+  return createDynamoEntityStore<T>({
+    tableName: opts.tableName,
     idKey: opts.idKey,
+    label: opts.label,
     kind: opts.kind,
   });
 }
@@ -71,7 +61,6 @@ const accountsStore = makeCrudStore<CrmAccountRecord>({
   idKey: "accountId",
   label: "CRM Accounts",
   kind: "crmAccounts",
-  api: { resource: "crm-accounts", collection: "accounts", item: "account" },
 });
 
 export const createCrmAccount = accountsStore.create;
@@ -106,7 +95,6 @@ const contactsStore = makeCrudStore<CrmContactRecord>({
   idKey: "contactId",
   label: "CRM Contacts",
   kind: "crmContacts",
-  api: { resource: "crm-contacts", collection: "contacts", item: "contact" },
 });
 
 export const createCrmContact = contactsStore.create;
@@ -122,7 +110,12 @@ export const deleteCrmContact = contactsStore.remove;
 // ---------------------------------------------------------------------------
 
 export type CrmLeadStage = "Prospect" | "Quoted" | "Won" | "Lost";
-export type CrmLeadSource = "dat_prospecting" | "referral" | "campaign" | "manual" | "inbound";
+export type CrmLeadSource =
+  | "dat_prospecting"
+  | "referral"
+  | "campaign"
+  | "manual"
+  | "inbound";
 
 export const CRM_LEAD_STAGES: CrmLeadStage[] = ["Prospect", "Quoted", "Won", "Lost"];
 
@@ -152,7 +145,6 @@ const leadsStore = makeCrudStore<CrmLeadRecord>({
   idKey: "leadId",
   label: "CRM Leads",
   kind: "crmLeads",
-  api: { resource: "crm-leads", collection: "leads", item: "lead" },
 });
 
 export const createCrmLead = leadsStore.create;
@@ -214,7 +206,6 @@ const activitiesStore = makeCrudStore<CrmActivityRecord>({
   idKey: "activityId",
   label: "CRM Activities",
   kind: "crmActivities",
-  api: { resource: "crm-activities", collection: "activities", item: "activity" },
 });
 
 export const createCrmActivity = activitiesStore.create;
@@ -270,7 +261,6 @@ const campaignsStore = makeCrudStore<CrmCampaignRecord>({
   idKey: "campaignId",
   label: "CRM Campaigns",
   kind: "crmCampaigns",
-  api: { resource: "crm-campaigns", collection: "campaigns", item: "campaign" },
 });
 
 export const createCrmCampaign = campaignsStore.create;
@@ -292,12 +282,7 @@ export type CrmProspectingMatch = {
   lane: string;
   postedRate: number;
   equipmentType: string;
-  callOutcome?:
-    | "pending"
-    | "verified_available"
-    | "unavailable"
-    | "negotiated"
-    | "guardrail_blocked";
+  callOutcome?: "pending" | "verified_available" | "unavailable" | "negotiated" | "guardrail_blocked";
   negotiatedRate?: number;
   transcript?: string;
   guardrailAllowed?: boolean;
@@ -325,7 +310,6 @@ const prospectingStore = makeCrudStore<CrmProspectingRunRecord>({
   idKey: "runId",
   label: "CRM Prospecting Runs",
   kind: "crmProspecting",
-  api: { resource: "crm-prospecting", collection: "runs", item: "run" },
 });
 
 export const createCrmProspectingRun = prospectingStore.create;

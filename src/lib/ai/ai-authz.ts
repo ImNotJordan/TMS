@@ -1,14 +1,13 @@
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
-import { tryVerifiedIdClaims } from "@/lib/ai/cognito-request-credentials";
+import { readIdTokenClaims } from "@/lib/ai/cognito-request-credentials";
 import {
   getAiDailyRequestBudget,
   getAiDynamoClient,
   getProfileTable,
   getWorkspaceSettingsTable,
 } from "@/lib/ai/server-aws";
-import { strictRole } from "@/lib/tenant/strict-role";
-import type { Role } from "@/lib/admin-user-constants";
+import { normalizeRole, type Role } from "@/lib/admin-user-constants";
 
 /** Roles allowed to use Logistics AI / workspace AI at scale. */
 export const AI_ALLOWED_ROLES: ReadonlySet<Role> = new Set([
@@ -29,161 +28,69 @@ export type AiAuthzResult =
 
 type PermissionsData = {
   role?: string;
-  /** Mirror of the Cognito `custom:sessionEpoch`, for cheap revocation checks. */
-  sessionEpoch?: unknown;
 };
 
-const roleCache = new Map<
-  string,
-  { role: Role | null; sessionEpoch: number | null; expiresAt: number }
->();
-/**
- * Also the revocation window: a bumped epoch takes effect within this long.
- * Short enough that removing someone from a company is measured in seconds,
- * long enough that the Profile lookup is not per-request.
- */
+const roleCache = new Map<string, { role: Role | null; expiresAt: number }>();
 const ROLE_CACHE_TTL_MS = 60_000;
 
-export type ResolvedRequestRole =
-  | { ok: true; sub: string; role: Role | null; sessionEpoch: number | null }
-  | { ok: false; code: "not_authenticated" | "forbidden"; message: string };
-
-function readStoredEpoch(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value.trim());
-  return null;
-}
-
 /**
- * Verified caller identity plus their stored role.
- *
- * The single place the server turns a request into "who is this and what are
- * they". Shared by every authorization check so the fail-closed behaviour below
- * cannot drift between them.
- *
- * Fails closed: a role lookup that cannot complete is a denial. The previous
- * version returned success here, so any transient Dynamo fault — or one an
- * attacker could induce — granted access to a caller whose role was never
- * established.
+ * Authorize AI use: valid Cognito ID token + role from Profile permissions
+ * (when a role is set). Missing profile/role allows access for setup DX;
+ * explicit non-allowed roles are denied.
  */
-export async function resolveRequestRole(request: Request): Promise<ResolvedRequestRole> {
-  const claims = await tryVerifiedIdClaims(request);
+export async function authorizeAiRequest(request: Request): Promise<AiAuthzResult> {
+  const claims = readIdTokenClaims(request);
   if (!claims?.sub) {
-    return { ok: false, code: "not_authenticated", message: "Sign in to continue." };
+    return {
+      ok: false,
+      code: "not_authenticated",
+      message: "Sign in to use Logistics AI.",
+    };
   }
 
   const sub = claims.sub;
   const now = Date.now();
   const cached = roleCache.get(sub);
   if (cached && cached.expiresAt > now) {
-    return { ok: true, sub, role: cached.role, sessionEpoch: cached.sessionEpoch };
+    if (cached.role && !AI_ALLOWED_ROLES.has(cached.role)) {
+      return {
+        ok: false,
+        code: "forbidden",
+        message: "Your role is not permitted to use Logistics AI.",
+      };
+    }
+    return { ok: true, sub, role: cached.role };
   }
 
   try {
     const client = await getAiDynamoClient(request);
-    const out = (await (
-      client as { send: (c: unknown) => Promise<{ Item?: { data?: PermissionsData } }> }
-    ).send(
+    const out = (await (client as { send: (c: unknown) => Promise<{ Item?: { data?: PermissionsData } }> }).send(
       new GetCommand({
         TableName: getProfileTable(),
         Key: { userId: sub, section: "permissions" },
       }),
     )) as { Item?: { data?: PermissionsData } };
 
-    // Strict: an unrecognized stored value is no role, not an inferred one.
-    // `normalizeRole` maps anything containing "admin" to Admin and everything
-    // else to Operations Manager — fine for a display label, not for deciding
-    // who may write a shared secret.
-    const role = strictRole(out.Item?.data?.role);
-    const sessionEpoch = readStoredEpoch(out.Item?.data?.sessionEpoch);
-    roleCache.set(sub, { role, sessionEpoch, expiresAt: now + ROLE_CACHE_TTL_MS });
-    return { ok: true, sub, role, sessionEpoch };
+    const rawRole = out.Item?.data?.role;
+    const role = rawRole ? normalizeRole(rawRole) : null;
+    roleCache.set(sub, { role, expiresAt: now + ROLE_CACHE_TTL_MS });
+
+    if (role && !AI_ALLOWED_ROLES.has(role)) {
+      return {
+        ok: false,
+        code: "forbidden",
+        message: "Your role is not permitted to use Logistics AI.",
+      };
+    }
+    return { ok: true, sub, role };
   } catch (err) {
-    console.error(
-      "[authz] role lookup failed; denying request",
+    console.warn(
+      "[ai] role lookup failed; allowing authenticated user",
       err instanceof Error ? err.message : err,
     );
-    // Not cached: a transient fault must not pin this user to denied for 60s.
-    return {
-      ok: false,
-      code: "forbidden",
-      message: "Could not verify your permissions. Try again shortly.",
-    };
+    roleCache.set(sub, { role: null, expiresAt: now + 15_000 });
+    return { ok: true, sub, role: null };
   }
-}
-
-/**
- * Authorize AI use: verified token + a role on the AI allowlist.
- *
- * A user with no role set is allowed — deliberate setup DX, and the cost of
- * being wrong is AI spend against a metered budget, not data disclosure.
- * Settings writes use `authorizeAdminRequest`, which does not extend that grace.
- */
-export async function authorizeAiRequest(request: Request): Promise<AiAuthzResult> {
-  const resolved = await resolveRequestRole(request);
-  if (!resolved.ok) {
-    return {
-      ok: false,
-      code: resolved.code,
-      message:
-        resolved.code === "not_authenticated" ? "Sign in to use Logistics AI." : resolved.message,
-    };
-  }
-
-  if (resolved.role && !AI_ALLOWED_ROLES.has(resolved.role)) {
-    return {
-      ok: false,
-      code: "forbidden",
-      message: "Your role is not permitted to use Logistics AI.",
-    };
-  }
-  return { ok: true, sub: resolved.sub, role: resolved.role };
-}
-
-/** Drop a cached role/epoch so a bump takes effect immediately for that user. */
-export function invalidateCachedRole(sub: string) {
-  roleCache.delete(sub);
-}
-
-/** Roles permitted to change workspace-wide settings and secrets. */
-export const ADMIN_ROLES: ReadonlySet<Role> = new Set([
-  "Organization Owner",
-  "Admin",
-  "SuperAdmin",
-]);
-
-/**
- * Authorize a workspace-settings write.
- *
- * Stricter than `authorizeAiRequest` in the way that matters: **no role is a
- * denial here**, not a grace. These endpoints write shared secrets, so the
- * "allow unknown roles for setup DX" trade-off does not apply.
- */
-export async function authorizeAdminRequest(request: Request): Promise<AiAuthzResult> {
-  const resolved = await resolveRequestRole(request);
-  if (!resolved.ok) {
-    return {
-      ok: false,
-      code: resolved.code,
-      message:
-        resolved.code === "not_authenticated"
-          ? "Sign in to change workspace settings."
-          : resolved.message,
-    };
-  }
-
-  if (!resolved.role || !ADMIN_ROLES.has(resolved.role)) {
-    console.warn("[authz] non-admin attempted a workspace settings write", {
-      sub: resolved.sub,
-      role: resolved.role ?? "(none)",
-    });
-    return {
-      ok: false,
-      code: "forbidden",
-      message: "Only an administrator can change workspace settings.",
-    };
-  }
-  return { ok: true, sub: resolved.sub, role: resolved.role };
 }
 
 export type UsageMeterResult =
@@ -231,8 +138,7 @@ export async function consumeDailyAiBudget(
         ok: false,
         requests: budget,
         budget,
-        message:
-          "Daily Logistics AI budget reached. Try again tomorrow or raise TITAN_AI_DAILY_REQUEST_BUDGET.",
+        message: "Daily Logistics AI budget reached. Try again tomorrow or raise TITAN_AI_DAILY_REQUEST_BUDGET.",
       };
     }
     console.warn(

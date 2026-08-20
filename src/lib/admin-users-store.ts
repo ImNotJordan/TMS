@@ -1,30 +1,25 @@
-import { fetchAuthSession, fetchUserAttributes, getCurrentUser } from "aws-amplify/auth";
+import { fetchUserAttributes, getCurrentUser } from "aws-amplify/auth";
+import { QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 import { fetchAdminDirectoryCached, prependAdminDirectoryCacheUser } from "./admin-users-cache";
-import { formatStoredRole, normalizeRole, roleToStorageKey } from "./admin-user-constants";
-import { adminCreateCognitoUser, isCognitoAdminConfigured } from "./cognito-admin";
+import {
+  formatStoredRole,
+  roleToStorageKey,
+} from "./admin-user-constants";
+import {
+  adminCreateCognitoUser,
+  isCognitoAdminConfigured,
+  listCognitoDirectoryUsers,
+} from "./cognito-admin";
 import { configureAmplify } from "./amplify";
-import { isDynamoConfigured } from "./dynamodb";
-import { getAllSections, putSection, putSectionMerge } from "./profile-store";
+import { getDynamoDocClient, getProfileTableName, isDynamoConfigured } from "./dynamodb";
+import { putSection } from "./profile-store";
 import { createRateLimitedExecutor } from "./rate-limit";
-import { ensureCompanyContext } from "./tenant/company-context";
-import { TENANT_EXEMPT_ROLES } from "./tenant/server-tenant-context";
 
 const ADMIN_DIRECTORY_READ_RATE_LIMIT_MS = 300;
 const ADMIN_DIRECTORY_AUTH_RATE_LIMIT_MS = 600;
 const runAdminReadLimited = createRateLimitedExecutor(ADMIN_DIRECTORY_READ_RATE_LIMIT_MS);
 const runAdminAuthLimited = createRateLimitedExecutor(ADMIN_DIRECTORY_AUTH_RATE_LIMIT_MS);
-
-/** Cognito bearer for the server admin routes. */
-async function getServerAuthHeaders(): Promise<Record<string, string>> {
-  try {
-    const session = await fetchAuthSession();
-    const token = session.tokens?.idToken?.toString();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
-    return {};
-  }
-}
 
 type SectionData = Record<string, unknown>;
 
@@ -48,23 +43,6 @@ export type AdminUserDirectoryEntry = {
   inviteStatus?: string;
   twoFAStatus?: string;
   createdDate?: string;
-  /** Tenant assignment. Set by an admin at creation; never self-served. */
-  companyId?: string;
-  companyName?: string;
-  /**
-   * Employer, for tenant-exempt roles (Drivers). Profile-only, never a token
-   * claim — see [[directory-scope]]. Rule B is unchanged: a Driver still has no
-   * `companyId`, so `requireCompanyId` still fails closed for them.
-   */
-  employerCompanyId?: string;
-  employerCompanyName?: string;
-};
-
-/** A company an admin may assign to, derived from users already in the directory. */
-export type KnownCompany = {
-  companyId: string;
-  companyName: string;
-  userCount: number;
 };
 
 export type CreateAdminUserPayload = {
@@ -91,12 +69,6 @@ export type CreateAdminUserPayload = {
   fieldPermissions?: Record<string, unknown>;
   temporaryPassword?: string;
   sendEmailInvite?: boolean;
-  /**
-   * Tenant assignment for the new user. Required for every role except the
-   * tenant-exempt ones (Driver), which are scoped by assignment instead.
-   */
-  companyId?: string;
-  companyName?: string;
 };
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -144,7 +116,7 @@ function describeDynamoListError(err: unknown, op: string): Error {
     const awsName = (err as { name?: string }).name;
     if (awsName === "AccessDeniedException") {
       return new Error(
-        `Not authorized for ${op}.`,
+        `Not authorized for DynamoDB ${op}. Add dynamodb:${op} on table ${getProfileTableName()} to your Identity Pool authenticated IAM role.`,
       );
     }
     const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
@@ -172,43 +144,55 @@ function stripUndefinedDeep<T>(value: T): T {
   return value;
 }
 
-/**
- * The directory, from the server.
- *
- * Replaces two browser-side readers: a Cognito `ListUsers` over the whole pool,
- * and a `Scan` of the Profile table as fallback. Both pulled every user into the
- * browser and scoped afterwards in JavaScript, which is a presentation choice
- * rather than a boundary. The server now returns only rows this caller may see.
- */
-async function fetchDirectoryFromApi(options?: {
-  allCompanies?: boolean;
-}): Promise<DirectoryResult> {
-  const query = options?.allCompanies ? "?scope=all" : "";
-  const response = await fetch(`/api/admin/users${query}`, {
-    headers: { Accept: "application/json", ...(await getServerAuthHeaders()) },
-  });
+async function listUsersFromProfileTable(): Promise<AdminUserDirectoryEntry[]> {
+  const client = await getDynamoDocClient();
+  const tableName = getProfileTableName();
 
-  const body = (await response.json().catch(() => null)) as {
-    users?: AdminUserDirectoryEntry[];
-    warning?: string;
-    error?: string;
-    scope?: "platform" | "company";
-    companyCount?: number;
-    canViewAllCompanies?: boolean;
-  } | null;
+  const items: ProfileSectionItem[] = [];
+  let cursor: Record<string, unknown> | undefined;
 
-  if (!response.ok) {
-    throw new Error(body?.error ?? `Could not load the user directory (HTTP ${response.status}).`);
+  try {
+    do {
+      const out = (await runAdminReadLimited(() =>
+        client.send(
+          new ScanCommand({
+            TableName: tableName,
+            ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+          }) as never,
+        ),
+      )) as { Items?: ProfileSectionItem[]; LastEvaluatedKey?: Record<string, unknown> };
+      const page = out.Items ?? [];
+      items.push(...page);
+      cursor = out.LastEvaluatedKey;
+    } while (cursor);
+  } catch (err) {
+    throw describeDynamoListError(err, "Scan");
   }
 
-  return {
-    users: body?.users ?? [],
-    source: "server",
-    ...(body?.warning ? { warning: body.warning } : {}),
-    ...(body?.scope ? { scope: body.scope } : {}),
-    ...(typeof body?.companyCount === "number" ? { companyCount: body.companyCount } : {}),
-    ...(body?.canViewAllCompanies ? { canViewAllCompanies: true } : {}),
-  };
+  return mapSectionItemsToUsers(items);
+}
+
+async function enrichDirectoryFromProfileTable(
+  users: AdminUserDirectoryEntry[],
+): Promise<AdminUserDirectoryEntry[]> {
+  const enriched = await Promise.all(
+    users.map(async (user) => {
+      if (!user.id) return user;
+      try {
+        const fromTable = await getAdminDirectoryUserById(user.id);
+        return fromTable ?? user;
+      } catch {
+        return user;
+      }
+    }),
+  );
+  return enriched;
+}
+
+async function listUsersFromCognitoAndProfile(): Promise<AdminUserDirectoryEntry[]> {
+  const cognitoUsers = await runAdminAuthLimited(() => listCognitoDirectoryUsers());
+  if (cognitoUsers.length === 0) return [];
+  return enrichDirectoryFromProfileTable(cognitoUsers);
 }
 
 function mapSectionItemsToUsers(items: ProfileSectionItem[]): AdminUserDirectoryEntry[] {
@@ -255,13 +239,6 @@ function mapSectionItemsToUsers(items: ProfileSectionItem[]): AdminUserDirectory
     const nickname = asString(personal.nickname);
     const email = asString(personal.email);
     const role = formatStoredRole(asString(permissions.role));
-    const companyId = asString(permissions.companyId);
-    const companyName = asString(permissions.companyName);
-    // Tenant-exempt roles carry these instead of companyId — see
-    // [[directory-scope]]. Read here so the edit screen can show the current
-    // employer rather than an empty field.
-    const employerCompanyId = asString(permissions.employerCompanyId);
-    const employerCompanyName = asString(permissions.employerCompanyName);
     const department = asString(personal.department);
     const teams = asString(permissions.teams);
     const accountStatus = asString(security.accountStatus) ?? asString(permissions.status);
@@ -285,10 +262,6 @@ function mapSectionItemsToUsers(items: ProfileSectionItem[]): AdminUserDirectory
       inviteStatus,
       twoFAStatus: twoFactor,
       createdDate: aggregate.createdAt,
-      companyId,
-      companyName,
-      employerCompanyId,
-      employerCompanyName,
     } satisfies AdminUserDirectoryEntry;
   });
 }
@@ -296,20 +269,19 @@ function mapSectionItemsToUsers(items: ProfileSectionItem[]): AdminUserDirectory
 export async function getAdminDirectoryUserById(
   userId: string,
 ): Promise<AdminUserDirectoryEntry | null> {
-  // Goes through /api/profile, which decides whether this caller may see that
-  // user: their own row always, anyone else's only with an admin role and only
-  // inside their own company. A foreign id returns 404 and lands here as null.
-  const sections = await getAllSections(userId);
-  if (sections.length === 0) return null;
-
-  const mapped = mapSectionItemsToUsers(
-    sections.map((row) => ({
-      userId,
-      section: row.section,
-      data: row.data as SectionData | undefined,
-      updatedAt: row.updatedAt,
-    })),
-  );
+  const client = await getDynamoDocClient();
+  const tableName = getProfileTableName();
+  const out = (await runAdminReadLimited(() =>
+    client.send(
+      new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: "userId = :u",
+        ExpressionAttributeValues: { ":u": userId },
+      }) as never,
+    ),
+  )) as { Items?: ProfileSectionItem[] };
+  const items = out.Items ?? [];
+  const mapped = mapSectionItemsToUsers(items);
   return mapped[0] ?? null;
 }
 
@@ -372,16 +344,6 @@ export async function createAdminDirectoryUser(
     throw new Error("First and last name are required.");
   }
 
-  // Rule B: Drivers are never assigned a company — their access is scoped to
-  // the loads assigned to them. Everyone else must have one, or the account
-  // looks broken rather than unassigned.
-  const isTenantExempt = TENANT_EXEMPT_ROLES.has(normalizeRole(payload.role));
-  const companyId = isTenantExempt ? "" : (payload.companyId?.trim() ?? "");
-  const companyName = isTenantExempt ? "" : (payload.companyName?.trim() ?? "");
-  if (!isTenantExempt && (!companyId || !companyName)) {
-    throw new Error("A company is required. Pick an existing one or add a new company.");
-  }
-
   const cognitoUser = await runAdminAuthLimited(() =>
     adminCreateCognitoUser({
       email,
@@ -417,8 +379,6 @@ export async function createAdminDirectoryUser(
     userId,
     "permissions",
     stripUndefinedDeep({
-      // Placeholder only. The authoritative role and its Cognito group are set
-      // by syncUserRole below, server-side.
       role: storageRole,
       permissionGroup: payload.permissionTemplate?.trim() || undefined,
       accessLevel: payload.accessLevel?.trim() || undefined,
@@ -428,9 +388,6 @@ export async function createAdminDirectoryUser(
       dataAccessScope: payload.dataAccessScope?.trim() || undefined,
       modulePermissions: payload.modulePermissions,
       fieldPermissions: payload.fieldPermissions,
-      // Tenant assignment — the one place a company is bound to a user.
-      companyId,
-      companyName,
     }),
   );
 
@@ -440,18 +397,6 @@ export async function createAdminDirectoryUser(
     twoFAStatus: payload.twoFAStatus,
     createdAt: now,
   });
-
-  // Put the new user in their role's Cognito group. Deliberately after the
-  // profile rows exist, because the endpoint reads the target's company from
-  // them to run its cross-tenant check.
-  try {
-    await syncUserRole(userId, payload.role);
-  } catch (err) {
-    // The account exists and is usable; only the group is missing. Surfacing
-    // this rather than swallowing it matters — an admin who thinks they created
-    // a Dispatcher should not discover later that the token says otherwise.
-    console.error("[admin] role group sync failed for the new user", err);
-  }
 
   return {
     id: userId,
@@ -474,213 +419,107 @@ export async function createAdminDirectoryUser(
   };
 }
 
-type DirectoryResult = {
+export async function listAdminDirectoryUsers(): Promise<{
   users: AdminUserDirectoryEntry[];
-  source: "server" | "dynamodb" | "cognito";
+  source: "dynamodb" | "cognito";
   warning?: string;
-  /**
-   * `"platform"` when the caller is a platform admin and is therefore seeing
-   * every company, not just their own. The screen says so — otherwise a
-   * legitimate cross-company view is indistinguishable from a broken filter.
-   */
-  scope?: "platform" | "company";
-  /** Distinct companies represented, for the cross-company banner. */
-  companyCount?: number;
-  /** True when this caller may widen the view. Drives the UI toggle. */
-  canViewAllCompanies?: boolean;
-};
+}> {
+  const scanEnabled =
+    String(import.meta.env.VITE_ADMIN_USERS_TABLE_SCAN ?? "").toLowerCase() === "true";
+  const current = await buildCurrentCognitoUser();
 
-/**
- * The user directory, already scoped by the server.
- *
- * The scoping that used to live here — a `.filter()` over a full pool listing —
- * is gone. It kept every user *without* a companyId visible so that unassigned
- * users stayed assignable, which meant Drivers were visible to every company
- * forever: Rule B guarantees they never have one. See [[directory-scope]] for
- * the predicate that replaced it and why a Driver's employer is a separate
- * field.
- */
-export async function listAdminDirectoryUsers(options?: {
-  allCompanies?: boolean;
-}): Promise<DirectoryResult> {
-  return fetchDirectoryFromApi(options);
-}
+  if (isDynamoConfigured()) {
+    if (scanEnabled) {
+      try {
+        const users = await listUsersFromCognitoAndProfile();
+        if (users.length > 0) {
+          return { users, source: "dynamodb" };
+        }
+      } catch (cognitoErr) {
+        try {
+          const users = await listUsersFromProfileTable();
+          if (users.length > 0) {
+            return { users, source: "dynamodb" };
+          }
+        } catch (scanErr) {
+          const cognitoMessage =
+            cognitoErr instanceof Error ? cognitoErr.message : "Could not list Cognito users";
+          const scanMessage =
+            scanErr instanceof Error ? scanErr.message : "Could not scan UsersTable";
+          if (!current) {
+            throw new Error(`${cognitoMessage}. ${scanMessage}`);
+          }
+          return {
+            users: [current],
+            source: "cognito",
+            warning: `${cognitoMessage}. ${scanMessage}`,
+          };
+        }
 
-/**
- * Companies already in use, for the Add User picker.
- *
- * Derived from the directory rather than a Companies table — the lightweight
- * model. The trade-off is that a company with no users yet does not appear, and
- * a rename has to be applied per user (`renameCompany`).
- */
-export async function listKnownCompanies(): Promise<KnownCompany[]> {
-  const { users } = await fetchDirectoryFromApi();
-  const byId = new Map<string, KnownCompany>();
-
-  for (const user of users) {
-    const companyId = user.companyId?.trim();
-    if (!companyId) continue;
-    const existing = byId.get(companyId);
-    if (existing) {
-      existing.userCount += 1;
-      // Keep the first non-empty name we see; renames land via `renameCompany`.
-      if (!existing.companyName && user.companyName) existing.companyName = user.companyName;
-      continue;
+        const message =
+          cognitoErr instanceof Error ? cognitoErr.message : "Could not list Cognito users";
+        if (!current) throw cognitoErr;
+        return {
+          users: [current],
+          source: "cognito",
+          warning: message,
+        };
+      }
     }
-    byId.set(companyId, {
-      companyId,
-      companyName: user.companyName?.trim() ?? "",
-      userCount: 1,
-    });
+
+    if (current?.id) {
+      try {
+        const fromTable = await getAdminDirectoryUserById(current.id);
+        if (fromTable) {
+          return {
+            users: [fromTable],
+            source: "dynamodb",
+          };
+        }
+      } catch (err) {
+        if (!current) throw err;
+        const message =
+          err instanceof Error ? err.message : "Could not query current user from UsersTable";
+        return {
+          users: [current],
+          source: "cognito",
+          warning: message,
+        };
+      }
+    }
+
+    if (current) {
+      return {
+        users: [current],
+        source: "cognito",
+      };
+    }
+
+    const users = await listUsersFromProfileTable();
+    if (users.length > 0) {
+      return { users, source: "dynamodb" };
+    }
+    return { users: [], source: "dynamodb" };
   }
 
-  return [...byId.values()].sort((a, b) =>
-    a.companyName.localeCompare(b.companyName, undefined, { sensitivity: "base" }),
-  );
-}
-
-export type CompanyAssignmentResult = {
-  companyId: string | null;
-  companyName: string | null;
-  /** The target must re-authenticate before the change applies to them. */
-  tokenRefreshRequired: boolean;
-  /** False when `custom:sessionEpoch` is missing — old tokens stay valid. */
-  revocationActive: boolean;
-  /**
-   * `"employer"` when the target is a tenant-exempt role: only the Profile
-   * employer field was written, no claim and no epoch bump. Absent for an
-   * ordinary tenant assignment.
-   */
-  scope?: "employer";
-};
-
-/**
- * Assign (or move) a user to a company.
- *
- * Goes through the server, which writes `custom:companyId` on the Cognito user
- * under the server's own IAM principal. The browser deliberately does not make
- * this call itself: doing so would require `cognito-idp:AdminUpdateUserAttributes`
- * on the Identity Pool role, which is the permission that lets any signed-in
- * user rewrite anyone's attributes.
- *
- * Pass an empty `companyId` to remove a user from their company.
- */
-/**
- * Set a user's role, synced to their Cognito group.
- *
- * Goes through the server, which owns the group membership. The browser must
- * never hold `cognito-idp:AdminAddUserToGroup` — that action is what makes a
- * group trustworthy, and granting it to the Identity Pool role would let any
- * signed-in user put themselves in `superadmin`.
- *
- * The stored `permissions.role` is written by the server too, so the browser no
- * longer has a way to claim a role it was not given.
- */
-export async function syncUserRole(
-  userId: string,
-  role: string,
-): Promise<{ role: string; group: string; tokenRefreshRequired: boolean }> {
-  if (!userId.trim()) throw new Error("userId is required.");
-
-  const response = await fetch("/api/admin/user-role", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      ...(await getServerAuthHeaders()),
-    },
-    body: JSON.stringify({ userId: userId.trim(), role }),
-  });
-
-  const body = (await response.json().catch(() => null)) as {
-    role?: string;
-    group?: string;
-    tokenRefreshRequired?: boolean;
-    error?: string;
-  } | null;
-
-  if (!response.ok) {
-    throw new Error(body?.error ?? `Could not change the role (HTTP ${response.status}).`);
+  if (current) {
+    return {
+      users: [current],
+      source: "cognito",
+    };
   }
-
-  return {
-    role: body?.role ?? role,
-    group: body?.group ?? "",
-    tokenRefreshRequired: body?.tokenRefreshRequired ?? true,
-  };
-}
-
-export async function assignUserCompany(
-  userId: string,
-  company: { companyId: string; companyName: string },
-): Promise<CompanyAssignmentResult> {
-  const companyId = company.companyId.trim();
-  const companyName = company.companyName.trim();
-  if (!userId.trim()) throw new Error("userId is required.");
-  if (companyId && !companyName) throw new Error("A company name is required.");
-
-  const response = await fetch("/api/admin/company-assignment", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      ...(await getServerAuthHeaders()),
-    },
-    body: JSON.stringify({ userId: userId.trim(), companyId, companyName }),
-  });
-
-  const body = (await response.json().catch(() => null)) as
-    | (Partial<CompanyAssignmentResult> & { error?: string })
-    | null;
-
-  if (!response.ok) {
-    throw new Error(body?.error ?? `Could not assign the company (HTTP ${response.status}).`);
-  }
-
-  return {
-    companyId: body?.companyId ?? null,
-    companyName: body?.companyName ?? null,
-    tokenRefreshRequired: body?.tokenRefreshRequired ?? true,
-    revocationActive: body?.revocationActive ?? false,
-    ...(body?.scope === "employer" ? { scope: "employer" as const } : {}),
-  };
-}
-
-/**
- * Rename a company across every user assigned to it.
- *
- * Only the display label changes, so this writes the Profile mirror directly —
- * `custom:companyId` on the Cognito user is unaffected and no token goes stale.
- *
- * The cost of the lightweight model: the name is denormalized onto each user,
- * so a rename is a fan-out rather than a single row update. Fine at this scale;
- * revisit if company count grows.
- */
-export async function renameCompany(companyId: string, nextName: string): Promise<number> {
-  const target = companyId.trim();
-  const companyName = nextName.trim();
-  if (!target || !companyName) throw new Error("A company id and new name are required.");
-
-  const { users } = await fetchDirectoryFromApi();
-  const members = users.filter((user) => user.companyId === target);
-  for (const member of members) {
-    await putSectionMerge(member.id, "permissions", { companyId: target, companyName });
-  }
-  return members.length;
+  return { users: [], source: "cognito", warning: "No Cognito session found." };
 }
 
 /** Cached directory list — reuses session/memory until force refresh or sign-out. */
 export async function listAdminDirectoryUsersCached(
   scope: string,
-  options?: { force?: boolean; allCompanies?: boolean },
+  options?: { force?: boolean },
 ) {
   return fetchAdminDirectoryCached({
-    // Distinct cache key per view. Sharing one would let the wider list be
-    // served to the scoped view straight from sessionStorage — the leak the
-    // server just refused, reintroduced by the cache.
-    scope: options?.allCompanies ? `${scope}:all` : scope,
+    scope,
     force: options?.force,
-    fetchRemote: () => listAdminDirectoryUsers({ allCompanies: options?.allCompanies }),
+    fetchRemote: listAdminDirectoryUsers,
   });
 }
 
@@ -690,7 +529,10 @@ export function cacheAdminDirectoryUser(scope: string, user: AdminUserDirectoryE
 
 export type AssignableRoleKind = "dispatcher" | "driver" | "broker";
 
-function matchesAssignableRole(role: string | undefined, kind: AssignableRoleKind): boolean {
+function matchesAssignableRole(
+  role: string | undefined,
+  kind: AssignableRoleKind,
+): boolean {
   const normalized = (role ?? "").trim().toLowerCase();
   if (!normalized) return false;
   if (kind === "dispatcher") return normalized.includes("dispatch");
@@ -709,19 +551,26 @@ function isAssignableAccountStatus(status: string | undefined): boolean {
 }
 
 /**
- * Directory fetch for the load-assignment pickers.
- *
- * This used to bypass the directory scoping entirely — a Cognito `ListUsers`
- * with a Profile-table `Scan` as fallback — so the Create Load driver dropdown
- * offered every driver in the pool regardless of company. It goes through the
- * same scoped endpoint as the admin list now.
+ * Full directory fetch for load-assignment pickers (ignores admin scan gate).
+ * Prefers Cognito ListUsers + profile enrich; falls back to profile table scan.
  */
 async function fetchDirectoryForAssignment(): Promise<AdminUserDirectoryEntry[]> {
-  try {
-    const { users } = await fetchDirectoryFromApi();
-    if (users.length > 0) return users;
-  } catch {
-    /* fall through to the signed-in user below */
+  if (isCognitoAdminConfigured()) {
+    try {
+      const users = await listUsersFromCognitoAndProfile();
+      if (users.length > 0) return users;
+    } catch {
+      /* fall through to profile scan / current user */
+    }
+  }
+
+  if (isDynamoConfigured()) {
+    try {
+      const users = await listUsersFromProfileTable();
+      if (users.length > 0) return users;
+    } catch {
+      /* fall through */
+    }
   }
 
   const current = await buildCurrentCognitoUser();

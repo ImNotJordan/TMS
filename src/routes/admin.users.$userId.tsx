@@ -4,8 +4,6 @@ import { ArrowLeft, Loader2, Save, UserCircle2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { EditUserForm } from "@/components/admin/edit-user-form";
-import { CompanyAssignmentCard } from "@/components/admin/company-assignment-card";
-import { getAdminDirectoryUserById } from "@/lib/admin-users-store";
 import { Button } from "@/components/ui/button";
 import { usePageReady } from "@/components/page-load-gate";
 import {
@@ -45,15 +43,6 @@ function AdminEditUserPage() {
   );
   const [fetchError, setFetchError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-  // Company assignment is not part of the editable draft — it is applied
-  // immediately through its own endpoint, so it is tracked separately.
-  const [company, setCompany] = React.useState<{
-    companyId?: string;
-    companyName?: string;
-    /** Tenant-exempt roles carry an employer instead — directory only. */
-    employerCompanyId?: string;
-    employerCompanyName?: string;
-  }>({});
 
   usePageReady(fetchState === "loading");
 
@@ -78,21 +67,6 @@ function AdminEditUserPage() {
         setBaseline(loaded);
         setDraft(loaded);
         setFetchState("ready");
-
-        // Non-blocking: the form is usable even if the company lookup fails.
-        void getAdminDirectoryUserById(userId)
-          .then((entry) => {
-            if (cancelled || !entry) return;
-            setCompany({
-              companyId: entry.companyId,
-              companyName: entry.companyName,
-              employerCompanyId: entry.employerCompanyId,
-              employerCompanyName: entry.employerCompanyName,
-            });
-          })
-          .catch(() => {
-            /* leave unassigned — the card shows "Not assigned" */
-          });
       } catch (err) {
         if (cancelled) return;
         setFetchError(err instanceof Error ? err.message : "Could not load user");
@@ -239,31 +213,6 @@ function AdminEditUserPage() {
             </Button>
           </div>
         </div>
-
-        <CompanyAssignmentCard
-          userId={userId}
-          role={draft.role}
-          currentCompanyId={company.companyId}
-          currentCompanyName={company.companyName}
-          currentEmployerCompanyId={company.employerCompanyId}
-          currentEmployerCompanyName={company.employerCompanyName}
-          onAssigned={(assigned) =>
-            setCompany((prev) =>
-              // An employer write leaves the tenant claim alone, and vice versa.
-              assigned.scope === "employer"
-                ? {
-                    ...prev,
-                    employerCompanyId: assigned.companyId ?? undefined,
-                    employerCompanyName: assigned.companyName ?? undefined,
-                  }
-                : {
-                    ...prev,
-                    companyId: assigned.companyId ?? undefined,
-                    companyName: assigned.companyName ?? undefined,
-                  },
-            )
-          }
-        />
 
         <EditUserForm draft={draft} onChange={setDraft} />
       </div>

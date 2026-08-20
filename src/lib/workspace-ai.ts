@@ -50,8 +50,7 @@ export async function draftCampaignContentAsync(params: {
 
   const audience = params.audience?.trim() || "mid-market shippers";
   const typeLabel: Record<CrmCampaignType, string> = {
-    email_sequence:
-      "email outreach sequence (subject + body with {{first_name}} / {{sender_name}} tokens)",
+    email_sequence: "email outreach sequence (subject + body with {{first_name}} / {{sender_name}} tokens)",
     landing_page: "landing page markdown (headline, bullets, CTA)",
     social: "short social post",
     content_studio: "thought-leadership post for freight operators",
@@ -134,7 +133,9 @@ Be concise, operational, and specific to the numbers provided. No markdown fence
     return {
       notes: typeof parsed.notes === "string" ? parsed.notes.trim() : undefined,
       suggestedStrategy:
-        typeof parsed.suggestedStrategy === "string" ? parsed.suggestedStrategy.trim() : undefined,
+        typeof parsed.suggestedStrategy === "string"
+          ? parsed.suggestedStrategy.trim()
+          : undefined,
       customerFacingNote:
         typeof parsed.customerFacingNote === "string"
           ? parsed.customerFacingNote.trim()

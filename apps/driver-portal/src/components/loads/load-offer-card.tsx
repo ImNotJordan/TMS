@@ -1,11 +1,10 @@
-import { ArrowRight, Gauge, Scale, Truck, UserCheck } from "lucide-react";
+import { ArrowRight, Gauge, Scale, Truck } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Load } from "@/lib/mock-data";
-import { cn } from "@/lib/utils";
 
 export function LoadOfferCard({
   load,
@@ -19,18 +18,8 @@ export function LoadOfferCard({
   const perMile = (load.rate / load.distanceMiles).toFixed(2);
 
   return (
-    <Card
-      className={cn(
-        "overflow-hidden shadow-sm",
-        load.assignedByDispatch ? "border-primary/40 ring-1 ring-primary/15" : "border-border/70",
-      )}
-    >
+    <Card className="overflow-hidden border-border/70 shadow-sm">
       <CardContent className="p-4">
-        {load.assignedByDispatch ? (
-          <div className="mb-3 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-            <UserCheck className="h-3.5 w-3.5" /> Assigned to you · accept to start
-          </div>
-        ) : null}
         <Link to="/loads/$loadId" params={{ loadId: load.id }} className="block">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">

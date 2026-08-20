@@ -29,7 +29,7 @@ export async function fetchDashboardData(workspaceId: string): Promise<Dashboard
   ]);
 
   const errors: DashboardSourceError[] = [];
-  const settle = <T>(result: PromiseSettledResult<T[]>, source: string): T[] => {
+  const settle = <T,>(result: PromiseSettledResult<T[]>, source: string): T[] => {
     if (result.status === "fulfilled") return result.value;
     const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
     errors.push({ source, message });
@@ -185,10 +185,7 @@ export function carrierScores(carriers: CarrierRecord[], limit = 4): CarrierScor
     .filter((c) => c.otdPercentage != null && c.otdPercentage !== "" && !c.blacklisted)
     .map((c) => ({
       name: c.companyName,
-      score: Math.max(
-        0,
-        Math.min(100, parseMoney(c.otdPercentage) - parseMoney(c.claimsRatePercentage)),
-      ),
+      score: Math.max(0, Math.min(100, parseMoney(c.otdPercentage) - parseMoney(c.claimsRatePercentage))),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
@@ -290,11 +287,7 @@ export function buildDeadlines(
     return "Low";
   };
   const dateLabel = (at: number) =>
-    new Date(at).toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
+    new Date(at).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
   for (const rfp of rfps) {
     if (CLOSED_RFP_STATUSES.has(rfp.status)) continue;
@@ -390,12 +383,7 @@ export function buildActivity(
       who: rfp.owner?.trim() || "Pricing",
       what: `${rfp.rfpId} · ${rfp.status} (${rfp.customer})`,
       when: relativeTime(at, now),
-      tone:
-        rfp.status === "Approved"
-          ? "success"
-          : rfp.status === "Approval Pending"
-            ? "warning"
-            : "info",
+      tone: rfp.status === "Approved" ? "success" : rfp.status === "Approval Pending" ? "warning" : "info",
       at,
     });
   }
@@ -426,54 +414,18 @@ export type ShipmentPin = {
 
 /** Approximate state centroids (lat, lon) for positioning pins on the schematic US map. */
 const STATE_CENTROIDS: Record<string, [number, number]> = {
-  AL: [32.8, -86.8],
-  AR: [34.9, -92.4],
-  AZ: [34.3, -111.7],
-  CA: [37.2, -119.3],
-  CO: [39.0, -105.5],
-  CT: [41.6, -72.7],
-  DC: [38.9, -77.0],
-  DE: [39.0, -75.5],
-  FL: [28.6, -82.4],
-  GA: [32.6, -83.4],
-  IA: [42.0, -93.5],
-  ID: [44.4, -114.6],
-  IL: [40.0, -89.2],
-  IN: [39.9, -86.3],
-  KS: [38.5, -98.4],
-  KY: [37.5, -85.3],
-  LA: [31.1, -92.0],
-  MA: [42.3, -71.8],
-  MD: [39.0, -76.8],
-  ME: [45.4, -69.2],
-  MI: [44.3, -85.4],
-  MN: [46.3, -94.3],
-  MO: [38.4, -92.5],
-  MS: [32.7, -89.7],
-  MT: [47.0, -109.6],
-  NC: [35.5, -79.4],
-  ND: [47.4, -100.5],
-  NE: [41.5, -99.8],
-  NH: [43.7, -71.6],
-  NJ: [40.2, -74.7],
-  NM: [34.4, -106.1],
-  NV: [39.3, -116.6],
-  NY: [42.9, -75.5],
-  OH: [40.3, -82.8],
-  OK: [35.6, -97.5],
-  OR: [43.9, -120.6],
-  PA: [40.9, -77.8],
-  RI: [41.7, -71.6],
-  SC: [33.9, -80.9],
-  SD: [44.4, -100.2],
-  TN: [35.8, -86.4],
-  TX: [31.5, -99.3],
-  UT: [39.3, -111.7],
-  VA: [37.5, -78.9],
-  VT: [44.1, -72.7],
-  WA: [47.4, -120.4],
-  WI: [44.6, -90.0],
-  WV: [38.6, -80.6],
+  AL: [32.8, -86.8], AR: [34.9, -92.4], AZ: [34.3, -111.7], CA: [37.2, -119.3],
+  CO: [39.0, -105.5], CT: [41.6, -72.7], DC: [38.9, -77.0], DE: [39.0, -75.5],
+  FL: [28.6, -82.4], GA: [32.6, -83.4], IA: [42.0, -93.5], ID: [44.4, -114.6],
+  IL: [40.0, -89.2], IN: [39.9, -86.3], KS: [38.5, -98.4], KY: [37.5, -85.3],
+  LA: [31.1, -92.0], MA: [42.3, -71.8], MD: [39.0, -76.8], ME: [45.4, -69.2],
+  MI: [44.3, -85.4], MN: [46.3, -94.3], MO: [38.4, -92.5], MS: [32.7, -89.7],
+  MT: [47.0, -109.6], NC: [35.5, -79.4], ND: [47.4, -100.5], NE: [41.5, -99.8],
+  NH: [43.7, -71.6], NJ: [40.2, -74.7], NM: [34.4, -106.1], NV: [39.3, -116.6],
+  NY: [42.9, -75.5], OH: [40.3, -82.8], OK: [35.6, -97.5], OR: [43.9, -120.6],
+  PA: [40.9, -77.8], RI: [41.7, -71.6], SC: [33.9, -80.9], SD: [44.4, -100.2],
+  TN: [35.8, -86.4], TX: [31.5, -99.3], UT: [39.3, -111.7], VA: [37.5, -78.9],
+  VT: [44.1, -72.7], WA: [47.4, -120.4], WI: [44.6, -90.0], WV: [38.6, -80.6],
   WY: [43.0, -107.6],
 };
 
@@ -517,7 +469,11 @@ export function buildShipmentPins(loads: LoadRecord[], limit = 8): ShipmentPin[]
     const y = from && to ? from.y + (to.y - from.y) * progress : anchor.y;
     const meta = STATUS_LABELS[status];
     const tone: ShipmentPin["tone"] =
-      status === "exception" ? "destructive" : meta?.tone === "warning" ? "warning" : "success";
+      status === "exception"
+        ? "destructive"
+        : meta?.tone === "warning"
+          ? "warning"
+          : "success";
     pins.push({ id: load.loadId, x, y, status: meta?.label ?? status, tone });
     if (pins.length >= limit) break;
   }

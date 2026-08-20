@@ -1,4 +1,4 @@
-import { createApiBackedStore } from "./api/api-backed-store";
+import { createDynamoEntityStore } from "./dynamo-entity-store";
 import {
   getAwsRegion,
   getRfpsTableName,
@@ -92,11 +92,16 @@ function mapRfpError(err: unknown, op: string): Error {
   return err instanceof Error ? err : new Error(`DynamoDB ${op} failed`);
 }
 
-const store = createApiBackedStore<RfpRecord>({
-  resource: "rfps",
-  keys: { collection: "rfps", item: "rfp" },
+const store = createDynamoEntityStore<RfpRecord>({
+  tableName: getRfpsTableName,
   idKey: "rfpId",
+  label: "RFPs",
   kind: "rfps",
+  normalizeUpdate: (record, now) => ({
+    ...record,
+    updatedAt: now,
+    lastModified: formatDateTime(new Date(now)),
+  }),
 });
 
 export async function createRfp(input: CreateRfpInput): Promise<RfpRecord> {

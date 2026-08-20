@@ -48,12 +48,14 @@ async function fetchViaRoutesApi(
   destination: string,
   apiKey: string,
 ): Promise<ProxyRouteResult | null> {
+
   const upstream = await fetch(GOOGLE_ROUTES_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": "routes.polyline.encodedPolyline,routes.distanceMeters,routes.duration",
+      "X-Goog-FieldMask":
+        "routes.polyline.encodedPolyline,routes.distanceMeters,routes.duration",
     },
     body: JSON.stringify({
       origin: toRoutesApiWaypoint(origin),
@@ -113,8 +115,10 @@ async function fetchViaLegacyDirectionsApi(
 
   return {
     polyline: encoded,
-    distanceMeters: route.legs?.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0) ?? 0,
-    durationSeconds: route.legs?.reduce((sum, leg) => sum + (leg.duration?.value ?? 0), 0) ?? 0,
+    distanceMeters:
+      route.legs?.reduce((sum, leg) => sum + (leg.distance?.value ?? 0), 0) ?? 0,
+    durationSeconds:
+      route.legs?.reduce((sum, leg) => sum + (leg.duration?.value ?? 0), 0) ?? 0,
   };
 }
 
@@ -170,11 +174,17 @@ export async function handleGoogleDirectionsRequest(
   // far from any road). Retry with the caller-provided fallback addresses.
   const originFallback = requestUrl.searchParams.get("originFallback")?.trim();
   const destinationFallback = requestUrl.searchParams.get("destinationFallback")?.trim();
-  if ((!result || "error" in result) && (originFallback || destinationFallback)) {
+  if (
+    (!result || "error" in result) &&
+    (originFallback || destinationFallback)
+  ) {
     console.warn(
       "[directions-proxy] No route for exact coordinates; retrying with fallback addresses.",
     );
-    result = await computeRoute(originFallback || origin, destinationFallback || destination);
+    result = await computeRoute(
+      originFallback || origin,
+      destinationFallback || destination,
+    );
   }
 
   if (result && "error" in result) {

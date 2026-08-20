@@ -5,11 +5,10 @@ import {
   configureAmplifyBasics,
   getAwsRegionBasics,
   hasIdentityPoolBasics,
-  queryAllItems,
   scanAllTableItems,
 } from "@titan/aws-client";
 
-export { queryAllItems, scanAllTableItems };
+export { scanAllTableItems };
 
 const region = getAwsRegionBasics();
 const loadsTableName = (import.meta.env.VITE_LOADS_TABLE_NAME as string | undefined) ?? "Loads";

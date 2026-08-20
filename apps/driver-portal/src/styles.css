@@ -75,20 +75,6 @@
 :root {
   --radius: 0.875rem;
 
-  /* Shared safe-area floor — used by both the floating nav's own bottom inset
-     (floating-bottom-nav.tsx) and the clearance below, so they can't drift. */
-  --safe-bottom: max(1rem, env(safe-area-inset-bottom));
-  /* FloatingBottomNav's actual rendered pill height (icon + label + dot stack
-     plus its own vertical padding) — excludes --safe-bottom, added separately
-     below. Keep in sync with floating-bottom-nav.tsx if its size changes. */
-  --nav-height: 5.5rem;
-  /* Reserved so scrollable content never renders under the floating bottom
-     nav — real nav height + the same safe-area floor the nav itself uses +
-     a comfortable margin, computed once so every screen inherits it instead
-     of guessing a flat pixel value per page. Self-adjusts for notch/no-notch
-     and tall/short devices via env(safe-area-inset-bottom). */
-  --nav-clearance: calc(var(--nav-height) + var(--safe-bottom) + 1rem);
-
   /* Brand constants — same in light and dark, never inverted. */
   --ink: #0b1220;
   --ink-elevated: #141f36;

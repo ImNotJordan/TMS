@@ -191,19 +191,14 @@ export function createEmptySearchCriteria(): SearchCriteria {
 
 export function deriveLoadFieldOptions(loads: LoadRecord[]) {
   const uniqueSorted = (values: Array<string | undefined>) =>
-    [
-      ...new Set(
-        values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)),
-      ),
-    ].sort((a, b) => a.localeCompare(b));
+    [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))].sort(
+      (a, b) => a.localeCompare(b),
+    );
 
   return {
     customers: uniqueSorted(loads.map((load) => load.customer)),
     brokers: uniqueSorted(loads.map((load) => load.broker)),
-    states: uniqueSorted([
-      ...loads.map((load) => load.pickupState),
-      ...loads.map((load) => load.deliveryState),
-    ]),
+    states: uniqueSorted([...loads.map((load) => load.pickupState), ...loads.map((load) => load.deliveryState)]),
     equipmentTypes: uniqueSorted(loads.map((load) => load.equipmentType)),
   };
 }
@@ -261,9 +256,7 @@ export function getBiddingLoadsFingerprint(loads: LoadRecord[]): string {
   return listFingerprint(loads, (load) => load.loadId);
 }
 
-export async function fetchBiddingRiskModels(options?: {
-  force?: boolean;
-}): Promise<RiskModelOption[]> {
+export async function fetchBiddingRiskModels(options?: { force?: boolean }): Promise<RiskModelOption[]> {
   try {
     const remote = await listRiskModelsCached({ force: options?.force });
     return remote.map(mapRiskModelRecord);
@@ -418,11 +411,7 @@ function pricedLoads(loads: LoadRecord[]) {
     .filter((row): row is NonNullable<typeof row> => row != null);
 }
 
-function filterLoadsForSearch(
-  loads: LoadRecord[],
-  criteria: SearchCriteria,
-  options: SearchOptions,
-) {
+function filterLoadsForSearch(loads: LoadRecord[], criteria: SearchCriteria, options: SearchOptions) {
   return loads.filter((load) => {
     if (!equipmentMatches(load, criteria)) return false;
     if (options.exactLaneMatch && exactLaneMatch(load, criteria)) return true;
@@ -485,9 +474,7 @@ function aggregateGroup(
     datMarketMax: dat.marketMaximum,
     datRatePerMile: dat.ratePerMile,
     marginBand,
-    riskScore: Math.round(
-      Math.min(96, Math.max(12, 100 - winRate * 0.45 + historicalMarginPct * 1.2)),
-    ),
+    riskScore: Math.round(Math.min(96, Math.max(12, 100 - winRate * 0.45 + historicalMarginPct * 1.2))),
     similarActiveLoads: similarActiveCount,
     confidence: Math.min(96, Math.max(35, 40 + rows.length * 4)),
     recommendedBid,

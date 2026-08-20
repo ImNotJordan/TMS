@@ -53,7 +53,9 @@ export function integrationStatusBadgeClass(status: IntegrationConnectionStatus)
   return "bg-destructive/15 text-destructive border-destructive/25";
 }
 
-export function connectionLabelToStatus(label: IntegrationConnectionStatus): IntegrationStatus {
+export function connectionLabelToStatus(
+  label: IntegrationConnectionStatus,
+): IntegrationStatus {
   if (label === "Connected") return "connected";
   if (label === "Attention") return "error";
   return "disconnected";

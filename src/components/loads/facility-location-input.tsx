@@ -133,7 +133,7 @@ export function FacilityLocationInput({
   }, []);
 
   const layoutRect =
-    anchorRect ?? (showPanel ? (containerRef.current?.getBoundingClientRect() ?? null) : null);
+    anchorRect ?? (showPanel ? containerRef.current?.getBoundingClientRect() ?? null : null);
 
   const panelStyle = React.useMemo(() => {
     if (!layoutRect) return null;
@@ -153,9 +153,7 @@ export function FacilityLocationInput({
     };
   }, [layoutRect]);
 
-  // Bound to both onWheel and onTouchMove, so it takes the common supertype
-  // rather than WheelEvent — a TouchEvent is not assignable to that.
-  const stopWheel = (event: React.SyntheticEvent) => {
+  const stopWheel = (event: React.WheelEvent) => {
     event.stopPropagation();
   };
 
@@ -177,11 +175,7 @@ export function FacilityLocationInput({
         onTouchMove={stopWheel}
       >
         {loading && (
-          <div
-            className="space-y-2.5 px-3 py-2.5"
-            aria-busy="true"
-            aria-label="Searching locations"
-          >
+          <div className="space-y-2.5 px-3 py-2.5" aria-busy="true" aria-label="Searching locations">
             {[0, 1, 2].map((i) => (
               <div key={i} className="space-y-1.5">
                 <Skeleton className="h-3.5 w-full" />

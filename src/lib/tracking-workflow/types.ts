@@ -1,16 +1,5 @@
 export type TrackingState =
   | "waiting-driver"
-  /**
-   * Dispatch assigned a driver; the driver has not answered yet.
-   *
-   * Added because `waiting-driver` was covering two different situations — "no
-   * driver on this load" and "driver assigned, waiting on them" — and the board
-   * showed "Waiting for Driver" for both. Dispatch could not tell whether they
-   * still had work to do. The distinction is also why the naming is confusing
-   * elsewhere: the driver portal writes `driverWorkflowStatus: "assigned"` to mean
-   * *the driver accepted*, which is this state's successor, not this state.
-   */
-  | "driver-assigned"
   | "driver-accepted"
   | "en-route-pickup"
   | "at-pickup"
@@ -135,8 +124,7 @@ export type TrackingSessionCloud = Omit<TrackingSession, "messages" | "documents
 };
 
 export const TRACKING_STATE_LABELS: Record<TrackingState, string> = {
-  "waiting-driver": "Unassigned",
-  "driver-assigned": "Assigned · awaiting driver",
+  "waiting-driver": "Waiting for Driver",
   "driver-accepted": "Driver Accepted",
   "en-route-pickup": "En Route to Pickup",
   "at-pickup": "At Pickup",

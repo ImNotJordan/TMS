@@ -31,7 +31,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TruckboardTruckBoardIdRouteImport } from './routes/truckboard.$truckBoardId'
 import { Route as LoadsLoadIdRouteImport } from './routes/loads.$loadId'
 import { Route as CarriersCarrierIdRouteImport } from './routes/carriers.$carrierId'
-import { Route as InvoicesInvoiceIdPrintRouteImport } from './routes/invoices.$invoiceId.print'
 import { Route as AdminUsersUserIdRouteImport } from './routes/admin.users.$userId'
 
 const TruckboardRoute = TruckboardRouteImport.update({
@@ -144,11 +143,6 @@ const CarriersCarrierIdRoute = CarriersCarrierIdRouteImport.update({
   path: '/$carrierId',
   getParentRoute: () => CarriersRoute,
 } as any)
-const InvoicesInvoiceIdPrintRoute = InvoicesInvoiceIdPrintRouteImport.update({
-  id: '/invoices/$invoiceId/print',
-  path: '/invoices/$invoiceId/print',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminUsersUserIdRoute = AdminUsersUserIdRouteImport.update({
   id: '/users/$userId',
   path: '/users/$userId',
@@ -179,7 +173,6 @@ export interface FileRoutesByFullPath {
   '/loads/$loadId': typeof LoadsLoadIdRoute
   '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
-  '/invoices/$invoiceId/print': typeof InvoicesInvoiceIdPrintRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -205,7 +198,6 @@ export interface FileRoutesByTo {
   '/loads/$loadId': typeof LoadsLoadIdRoute
   '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
-  '/invoices/$invoiceId/print': typeof InvoicesInvoiceIdPrintRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -232,7 +224,6 @@ export interface FileRoutesById {
   '/loads/$loadId': typeof LoadsLoadIdRoute
   '/truckboard/$truckBoardId': typeof TruckboardTruckBoardIdRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
-  '/invoices/$invoiceId/print': typeof InvoicesInvoiceIdPrintRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -260,7 +251,6 @@ export interface FileRouteTypes {
     | '/loads/$loadId'
     | '/truckboard/$truckBoardId'
     | '/admin/users/$userId'
-    | '/invoices/$invoiceId/print'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -286,7 +276,6 @@ export interface FileRouteTypes {
     | '/loads/$loadId'
     | '/truckboard/$truckBoardId'
     | '/admin/users/$userId'
-    | '/invoices/$invoiceId/print'
   id:
     | '__root__'
     | '/'
@@ -312,7 +301,6 @@ export interface FileRouteTypes {
     | '/loads/$loadId'
     | '/truckboard/$truckBoardId'
     | '/admin/users/$userId'
-    | '/invoices/$invoiceId/print'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -335,7 +323,6 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   TrackingRoute: typeof TrackingRoute
   TruckboardRoute: typeof TruckboardRouteWithChildren
-  InvoicesInvoiceIdPrintRoute: typeof InvoicesInvoiceIdPrintRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -494,13 +481,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CarriersCarrierIdRouteImport
       parentRoute: typeof CarriersRoute
     }
-    '/invoices/$invoiceId/print': {
-      id: '/invoices/$invoiceId/print'
-      path: '/invoices/$invoiceId/print'
-      fullPath: '/invoices/$invoiceId/print'
-      preLoaderRoute: typeof InvoicesInvoiceIdPrintRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin/users/$userId': {
       id: '/admin/users/$userId'
       path: '/users/$userId'
@@ -575,7 +555,6 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   TrackingRoute: TrackingRoute,
   TruckboardRoute: TruckboardRouteWithChildren,
-  InvoicesInvoiceIdPrintRoute: InvoicesInvoiceIdPrintRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

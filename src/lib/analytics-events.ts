@@ -219,10 +219,7 @@ function buildLoadEvents(loads: LoadRecord[], events: AnalyticsEvent[]) {
       const created = recordTime(load.createdAt) ?? at;
       const coverHours = Math.max(
         0.5,
-        Math.min(
-          96,
-          (at.getTime() - created.getTime()) / 3_600_000 || 4 + unitFromSeed(load.loadId) * 28,
-        ),
+        Math.min(96, (at.getTime() - created.getTime()) / 3_600_000 || 4 + unitFromSeed(load.loadId) * 28),
       );
       push(events, {
         id: `load.covered:${load.loadId}`,
@@ -494,9 +491,7 @@ function buildCrmEvents(
     const at = recordTime(campaign.updatedAt) ?? recordTime(campaign.createdAt) ?? new Date();
     const touches = Math.round(20 + unitFromSeed(campaign.campaignId) * 480);
     const replies = Math.round(touches * (0.04 + unitFromSeed(`${campaign.campaignId}:r`) * 0.12));
-    const conversions = Math.round(
-      replies * (0.1 + unitFromSeed(`${campaign.campaignId}:c`) * 0.25),
-    );
+    const conversions = Math.round(replies * (0.1 + unitFromSeed(`${campaign.campaignId}:c`) * 0.25));
     push(events, {
       id: `campaign.touch:${campaign.campaignId}`,
       type: "campaign.touch",
@@ -551,10 +546,7 @@ function buildCarrierAiEvents(carriers: CarrierRecord[], events: AnalyticsEvent[
     const insuranceBoost = carrier.insuranceVerified ? 4 : -6;
     const score = Math.max(
       0,
-      Math.min(
-        100,
-        otd - claims * 1.5 + insuranceBoost + unitFromSeed(`${carrier.carrierId}:rel`) * 3,
-      ),
+      Math.min(100, otd - claims * 1.5 + insuranceBoost + unitFromSeed(`${carrier.carrierId}:rel`) * 3),
     );
     push(events, {
       id: `carrier.reliability_score:${carrier.carrierId}`,
@@ -621,7 +613,8 @@ function buildLaneProfitabilityEvents(events: AnalyticsEvent[]) {
         lane,
         zip3Origin: latest.dimensions?.zip3Origin ?? "",
         zip3Dest: latest.dimensions?.zip3Dest ?? "",
-        suggestion: score >= 70 ? "Grow volume" : score >= 50 ? "Optimize mix" : "Reprice or exit",
+        suggestion:
+          score >= 70 ? "Grow volume" : score >= 50 ? "Optimize mix" : "Reprice or exit",
       },
       links: list[0]?.links ?? [{ href: "/loads", label: "Loads" }],
       source: "derived",
@@ -763,7 +756,7 @@ export async function fetchAnalyticsSources(workspaceId: string): Promise<Analyt
     ]);
 
   const errors: AnalyticsSourceError[] = [];
-  const settle = <T>(result: PromiseSettledResult<T[]>, source: string): T[] => {
+  const settle = <T,>(result: PromiseSettledResult<T[]>, source: string): T[] => {
     if (result.status === "fulfilled") return result.value;
     const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
     errors.push({ source, message });

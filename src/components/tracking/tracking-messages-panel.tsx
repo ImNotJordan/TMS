@@ -24,7 +24,8 @@ import { toast } from "sonner";
 
 const LONG_PRESS_MS = 500;
 
-const LEGACY_DOC_RE = /uploaded\s+(Bill of Lading|Proof of Delivery)(?:\s+\(([^)]+)\))?/i;
+const LEGACY_DOC_RE =
+  /uploaded\s+(Bill of Lading|Proof of Delivery)(?:\s+\(([^)]+)\))?/i;
 
 function prettyTime(iso?: string | null) {
   if (!iso) return "-";
@@ -63,7 +64,7 @@ function resolveDocAttachment(
 ): ResolvedAttachment | null {
   let docKind = message.docKind;
   let fileName = message.fileName;
-  const contentType = message.contentType;
+  let contentType = message.contentType;
 
   if (!docKind) {
     const match = message.text.match(LEGACY_DOC_RE);
@@ -81,8 +82,7 @@ function resolveDocAttachment(
   const rawName = fileName || matched?.name || label;
   const base = rawName.replace(/\.[^.]+$/, "");
   const uglyUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(base);
-  const isPdf =
-    (contentType || matched?.contentType || "").includes("pdf") || /\.pdf$/i.test(rawName);
+  const isPdf = (contentType || matched?.contentType || "").includes("pdf") || /\.pdf$/i.test(rawName);
   const displayName = uglyUuid
     ? `${docKind === "pod" ? "POD" : "BOL"} · ${prettyTime(message.timestamp)}.${isPdf ? "pdf" : "jpg"}`
     : rawName;
@@ -123,12 +123,9 @@ function useLongPress(onLongPress: (event: React.PointerEvent) => void, ms = LON
         }
       }, ms);
     },
-    // Declared as event-taking even though the event is unused: call sites
-    // forward theirs (`longPressHandlers.onPointerUp?.(event)`), and a bare
-    // 0-arity `clearTimer` makes that a type error.
-    onPointerUp: (_event: React.PointerEvent) => clearTimer(),
-    onPointerLeave: (_event: React.PointerEvent) => clearTimer(),
-    onPointerCancel: (_event: React.PointerEvent) => clearTimer(),
+    onPointerUp: clearTimer,
+    onPointerLeave: clearTimer,
+    onPointerCancel: clearTimer,
     onClick: (event: React.MouseEvent) => {
       if (suppressClickRef.current) {
         event.preventDefault();
@@ -187,9 +184,7 @@ function MessageActionMenu({
           "fixed z-[210] w-[12.25rem] overflow-hidden rounded-2xl border border-border/60",
           "bg-background/95 p-1.5 text-popover-foreground shadow-[0_20px_50px_-16px_rgba(15,23,42,0.45)] backdrop-blur-xl",
           "animate-in fade-in-0 zoom-in-95 duration-200",
-          outgoing
-            ? "slide-in-from-bottom-1 slide-in-from-right-1"
-            : "slide-in-from-bottom-1 slide-in-from-left-1",
+          outgoing ? "slide-in-from-bottom-1 slide-in-from-right-1" : "slide-in-from-bottom-1 slide-in-from-left-1",
         )}
         style={{ left: position.x, top: position.y }}
         role="menu"
@@ -255,10 +250,7 @@ function LongPressCursorRing({
       }}
       aria-hidden
     >
-      <svg
-        className="h-full w-full -rotate-90"
-        viewBox={`0 0 ${CURSOR_RING_SIZE} ${CURSOR_RING_SIZE}`}
-      >
+      <svg className="h-full w-full -rotate-90" viewBox={`0 0 ${CURSOR_RING_SIZE} ${CURSOR_RING_SIZE}`}>
         <circle
           cx={CURSOR_RING_SIZE / 2}
           cy={CURSOR_RING_SIZE / 2}
@@ -337,12 +329,7 @@ function DocumentAttachmentCard({
         {attachment.viewUrl && isImage ? (
           <img src={attachment.viewUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <FileText
-            className={cn(
-              "h-6 w-6",
-              outgoing ? "text-primary-foreground/80" : "text-muted-foreground",
-            )}
-          />
+          <FileText className={cn("h-6 w-6", outgoing ? "text-primary-foreground/80" : "text-muted-foreground")} />
         )}
       </span>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-3 py-2">
@@ -425,13 +412,7 @@ function DocumentViewerDialog({
           )}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-border/70 px-4 py-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => onOpenChange(false)}>
             <X className="h-3.5 w-3.5" /> Close
           </Button>
           <Button type="button" size="sm" className="gap-1.5" onClick={download}>
@@ -524,10 +505,7 @@ function TrackingMessageBubble({
   };
 
   const caption = attachment
-    ? message.text
-        .replace(LEGACY_DOC_RE, "uploaded $1")
-        .replace(/\s+\([^)]+\)\.?$/, "")
-        .replace(/\.$/, "")
+    ? message.text.replace(LEGACY_DOC_RE, "uploaded $1").replace(/\s+\([^)]+\)\.?$/, "").replace(/\.$/, "")
     : message.text;
 
   const isInteractiveTarget = (event: React.PointerEvent | React.MouseEvent) => {
@@ -549,8 +527,7 @@ function TrackingMessageBubble({
           {...longPressHandlers}
           onPointerDown={(event) => {
             if (isInteractiveTarget(event)) {
-              // Cancel any pending long-press: the pointer landed on a control.
-              longPressHandlers.onPointerUp(event);
+              longPressHandlers.onPointerUp();
               return;
             }
             setPressing(true);
@@ -668,25 +645,22 @@ export function TrackingMessagesPanel({
   const activeRef = React.useRef(active);
   activeRef.current = active;
 
-  const scrollToLatest = React.useCallback(
-    (force = false) => {
-      if (!activeRef.current) return;
-      const list = listRef.current;
-      if (!list) return;
-      // Tab panels that were `hidden` report 0 height until layout settles
-      if (list.clientHeight < 8) return;
+  const scrollToLatest = React.useCallback((force = false) => {
+    if (!activeRef.current) return;
+    const list = listRef.current;
+    if (!list) return;
+    // Tab panels that were `hidden` report 0 height until layout settles
+    if (list.clientHeight < 8) return;
 
-      const key = `${loadId}:${lastMessageId ?? "empty"}:${messages.length}`;
-      if (!force && lastScrolledKeyRef.current === key) {
-        const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-        if (distanceFromBottom < 48) scrollMessageListToEnd(list);
-        return;
-      }
-      lastScrolledKeyRef.current = key;
-      scrollMessageListToEnd(list);
-    },
-    [loadId, lastMessageId, messages.length],
-  );
+    const key = `${loadId}:${lastMessageId ?? "empty"}:${messages.length}`;
+    if (!force && lastScrolledKeyRef.current === key) {
+      const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+      if (distanceFromBottom < 48) scrollMessageListToEnd(list);
+      return;
+    }
+    lastScrolledKeyRef.current = key;
+    scrollMessageListToEnd(list);
+  }, [loadId, lastMessageId, messages.length]);
 
   React.useLayoutEffect(() => {
     if (!active) {

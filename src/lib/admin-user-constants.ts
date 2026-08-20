@@ -168,10 +168,7 @@ export function roleToStorageKey(role: string): string {
   if (normalized.includes("organization_owner") || normalized.includes("owner")) {
     return ROLE_STORAGE_KEYS["Organization Owner"];
   }
-  if (
-    normalized.includes("superadmin") ||
-    (normalized.includes("super") && normalized.includes("admin"))
-  ) {
+  if (normalized.includes("superadmin") || (normalized.includes("super") && normalized.includes("admin"))) {
     return ROLE_STORAGE_KEYS.SuperAdmin;
   }
   if (normalized === "admin" || normalized.endsWith("_admin")) return ROLE_STORAGE_KEYS.Admin;
@@ -194,10 +191,7 @@ export function normalizeRole(value: string | undefined): Role {
   const exact = ROLES.find((role) => role.toLowerCase() === value.trim().toLowerCase());
   if (exact) return exact;
 
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
 
   // Prefer storage-key matches first (round-trip safe).
   if (
@@ -207,18 +201,11 @@ export function normalizeRole(value: string | undefined): Role {
   ) {
     return "Organization Owner";
   }
-  if (
-    normalized === "superadmin" ||
-    (normalized.includes("super") && normalized.includes("admin"))
-  ) {
+  if (normalized === "superadmin" || (normalized.includes("super") && normalized.includes("admin"))) {
     return "SuperAdmin";
   }
   if (normalized === "admin") return "Admin";
-  if (
-    normalized === "ops" ||
-    normalized === "operations_manager" ||
-    normalized.includes("operation")
-  ) {
+  if (normalized === "ops" || normalized === "operations_manager" || normalized.includes("operation")) {
     return "Operations Manager";
   }
   if (normalized === "dispatch" || normalized === "dispatcher" || normalized.includes("dispatch")) {

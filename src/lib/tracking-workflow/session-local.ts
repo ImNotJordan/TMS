@@ -1,18 +1,6 @@
-import { isDynamoResourceNotFound } from "../dynamodb";
-
-/**
- * Message persistence is always available now.
- *
- * This used to read `VITE_TRACKING_MESSAGES_TABLE_NAME` to decide whether the
- * browser could reach the table. Messages go through `/api/tracking-messages`
- * today, so the table name is a server concern and that variable no longer has
- * to exist in the browser build — but the gates below still read well as
- * "should we persist?", so they stay and this answers yes.
- */
-const isTrackingMessagesConfigured = () => true;
+import { isDynamoResourceNotFound, isTrackingMessagesConfigured } from "../dynamodb";
 import { isDriverGpsFresh } from "../driver-gps";
-import { checkLoadTransition, normalizeLoadStatus, type LoadStatus } from "../load-status";
-import { latestDriverStatus, type LoadRecord } from "../loads-store";
+import type { LoadRecord } from "../loads-store";
 import { trackingDocumentsFromLoad } from "../load-documents";
 import {
   createTrackingMessageId,
@@ -48,6 +36,7 @@ export type {
   TrackingTimelineEvent,
 };
 export { DRIVER_ACTION_LABELS, TRACKING_STATE_LABELS };
+
 
 type TrackingListener = () => void;
 
@@ -101,7 +90,9 @@ function mergeCloudIntoSession(
     ...base,
     ...rest,
     messages: base.messages,
-    documents: base.documents.length ? base.documents : (documentMeta ?? []).map((d) => ({ ...d })),
+    documents: base.documents.length
+      ? base.documents
+      : (documentMeta ?? []).map((d) => ({ ...d })),
   };
 }
 
@@ -152,12 +143,12 @@ function flushPersist() {
   if (persistDirty) persist();
 }
 
-async function writeSessionToLoad(loadId: string, propagateDriverStatus = false) {
+async function writeSessionToLoad(loadId: string) {
   const session = sessionsByLoadId[loadId];
   if (!session || cloudPersistInFlight.has(loadId)) return;
   cloudPersistInFlight.add(loadId);
   try {
-    const { getLoadById, patchLoad } = await import("../loads-store");
+    const { getLoadById, updateLoad } = await import("../loads-store");
     const load = await getLoadById(loadId);
     if (!load) return;
     const cloud = toTrackingSessionCloud(session);
@@ -169,23 +160,11 @@ async function writeSessionToLoad(loadId: string, propagateDriverStatus = false)
     ) {
       return;
     }
-
-    // `driverWorkflowStatus` belongs to the driver portal. A background write-through
-    // (poll, ticker, session rebuild) must never touch it — GetItem is eventually
-    // consistent, so `load` can easily predate the driver's latest tap. Only an explicit
-    // dispatcher action on the Driver Actions row is allowed to speak for the driver.
-    const driverWorkflowStatus = propagateDriverStatus
-      ? driverWorkflowForCloudWrite(cloud.trackingState, load.driverWorkflowStatus)
-      : undefined;
-
-    // `loadStatus` follows the same rule: only an explicit dispatcher action may
-    // move it, and only forwards along the lifecycle table. Without this a load
-    // delivered on the tracking board never reached the billing queue.
-    const loadStatus = propagateDriverStatus
-      ? loadStatusForCloudWrite(cloud.trackingState, load.loadStatus)
-      : undefined;
-
-    await patchLoad(loadId, { trackingSession: cloud, driverWorkflowStatus, loadStatus });
+    await updateLoad({
+      ...load,
+      trackingSession: cloud,
+      driverWorkflowStatus: cloud.trackingState,
+    });
   } catch (err) {
     console.warn("[tracking] cloud persist failed", loadId, err);
   } finally {
@@ -197,22 +176,20 @@ async function writeSessionToLoad(loadId: string, propagateDriverStatus = false)
 export function scheduleCloudPersist(
   loadId: string,
   mode: "immediate" | "debounce" = "immediate",
-  opts?: { propagateDriverStatus?: boolean },
 ) {
   if (typeof window === "undefined") return;
-  const propagate = opts?.propagateDriverStatus ?? false;
   const existing = cloudPersistTimers.get(loadId);
   if (existing) {
     clearTimeout(existing);
     cloudPersistTimers.delete(loadId);
   }
   if (mode === "immediate") {
-    void writeSessionToLoad(loadId, propagate);
+    void writeSessionToLoad(loadId);
     return;
   }
   const timer = setTimeout(() => {
     cloudPersistTimers.delete(loadId);
-    void writeSessionToLoad(loadId, propagate);
+    void writeSessionToLoad(loadId);
   }, CLOUD_PERSIST_DEBOUNCE_MS);
   cloudPersistTimers.set(loadId, timer);
 }
@@ -225,7 +202,10 @@ function emit(persistMode: EmitMode = "immediate", cloudLoadId?: string) {
   if (persistMode === "immediate") persist();
   else if (persistMode === "debounce") schedulePersist();
   if (cloudLoadId) {
-    scheduleCloudPersist(cloudLoadId, persistMode === "debounce" ? "debounce" : "immediate");
+    scheduleCloudPersist(
+      cloudLoadId,
+      persistMode === "debounce" ? "debounce" : "immediate",
+    );
   }
   for (const listener of listeners) listener();
 }
@@ -282,14 +262,11 @@ function ensureTicker() {
       if (!MOVABLE_STATES.includes(session.trackingState)) continue;
 
       // Keep live driver GPS — don't overwrite with simulated route progress.
-      if (
-        session.gps.source === "driver" &&
-        isDriverGpsFresh({
-          lat: session.gps.location.lat,
-          lng: session.gps.location.lng,
-          lastPingAt: session.gps.lastPingAt,
-        })
-      ) {
+      if (session.gps.source === "driver" && isDriverGpsFresh({
+        lat: session.gps.location.lat,
+        lng: session.gps.location.lng,
+        lastPingAt: session.gps.lastPingAt,
+      })) {
         continue;
       }
 
@@ -521,9 +498,6 @@ export function normalizeLoadForDriverAssignment<
 /** Rank for comparing tracking states (higher = further along). */
 const TRACKING_STATE_RANK: Record<TrackingState, number> = {
   "waiting-driver": 0,
-  // Between "nobody on it" and "driver said yes". Fractional so the existing
-  // ranks keep their values and no comparison elsewhere shifts meaning.
-  "driver-assigned": 0.5,
   "driver-accepted": 1,
   "en-route-pickup": 2,
   "at-pickup": 3,
@@ -535,133 +509,8 @@ const TRACKING_STATE_RANK: Record<TrackingState, number> = {
   exception: -1,
 };
 
-/**
- * Ops `loadStatus` values that imply the driver is already moving, used when the
- * driver app has not reported a `driverWorkflowStatus` yet. `driver-assigned`,
- * `active`, `booked` and `tendered` are deliberately absent — they describe what
- * dispatch did, not driver acceptance, and must stay on "waiting-driver".
- */
-const TRACKING_STATE_BY_LOAD_STATUS: Record<string, TrackingState> = {
-  "driver-accepted": "driver-accepted",
-  dispatched: "en-route-pickup",
-  "en-route-pickup": "en-route-pickup",
-  en_route_pickup: "en-route-pickup",
-  "at-pickup": "at-pickup",
-  at_pickup: "at-pickup",
-  loaded: "at-pickup",
-  "in-transit": "in-transit",
-  in_transit: "in-transit",
-  "en-route-delivery": "in-transit",
-  en_route_delivery: "in-transit",
-  "at-delivery": "at-delivery",
-  at_delivery: "at-delivery",
-  "pod-uploaded": "pod-uploaded",
-  exception: "exception",
-};
-
-/**
- * `driverWorkflowStatus` is written by both apps but PARSED by the driver portal against
- * its own `ActiveLoadStatus` vocabulary — not `TrackingState`. Stamping raw tracking
- * states into it ("driver-accepted", "in-transit", "waiting-driver") leaves the portal
- * unable to recognise the value, so it falls back to "assigned" and the driver watches
- * their progress revert. Translate before writing; states with no driver-side
- * equivalent write nothing at all.
- */
-const DRIVER_WORKFLOW_BY_TRACKING_STATE: Partial<Record<TrackingState, string>> = {
-  // "driver-assigned" is absent alongside "waiting-driver": it describes what
-  // dispatch did, so it must never overwrite what the driver last reported.
-  "driver-accepted": "assigned",
-  "en-route-pickup": "en-route-pickup",
-  "at-pickup": "at-pickup",
-  "in-transit": "en-route-delivery",
-  "at-delivery": "at-delivery",
-  delivered: "delivered",
-  "pod-uploaded": "pod-uploaded",
-  completed: "completed",
-  // "waiting-driver" and "exception" are intentionally absent: neither describes a step
-  // the driver reported, so neither may overwrite what the driver last said.
-};
-
-/** Driver-portal step order, mirroring apps/driver-portal `STATUS_STEPS`. */
-const DRIVER_WORKFLOW_ORDER = [
-  "assigned",
-  "en-route-pickup",
-  "at-pickup",
-  "loaded",
-  "en-route-delivery",
-  "at-delivery",
-  "delivered",
-  "pod-uploaded",
-  "completed",
-];
-
-/**
- * The `driverWorkflowStatus` an ops write-through may safely set, or undefined to leave
- * the field untouched.
- */
-/**
- * The ops `loadStatus` a tracking state implies, or undefined to leave it alone.
- *
- * `writeSessionToLoad` wrote only `trackingSession` and `driverWorkflowStatus`, so
- * a dispatcher walking a load to delivered on the tracking board left `loadStatus`
- * wherever it was. `isLoadBillable` reads `loadStatus` — a single `||` fallback on
- * `driverWorkflowStatus` was all that kept those loads in the billing queue.
- *
- * States describing dispatch's own act, or an exception, map to nothing: an
- * exception is not a lifecycle position and must not overwrite one.
- */
-const LOAD_STATUS_BY_TRACKING_STATE: Partial<Record<TrackingState, LoadStatus>> = {
-  "driver-accepted": "driver-assigned",
-  "en-route-pickup": "dispatched",
-  "at-pickup": "at-pickup",
-  "in-transit": "in-transit",
-  "at-delivery": "at-delivery",
-  delivered: "delivered",
-  "pod-uploaded": "pod-uploaded",
-  completed: "completed",
-};
-
-/**
- * The `loadStatus` an ops write-through may set, or undefined to leave it as is.
- *
- * Refuses to move the load backwards, and refuses any move the lifecycle table
- * does not allow — the board must not be able to write a status the API would
- * reject, or the write silently fails and the two views diverge.
- */
-export function loadStatusForCloudWrite(
-  state: TrackingState,
-  current?: string,
-): LoadStatus | undefined {
-  const mapped = LOAD_STATUS_BY_TRACKING_STATE[state];
-  if (!mapped) return undefined;
-
-  const from = normalizeLoadStatus(current);
-  if (!from) return mapped;
-  if (from === mapped) return undefined;
-
-  const check = checkLoadTransition(from, mapped);
-  return check.ok ? mapped : undefined;
-}
-
-export function driverWorkflowForCloudWrite(
-  state: TrackingState,
-  current?: string,
-): string | undefined {
-  const mapped = DRIVER_WORKFLOW_BY_TRACKING_STATE[state];
-  if (!mapped) return undefined;
-  const now = (current ?? "").trim().toLowerCase();
-  if (!now) return mapped;
-  const from = DRIVER_WORKFLOW_ORDER.indexOf(now);
-  const to = DRIVER_WORKFLOW_ORDER.indexOf(mapped);
-  // Tracking collapses some driver steps (both "loaded" and "at-pickup" derive to
-  // at-pickup), so a naive write-back would walk the driver backwards. Never regress.
-  if (from >= 0 && to >= 0 && to < from) return undefined;
-  return mapped;
-}
-
 const PROGRESS_BY_STATE: Record<TrackingState, number> = {
   "waiting-driver": 0,
-  "driver-assigned": 0,
   "driver-accepted": 5,
   "en-route-pickup": 12,
   "at-pickup": 28,
@@ -713,17 +562,14 @@ export function deriveTrackingStateFromLoad(load: LoadRecord): TrackingState {
     case "pod-uploaded":
     case "completed":
       return workflow === "completed" ? "completed" : "pod-uploaded";
-    case "declined":
-      // Driver rejected the assignment — surface it as an exception so dispatch reassigns.
-      return "exception";
     default:
       break;
   }
 
-  // History fallback when workflow field is missing but driver already advanced.
-  // Ordered by server time where present — a device with a wrong clock can append
-  // out of order, and "last element" would then read as the latest status.
-  const latest = latestDriverStatus(load.driverStatusHistory);
+  // History fallback when workflow field is missing but driver already advanced
+  const latest = load.driverStatusHistory?.length
+    ? load.driverStatusHistory[load.driverStatusHistory.length - 1]
+    : undefined;
   if (latest?.status) {
     const fromHistory = deriveTrackingStateFromLoad({
       ...load,
@@ -733,29 +579,15 @@ export function deriveTrackingStateFromLoad(load: LoadRecord): TrackingState {
     if (fromHistory !== "waiting-driver") return fromHistory;
   }
 
-  // Dispatch can also advance a load by hand on the Loads page; honour that so the
-  // board does not sit on "Waiting for Driver" for a truck that is already rolling.
-  const fromLoadStatus = TRACKING_STATE_BY_LOAD_STATUS[loadStatus];
-  if (fromLoadStatus) return fromLoadStatus;
-
-  /**
-   * Assigned in ops, but the driver has not answered.
-   *
-   * This is the case behind the "status is still Awaiting Driver" report. The
-   * statuses below deliberately do not imply driver acceptance — that is correct
-   * and unchanged — but a load with a driver on it is not the same as a load with
-   * nobody on it, and the board was showing both as "Waiting for Driver". Dispatch
-   * could not tell which loads still needed chasing.
-   */
-  if (load.assignedDriver?.trim()) return "driver-assigned";
+  if (load.assignedDriver?.trim()) {
+    // Assigned in ops but driver has not accepted / no portal workflow yet
+    return "waiting-driver";
+  }
 
   return "waiting-driver";
 }
 
-function applyDerivedTrackingState(
-  session: TrackingSession,
-  state: TrackingState,
-): TrackingSession {
+function applyDerivedTrackingState(session: TrackingSession, state: TrackingState): TrackingSession {
   if (session.trackingState === "exception" && state === "waiting-driver") {
     return session;
   }
@@ -812,16 +644,11 @@ const syncedLoadVersions = new Map<string, string>();
 export function syncTrackingSessionsForLoads(
   loads: LoadRecord[],
   dispatcherName = "Dispatcher",
-  options?: { force?: boolean; pinnedLoadId?: string | null },
+  options?: { force?: boolean },
 ) {
-  const pinned = options?.pinnedLoadId?.trim() || null;
   const seen = new Set<string>();
   for (const load of loads) {
-    // A load asked for by id is always synced, however finished it is. The
-    // eligibility rules below declutter the live board — they are not access
-    // control, and a deep link is a different intent: "show me this one".
-    const isPinned = pinned !== null && load.loadId === pinned;
-    if (!isPinned && !isLoadEligibleForTracking(load)) {
+    if (!isLoadEligibleForTracking(load)) {
       if (sessionsByLoadId[load.loadId]) {
         removeTrackingSessionForLoad(load.loadId);
       }
@@ -838,7 +665,7 @@ export function syncTrackingSessionsForLoads(
   if (options?.force) {
     bootIfNeeded();
     for (const loadId of Object.keys(sessionsByLoadId)) {
-      if (seen.has(loadId) || loadId === pinned) continue;
+      if (seen.has(loadId)) continue;
       removeTrackingSessionForLoad(loadId);
     }
   }
@@ -872,22 +699,8 @@ export function isLoadEligibleForTracking(load: LoadRecord): boolean {
   return true;
 }
 
-/**
- * Hide terminal / non-operational sessions from the Tracking UI.
- *
- * Board decluttering, **not** access control. A finished load is hidden so the live
- * board shows trucks that are moving — but anyone who navigates to a specific load
- * is entitled to see it. Callers handling a deep link should pass `pinnedLoadId`.
- *
- * Without this exemption the Accounting page's "Track" button could never work: it
- * only appears on invoice rows, an invoice only exists for a delivered or completed
- * load, and every one of those is hidden by the rules below.
- */
-export function isTrackingSessionVisible(
-  session: TrackingSession,
-  pinnedLoadId?: string | null,
-): boolean {
-  if (pinnedLoadId && session.loadId === pinnedLoadId) return true;
+/** Hide terminal / non-operational sessions from the Tracking UI. */
+export function isTrackingSessionVisible(session: TrackingSession): boolean {
   if (session.trackingState === "completed") return false;
   if (session.trackingState === "delivered" || session.trackingState === "pod-uploaded") {
     return session.documents.some(
@@ -1220,7 +1033,6 @@ export async function hydrateSessionMessages(loadId: string) {
 
 export function getNextDriverActions(state: TrackingState): DriverWorkflowAction[] {
   if (state === "waiting-driver") return ["accept-load", "decline-load"];
-  if (state === "driver-assigned") return ["accept-load", "decline-load"];
   if (state === "driver-accepted") return ["start-route-pickup"];
   if (state === "en-route-pickup") return ["arrived-pickup"];
   if (state === "at-pickup") return ["checkin-pickup", "loaded", "depart-pickup"];
@@ -1231,81 +1043,14 @@ export function getNextDriverActions(state: TrackingState): DriverWorkflowAction
   return [];
 }
 
-/**
- * Is this action legal from this state?
- *
- * `decline-load` is exempt: it is how `reportTrackingException` raises an
- * exception, and a load can hit trouble at any point in its run. Every other
- * action must be one the state actually offers.
- */
-export function canApplyDriverAction(state: TrackingState, action: DriverWorkflowAction): boolean {
-  if (action === "decline-load") return true;
-  return getNextDriverActions(state).includes(action);
-}
-
-export type DriverActionRejection = {
-  ok: false;
-  code: "no_session" | "illegal_transition";
-  message: string;
-};
-
-/** The last rejection, for callers that want to surface it. */
-let lastDriverActionRejection: DriverActionRejection | null = null;
-
-export function consumeDriverActionRejection(): DriverActionRejection | null {
-  const rejection = lastDriverActionRejection;
-  lastDriverActionRejection = null;
-  return rejection;
-}
-
 export function applyDriverAction(
   loadId: string,
   action: DriverWorkflowAction,
   opts?: { user?: string; source?: TimelineSource; notes?: string },
 ) {
   bootIfNeeded();
-  lastDriverActionRejection = null;
   const current = sessionsByLoadId[loadId];
-  if (!current) {
-    lastDriverActionRejection = {
-      ok: false,
-      code: "no_session",
-      message: `No tracking session for ${loadId}.`,
-    };
-    return null;
-  }
-
-  /**
-   * The guard that was missing.
-   *
-   * `getNextDriverActions` computed the legal action set and fed the UI's buttons,
-   * but this function never consulted it — so 120 of the 130 state × action
-   * combinations applied, and 55 of them walked the load *backwards*. A dispatcher
-   * could put a completed load back to "Driver Accepted", and because
-   * `routeProgressPct` is monotonic the board would then show "Driver Accepted"
-   * next to a 98% progress bar.
-   *
-   * A hidden button is not a guard. This is.
-   */
-  if (!canApplyDriverAction(current.trackingState, action)) {
-    const allowed = getNextDriverActions(current.trackingState);
-    lastDriverActionRejection = {
-      ok: false,
-      code: "illegal_transition",
-      message: allowed.length
-        ? `A load at "${TRACKING_STATE_LABELS[current.trackingState]}" cannot ${DRIVER_ACTION_LABELS[action]}. Available: ${allowed
-            .map((a) => DRIVER_ACTION_LABELS[a])
-            .join(", ")}.`
-        : `This load is ${TRACKING_STATE_LABELS[current.trackingState]} and has no remaining driver actions.`,
-    };
-    console.warn("[tracking] rejected driver action", {
-      loadId,
-      from: current.trackingState,
-      action,
-    });
-    return null;
-  }
-
+  if (!current) return null;
   const user = opts?.user ?? current.assignedDriverName;
   const source = opts?.source ?? "driver-app";
   const now = nowIso();
@@ -1338,9 +1083,7 @@ export function applyDriverAction(
     ];
     sessionsByLoadId = { ...sessionsByLoadId, [loadId]: next };
     emit("immediate");
-    // Explicit dispatcher action on the Driver Actions row — allowed to speak for
-    // the driver, unlike background write-throughs.
-    scheduleCloudPersist(loadId, "immediate", { propagateDriverStatus: true });
+    scheduleCloudPersist(loadId, "immediate");
     ensureTicker();
     return next;
   }
@@ -1435,7 +1178,7 @@ export function applyDriverAction(
 
   sessionsByLoadId = { ...sessionsByLoadId, [loadId]: next };
   emit("immediate");
-  scheduleCloudPersist(loadId, "immediate", { propagateDriverStatus: true });
+  scheduleCloudPersist(loadId, "immediate");
   ensureTicker();
   return next;
 }
@@ -1456,9 +1199,10 @@ export async function completeTrackingLoadAfterPod(
   loadId: string,
   opts?: { user?: string; notes?: string },
 ) {
-  const { getLoadById, patchLoad } = await import("../loads-store");
-  const { upsertOperationalListItem, getOperationalCacheScope } =
-    await import("../operational-data-cache");
+  const { getLoadById, updateLoad } = await import("../loads-store");
+  const { upsertOperationalListItem, getOperationalCacheScope } = await import(
+    "../operational-data-cache"
+  );
 
   const load = await getLoadById(loadId);
   if (!load) {
@@ -1473,23 +1217,21 @@ export async function completeTrackingLoadAfterPod(
     throw new Error("POD is not on file yet. Ask the driver to upload Proof of Delivery first.");
   }
 
-  const session = applyDriverAction(loadId, "complete-load", {
-    user: opts?.user ?? "Dispatcher",
-    source: "dispatcher",
-    notes:
-      opts?.notes ??
-      "POD verified by dispatch. Load marked completed — ready for billing / invoice.",
-  });
-
-  // Close-out owns exactly these three attributes. A whole-item Put here would rewrite
-  // the driver's docs and GPS from a read that may already be out of date.
-  const changes = {
+  const updated = await updateLoad({
+    ...load,
     loadStatus: "completed",
     driverWorkflowStatus: "completed",
-    trackingSession: session ? toTrackingSessionCloud(session) : load.trackingSession,
-  };
-  await patchLoad(loadId, changes);
-  const updated = { ...load, ...changes, updatedAt: new Date().toISOString() };
+    trackingSession: (() => {
+      const session = applyDriverAction(loadId, "complete-load", {
+        user: opts?.user ?? "Dispatcher",
+        source: "dispatcher",
+        notes:
+          opts?.notes ??
+          "POD verified by dispatch. Load marked completed — ready for billing / invoice.",
+      });
+      return session ? toTrackingSessionCloud(session) : load.trackingSession;
+    })(),
+  });
   upsertOperationalListItem("loads", getOperationalCacheScope(), updated, (row) => row.loadId);
 
   // Force session off the live board

@@ -126,9 +126,7 @@ export function formatTruckDraftDestination(draft: TruckDraft): string {
       .replace(/\b\w/g, (c) => c.toUpperCase());
   }
   if (draft.preferredStates.length > 0) {
-    return (
-      draft.preferredStates.slice(0, 3).join(", ") + (draft.preferredStates.length > 3 ? "…" : "")
-    );
+    return draft.preferredStates.slice(0, 3).join(", ") + (draft.preferredStates.length > 3 ? "…" : "");
   }
   return "—";
 }

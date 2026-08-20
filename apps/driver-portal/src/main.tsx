@@ -4,14 +4,7 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { registerSW } from "virtual:pwa-register";
 
 import { routeTree } from "./routeTree.gen";
-import { applyDarkModeClass, readDarkModePref } from "./lib/theme";
 import "./styles.css";
-
-// Apply the saved theme before the first paint — this used to only happen
-// once ProfilePage (the settings screen) mounted, so the rest of the app
-// rendered light until you happened to open Profile, and opening it then
-// flipped the whole app to dark with no toggle tapped.
-applyDarkModeClass(readDarkModePref());
 
 const router = createRouter({ routeTree });
 

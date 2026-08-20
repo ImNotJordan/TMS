@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { isWorkspaceSettingsConfigured } from "@/lib/dynamodb";
 import {
   INTEGRATIONS_CONFIG_CHANGED,
-  readAiConnectionStatus,
+  getStoredAiApiKey,
   getStoredGeocodeApiKey,
   loadIntegrationsConfig,
   recordAiTestResult,
@@ -104,7 +104,9 @@ export function useIntegrations(settingsOverride?: Record<string, AppSettingValu
 
   const items = React.useMemo(() => {
     void tick;
-    return INTEGRATION_PROVIDERS.map((p) => resolveIntegrationState(p.id, settingsValues));
+    return INTEGRATION_PROVIDERS.map((p) =>
+      resolveIntegrationState(p.id, settingsValues),
+    );
   }, [settingsValues, tick]);
 
   const byId = React.useMemo(() => {
@@ -113,36 +115,33 @@ export function useIntegrations(settingsOverride?: Record<string, AppSettingValu
     return map;
   }, [items]);
 
-  const test = React.useCallback(
-    async (rawId: string): Promise<TestResult> => {
-      const id = toCanonicalIntegrationId(rawId);
-      setTestingId(id);
-      try {
-        if (id === "google_maps") {
-          const result = await testGoogleMapsIntegration();
-          await recordGoogleMapsTestResult(result.ok);
-          refresh();
-          return result;
-        }
-        if (id === "ai") {
-          const result = await testAiIntegration();
-          await recordAiTestResult(result.ok);
-          refresh();
-          return result;
-        }
-        const label = INTEGRATION_PROVIDERS.find((p) => p.id === id)?.label ?? id;
-        return { ok: false, message: `Test for ${label} is not wired yet.` };
-      } finally {
-        setTestingId(null);
+  const test = React.useCallback(async (rawId: string): Promise<TestResult> => {
+    const id = toCanonicalIntegrationId(rawId);
+    setTestingId(id);
+    try {
+      if (id === "google_maps") {
+        const result = await testGoogleMapsIntegration();
+        await recordGoogleMapsTestResult(result.ok);
+        refresh();
+        return result;
       }
-    },
-    [refresh],
-  );
+      if (id === "ai") {
+        const result = await testAiIntegration();
+        await recordAiTestResult(result.ok);
+        refresh();
+        return result;
+      }
+      const label = INTEGRATION_PROVIDERS.find((p) => p.id === id)?.label ?? id;
+      return { ok: false, message: `Test for ${label} is not wired yet.` };
+    } finally {
+      setTestingId(null);
+    }
+  }, [refresh]);
 
   const canTest = React.useCallback((rawId: string) => {
     const id = toCanonicalIntegrationId(rawId);
     if (id === "google_maps") return Boolean(getStoredGeocodeApiKey());
-    if (id === "ai") return Boolean(readAiConnectionStatus()?.connected);
+    if (id === "ai") return Boolean(getStoredAiApiKey());
     return true;
   }, []);
 

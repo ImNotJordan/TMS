@@ -12,27 +12,19 @@ import {
   tryAcquireInFlight,
   type RateLimitResult,
 } from "@/lib/ai/http-rate-limit";
-import { tryVerifiedIdClaims } from "@/lib/ai/cognito-request-credentials";
+import { readIdTokenClaims } from "@/lib/ai/cognito-request-credentials";
 import { getAiDynamoClient, getWorkspaceSettingsTable } from "@/lib/ai/server-aws";
 
 export { clientIpFromRequest, releaseInFlight, tryAcquireInFlight };
 
-/**
- * Rate-limit bucket identity. The `sub` must be *verified*: an unverified one
- * lets a caller mint a fresh bucket per forged token and sidestep the limit
- * entirely. Unauthenticated callers fall back to IP.
- */
-async function subjectKey(request: Request): Promise<string> {
-  const sub = (await tryVerifiedIdClaims(request))?.sub;
+function subjectKey(request: Request): string {
+  const sub = readIdTokenClaims(request)?.sub;
   const ip = clientIpFromRequest(request);
   return sub || `ip:${ip}`;
 }
 
-export async function aiRateLimitKey(
-  request: Request,
-  kind: "status" | "chat" | "workspace",
-): Promise<string> {
-  return `ai:${kind}:${await subjectKey(request)}`;
+export function aiRateLimitKey(request: Request, kind: "status" | "chat" | "workspace"): string {
+  return `ai:${kind}:${subjectKey(request)}`;
 }
 
 /**
@@ -45,7 +37,7 @@ export async function enforceDistributedRateLimit(
 ): Promise<RateLimitResult & { source: "memory" | "dynamo" | "memory+dynamo" }> {
   const limit =
     kind === "status" ? ASSISTANT_STATUS_LIMIT : kind === "chat" ? ASSISTANT_CHAT_LIMIT : 30;
-  const memoryKey = await aiRateLimitKey(request, kind);
+  const memoryKey = aiRateLimitKey(request, kind);
   const memory = checkMemoryRateLimit({
     key: memoryKey,
     limit,
@@ -58,7 +50,7 @@ export async function enforceDistributedRateLimit(
   try {
     const client = await getAiDynamoClient(request);
     const table = getWorkspaceSettingsTable();
-    const subject = await subjectKey(request);
+    const subject = subjectKey(request);
     const windowId = Math.floor(Date.now() / ASSISTANT_WINDOW_MS);
     const section = `${kind}:${subject}:${windowId}`.slice(0, 200);
 

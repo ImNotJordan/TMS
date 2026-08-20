@@ -1,4 +1,9 @@
-export type { IntegrationId, IntegrationState, IntegrationStatus, TestResult } from "./types";
+export type {
+  IntegrationId,
+  IntegrationState,
+  IntegrationStatus,
+  TestResult,
+} from "./types";
 export {
   INTEGRATION_PROVIDERS,
   connectionLabelToStatus,
@@ -6,4 +11,8 @@ export {
   toCanonicalIntegrationId,
 } from "./types";
 export { resolveIntegrationState } from "./resolveIntegration";
-export { useIntegration, useIntegrations, runIntegrationTestWithToast } from "./useIntegration";
+export {
+  useIntegration,
+  useIntegrations,
+  runIntegrationTestWithToast,
+} from "./useIntegration";

@@ -18,7 +18,6 @@ import { DEFAULT_AI_MODEL } from "@/lib/ai-proxy";
 import {
   INTEGRATIONS_CONFIG_DEFAULTS,
   recordAiTestResult,
-  saveAiIntegration,
   testAiIntegration,
   type AiIntegration,
   type IntegrationsConfig,
@@ -47,8 +46,7 @@ export function ConfigureAiDialog({
     if (open) setDraft({ ...config.ai, model: config.ai.model || DEFAULT_AI_MODEL });
   }, [open, config.ai]);
 
-  const updateDraft = (patch: Partial<AiIntegration>) =>
-    setDraft((prev) => ({ ...prev, ...patch }));
+  const updateDraft = (patch: Partial<AiIntegration>) => setDraft((prev) => ({ ...prev, ...patch }));
 
   const handleSave = async () => {
     const apiKey = draft.apiKey.trim();
@@ -61,19 +59,14 @@ export function ConfigureAiDialog({
 
     setPersisting(true);
     try {
-      // The key goes to the server, never into the browser-readable settings
-      // row. Omitting `apiKey` when the field is blank leaves the stored key
-      // alone — the admin cannot read it back to re-enter it.
-      await saveAiIntegration({
-        ...(apiKey ? { apiKey } : {}),
-        model,
-        enabled,
-      });
-      // Non-secret display state (test timestamps) still lives with the rest of
-      // the integrations config.
       await onSave({
         ...config,
-        ai: { ...draft, enabled, apiKey: "", model },
+        ai: {
+          ...draft,
+          enabled,
+          apiKey,
+          model,
+        },
       });
       toast.success("AI integration saved.");
       onOpenChange(false);
@@ -123,9 +116,9 @@ export function ConfigureAiDialog({
         <DialogHeader>
           <DialogTitle>Configure AI</DialogTitle>
           <DialogDescription>
-            Connect your OpenAI API key once — Titan Freight uses it for Bidding Copilot, RFP
-            matching explanations, Content Studio drafts, and other AI assistants. Stored in
-            WorkspaceSettings (not <code className="text-xs">.env</code>).
+            Connect your OpenAI API key once — Titan Freight uses it for Bidding Copilot, RFP matching
+            explanations, Content Studio drafts, and other AI assistants. Stored in WorkspaceSettings
+            (not <code className="text-xs">.env</code>).
           </DialogDescription>
         </DialogHeader>
 
@@ -158,8 +151,8 @@ export function ConfigureAiDialog({
             />
             <p className="text-xs text-muted-foreground">
               Create a key at{" "}
-              <span className="font-medium text-foreground">platform.openai.com</span>. Test
-              Connection calls OpenAI Models to verify the key before you rely on it in production.
+              <span className="font-medium text-foreground">platform.openai.com</span>. Test Connection
+              calls OpenAI Models to verify the key before you rely on it in production.
             </p>
           </div>
 
@@ -173,8 +166,8 @@ export function ConfigureAiDialog({
               onChange={(event) => updateDraft({ model: event.target.value })}
             />
             <p className="text-xs text-muted-foreground">
-              Default <code className="text-[10px]">{DEFAULT_AI_MODEL}</code> balances quality and
-              cost. Use <code className="text-[10px]">gpt-4o</code> for harder pricing narratives.
+              Default <code className="text-[10px]">{DEFAULT_AI_MODEL}</code> balances quality and cost.
+              Use <code className="text-[10px]">gpt-4o</code> for harder pricing narratives.
             </p>
           </div>
         </div>
@@ -191,12 +184,7 @@ export function ConfigureAiDialog({
               {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Test connection
             </Button>
-            <Button
-              type="button"
-              className="flex-1 gap-1.5"
-              disabled={busy}
-              onClick={() => void handleSave()}
-            >
+            <Button type="button" className="flex-1 gap-1.5" disabled={busy} onClick={() => void handleSave()}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Save
             </Button>

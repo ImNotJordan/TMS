@@ -1,18 +1,35 @@
 import { fromCognitoIdentityPool } from "@aws-sdk/credential-providers";
 
 import { ASSISTANT_CRED_CACHE_SKEW_MS } from "@/lib/ai/assistant-limits";
-import { CognitoRequestAuthFailure } from "@/lib/ai/auth-failure";
-import { verifyCognitoJwt, type VerifiedClaims } from "@/lib/ai/verify-cognito-jwt";
-
-export { CognitoRequestAuthFailure };
-export type { CognitoRequestAuthError } from "@/lib/ai/auth-failure";
 
 const cognitoRegionEnv = import.meta.env.VITE_COGNITO_REGION as string | undefined;
-const awsRegionEnv = (import.meta.env.VITE_AWS_REGION as string | undefined) ?? cognitoRegionEnv;
+const awsRegionEnv =
+  (import.meta.env.VITE_AWS_REGION as string | undefined) ?? cognitoRegionEnv;
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID as string | undefined;
 const identityPoolId = import.meta.env.VITE_COGNITO_IDENTITY_POOL_ID as string | undefined;
 
-export type IdTokenClaims = VerifiedClaims;
+export type CognitoRequestAuthError =
+  | "missing_token"
+  | "misconfigured"
+  | "credentials_failed"
+  | "expired_token";
+
+export class CognitoRequestAuthFailure extends Error {
+  readonly code: CognitoRequestAuthError;
+
+  constructor(code: CognitoRequestAuthError, message: string) {
+    super(message);
+    this.name = "CognitoRequestAuthFailure";
+    this.code = code;
+  }
+}
+
+export type IdTokenClaims = {
+  sub?: string;
+  iss?: string;
+  exp?: number;
+  tokenUse?: string;
+};
 
 type CredCacheEntry = {
   credentials: RequestAwsCredentials;
@@ -21,12 +38,33 @@ type CredCacheEntry = {
 
 const credCache = new Map<string, CredCacheEntry>();
 
+function decodeJwtPayload(idToken: string): IdTokenClaims | null {
+  try {
+    const [, payloadB64] = idToken.split(".");
+    if (!payloadB64) return null;
+    const normalized = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
+    const json =
+      typeof atob === "function"
+        ? atob(normalized)
+        : Buffer.from(payloadB64, "base64url").toString("utf8");
+    const payload = JSON.parse(json) as Record<string, unknown>;
+    return {
+      sub: typeof payload.sub === "string" ? payload.sub : undefined,
+      iss: typeof payload.iss === "string" ? payload.iss : undefined,
+      exp: typeof payload.exp === "number" ? payload.exp : undefined,
+      tokenUse: typeof payload.token_use === "string" ? payload.token_use : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function cacheKeyForToken(idToken: string): string {
   // Avoid storing full JWT as map key forever — use ends + length.
   return `${idToken.length}:${idToken.slice(0, 16)}:${idToken.slice(-24)}`;
 }
 
-/** Extract Bearer token from Authorization header. Header only — never body, query, or cookie. */
+/** Extract Bearer token from Authorization header. */
 export function readBearerToken(request: Request): string | null {
   const header = request.headers.get("authorization") ?? request.headers.get("Authorization");
   if (!header) return null;
@@ -34,55 +72,19 @@ export function readBearerToken(request: Request): string | null {
   return match?.[1]?.trim() || null;
 }
 
-/**
- * Per-request memo so a handler that needs claims in three places pays for
- * signature verification once. Keyed on the Request object itself, so it cannot
- * leak between requests the way a module-scoped `Map` keyed by `sub` would.
- */
-const verifiedClaimsByRequest = new WeakMap<Request, Promise<VerifiedClaims>>();
-
-/**
- * Fully verify the request's bearer token and return its claims.
- *
- * This is the only way to read claims on the server. There is deliberately no
- * decode-without-verify accessor: the previous one made every downstream role
- * and identity check trivially forgeable.
- *
- * @throws CognitoRequestAuthFailure when absent, malformed, or unverifiable.
- */
-export function requireVerifiedIdClaims(request: Request): Promise<VerifiedClaims> {
-  const memo = verifiedClaimsByRequest.get(request);
-  if (memo) return memo;
-
-  const promise = (async () => {
-    const token = readBearerToken(request);
-    if (!token) {
-      throw new CognitoRequestAuthFailure(
-        "missing_token",
-        "Sign in required. Missing Authorization bearer token.",
-      );
-    }
-    return verifyCognitoJwt(token, { tokenUse: "id" });
-  })();
-
-  verifiedClaimsByRequest.set(request, promise);
-  // A rejected promise must not be memoized as a permanent failure for a
-  // retried request object; drop it so the next call re-evaluates.
-  void promise.catch(() => verifiedClaimsByRequest.delete(request));
-  return promise;
+export function readIdTokenClaims(request: Request): IdTokenClaims | null {
+  const token = readBearerToken(request);
+  if (!token) return null;
+  return decodeJwtPayload(token);
 }
 
 /**
- * Verified claims, or `null` when the caller wants to branch rather than throw.
- * Still fully verified — `null` means "not authenticated", never "unchecked".
+ * Prefer the region embedded in the ID token `iss` claim so the Identity Pool
+ * login map matches the User Pool even when VITE_AWS_REGION differs.
  */
-export async function tryVerifiedIdClaims(request: Request): Promise<VerifiedClaims | null> {
-  try {
-    return await requireVerifiedIdClaims(request);
-  } catch (err) {
-    if (err instanceof CognitoRequestAuthFailure) return null;
-    throw err;
-  }
+function cognitoRegionFromClaims(claims: IdTokenClaims | null): string | null {
+  const match = /cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/i.exec(claims?.iss ?? "");
+  return match?.[1] ?? null;
 }
 
 export type RequestAwsCredentials = {
@@ -94,6 +96,24 @@ export type RequestAwsCredentials = {
 
 export function getAwsRegionForDynamo(): string | undefined {
   return awsRegionEnv ?? cognitoRegionEnv;
+}
+
+export function assertValidIdToken(idToken: string): IdTokenClaims {
+  const claims = decodeJwtPayload(idToken);
+  if (!claims?.sub || !claims.exp) {
+    throw new CognitoRequestAuthFailure("missing_token", "Invalid authorization token.");
+  }
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (claims.exp <= nowSec + 5) {
+    throw new CognitoRequestAuthFailure("expired_token", "Session expired. Sign in again.");
+  }
+  if (claims.tokenUse && claims.tokenUse !== "id") {
+    throw new CognitoRequestAuthFailure("missing_token", "Expected a Cognito ID token.");
+  }
+  if (userPoolId && claims.iss && !claims.iss.endsWith(`/${userPoolId}`)) {
+    throw new CognitoRequestAuthFailure("missing_token", "Token issuer does not match this app.");
+  }
+  return claims;
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -112,8 +132,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
 
 /**
  * Exchange a Cognito User Pool ID token for temporary Identity Pool AWS credentials.
- * The token is fully verified first — the Identity Pool would reject a forged
- * token too, but failing here keeps the rejection cheap and the error honest.
  * Results are cached until near STS expiration to avoid Cognito stampede at scale.
  */
 export async function getAwsCredentialsFromRequest(
@@ -127,7 +145,7 @@ export async function getAwsCredentialsFromRequest(
     );
   }
 
-  const claims = await requireVerifiedIdClaims(request);
+  assertValidIdToken(idToken);
 
   if (!userPoolId || !identityPoolId) {
     throw new CognitoRequestAuthFailure(
@@ -143,12 +161,9 @@ export async function getAwsCredentialsFromRequest(
     return cached.credentials;
   }
 
-  // `iss` is verified, so the region embedded in it is trustworthy and matches
-  // the pool the Identity Pool login map expects.
+  const claims = decodeJwtPayload(idToken);
   const cognitoRegion =
-    /cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/i.exec(claims.iss)?.[1] ??
-    cognitoRegionEnv ??
-    awsRegionEnv;
+    cognitoRegionFromClaims(claims) ?? cognitoRegionEnv ?? awsRegionEnv;
   if (!cognitoRegion) {
     throw new CognitoRequestAuthFailure(
       "misconfigured",
@@ -186,8 +201,7 @@ export async function getAwsCredentialsFromRequest(
     return result;
   } catch (err) {
     if (err instanceof CognitoRequestAuthFailure) throw err;
-    const message =
-      err instanceof Error ? err.message : "Identity Pool credential exchange failed.";
+    const message = err instanceof Error ? err.message : "Identity Pool credential exchange failed.";
     console.error("[ai] Identity Pool credential exchange failed", {
       loginKey,
       cognitoRegion,

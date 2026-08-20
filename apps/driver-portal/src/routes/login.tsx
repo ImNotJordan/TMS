@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Eye, EyeOff, Lock, Mail, KeyRound } from "lucide-react";
+import { ArrowRight, Lock, Mail, KeyRound } from "lucide-react";
 import {
   confirmResetPassword,
   confirmSignIn,
@@ -25,24 +25,6 @@ export const Route = createFileRoute("/login")({
 
 type Step = "signIn" | "newPassword" | "forgotRequest" | "forgotConfirm";
 
-const LAST_EMAIL_KEY = "driver-portal.last-email";
-
-function readLastEmail(): string {
-  try {
-    return localStorage.getItem(LAST_EMAIL_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeLastEmail(value: string) {
-  try {
-    if (value.trim()) localStorage.setItem(LAST_EMAIL_KEY, value.trim());
-  } catch {
-    /* ignore quota */
-  }
-}
-
 function LoginPage() {
   useEffect(() => {
     document.title = "Sign in — Titan Freight Driver";
@@ -51,9 +33,8 @@ function LoginPage() {
   const navigate = useNavigate();
   const { signIn, refresh, status, cancelSignInChallenge } = useAuth();
   const [step, setStep] = useState<Step>("signIn");
-  const [email, setEmail] = useState(readLastEmail);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetCode, setResetCode] = useState("");
@@ -71,7 +52,6 @@ function LoginPage() {
       toast.error("Enter your email and password");
       return;
     }
-    writeLastEmail(email);
     setLoading(true);
     try {
       const result = await signIn(email, password);
@@ -94,7 +74,8 @@ function LoginPage() {
       }
       toast.error("Sign-in incomplete");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Check your email and password and try again.";
+      const message =
+        err instanceof Error ? err.message : "Check your email, password, and Cognito config.";
       toast.error("Sign-in failed", { description: message });
     } finally {
       setLoading(false);
@@ -143,7 +124,7 @@ function LoginPage() {
         email;
       setStep("forgotConfirm");
       toast.success("Reset code sent", {
-        description: `Check ${dest} for a verification code.`,
+        description: `Check ${dest} for a verification code from Cognito.`,
       });
     } catch (err) {
       toast.error("Couldn’t send reset email", {
@@ -206,11 +187,11 @@ function LoginPage() {
 
   const subtitle =
     step === "signIn"
-      ? "Sign in to see your live loads and get started."
+      ? "Sign in with your Cognito account to pull live loads from AWS."
       : step === "newPassword"
         ? "Your temporary password must be replaced before you can continue."
         : step === "forgotRequest"
-          ? "We’ll email you a verification code to reset your password."
+          ? "We’ll email a Cognito verification code to reset your password."
           : `Enter the code sent to ${email}, then choose a new password.`;
 
   return (
@@ -219,9 +200,12 @@ function LoginPage() {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8">
         <div className="flex items-center gap-2">
           <AppLogoMark className="h-9 w-9 rounded-md" />
-          <div className="font-heading text-sm font-bold text-foreground">Titan Freight</div>
+          <div className="leading-tight">
+            <div className="font-heading text-sm font-bold text-foreground">Titan Freight</div>
+            <div className="text-[11px] text-muted-foreground">Driver</div>
+          </div>
           <Badge className="ml-auto bg-amber font-heading text-[10px] font-bold tracking-wide text-ink">
-            Driver
+            DRIVER
           </Badge>
         </div>
 
@@ -262,22 +246,14 @@ function LoginPage() {
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="password"
-                    type={showPassword ? "text" : "password"}
+                    type="password"
                     autoComplete="current-password"
                     placeholder="********"
-                    className="h-12 px-9"
+                    className="h-12 pl-9"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={loading}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
                 </div>
               </div>
 
@@ -293,7 +269,7 @@ function LoginPage() {
 
               <div className="relative py-1">
                 <Separator />
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-[11px] text-muted-foreground">
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-[10px] uppercase tracking-wider text-muted-foreground">
                   or
                 </span>
               </div>
@@ -460,7 +436,7 @@ function LoginPage() {
             rel="noreferrer"
             className="block font-medium text-amber-dim hover:underline"
           >
-            Dispatcher or ops team? Sign in to the operations console →
+            Dispatcher or ops team? Sign in to the Operations Console →
           </a>
           <p>© {new Date().getFullYear()} Titan Freight, Inc.</p>
         </div>

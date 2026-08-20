@@ -79,7 +79,10 @@ export type SimulatedMatch = {
  * the pipeline (log → call → guardrail → outcome) can be exercised end to end today.
  * Replace with a real DAT API call; keep the return shape.
  */
-export function runSimulatedDatScan(params: ProspectingParams, seed: number): SimulatedMatch[] {
+export function runSimulatedDatScan(
+  params: ProspectingParams,
+  seed: number,
+): SimulatedMatch[] {
   const count = Math.min(Math.max(params.maxResults ?? 5, 1), 10);
   const lane =
     params.originCity && params.destCity
@@ -146,12 +149,7 @@ export function simulateBrokerCall(
     transcriptLines.push(
       `Bot: That rate doesn't clear our margin floor even after negotiation — we'll pass for now.`,
     );
-    return {
-      transcript: transcriptLines.join("\n"),
-      negotiatedRate,
-      outcome: "guardrail_blocked",
-      guardrail,
-    };
+    return { transcript: transcriptLines.join("\n"), negotiatedRate, outcome: "guardrail_blocked", guardrail };
   }
 
   transcriptLines.push(
@@ -159,10 +157,5 @@ export function simulateBrokerCall(
     `${match.broker}: We can make that work.`,
     `Bot: Confirmed at $${negotiatedRate}. Logging the outcome now.`,
   );
-  return {
-    transcript: transcriptLines.join("\n"),
-    negotiatedRate,
-    outcome: "negotiated",
-    guardrail,
-  };
+  return { transcript: transcriptLines.join("\n"), negotiatedRate, outcome: "negotiated", guardrail };
 }

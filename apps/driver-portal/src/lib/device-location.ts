@@ -70,9 +70,7 @@ export function positionToDriverGpsPing(
         : undefined,
     speedMph: msToMph(coords.speed),
     headingDeg:
-      coords.heading != null && Number.isFinite(coords.heading)
-        ? Math.round(coords.heading)
-        : undefined,
+      coords.heading != null && Number.isFinite(coords.heading) ? Math.round(coords.heading) : undefined,
     lastPingAt: new Date(position.timestamp || Date.now()).toISOString(),
     sharedBy: meta?.sharedBy,
     sharedByName: meta?.sharedByName,
