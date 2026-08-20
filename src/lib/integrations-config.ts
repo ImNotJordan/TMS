@@ -1,3 +1,5 @@
+import { fetchAuthSession } from "aws-amplify/auth";
+
 import { AI_API_KEY_HEADER, DEFAULT_AI_MODEL } from "@/lib/ai-proxy";
 import { GEOCODE_API_KEY_HEADER } from "@/lib/geocode-proxy";
 import { isDynamoConfigured, isWorkspaceSettingsConfigured } from "@/lib/dynamodb";
@@ -18,11 +20,26 @@ export type GoogleMapsIntegration = {
 
 export type AiIntegration = {
   enabled: boolean;
+  /**
+   * Write-only. Always empty when read back — the stored key lives in the
+   * server-only `secrets` partition and is never returned to the browser.
+   * Populate it to save a new key; use `readAiConnectionStatus()` to find out
+   * whether one is installed.
+   */
   apiKey: string;
   /** OpenAI chat model id (default gpt-4o-mini). */
   model?: string;
   lastTestedAt: string | null;
   lastTestOk: boolean | null;
+};
+
+/** What the browser is allowed to know about the stored OpenAI key. */
+export type AiConnectionStatus = {
+  connected: boolean;
+  model: string;
+  /** Last four characters — identifies the key without exposing it. */
+  last4?: string;
+  updatedAt?: string;
 };
 
 export type IntegrationsConfig = {
@@ -53,6 +70,17 @@ export const INTEGRATIONS_CONFIG_DEFAULTS: IntegrationsConfig = {
 
 let memoryCache: IntegrationsConfig | null = null;
 let loadPromise: Promise<IntegrationsConfig> | null = null;
+
+/** Cognito bearer for the server settings routes. */
+async function getCognitoAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 function canUseBrowserStorage() {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
@@ -88,16 +116,16 @@ export function mergeIntegrationsConfig(partial: unknown): IntegrationsConfig {
   let googleMaps = isGoogleMapsIntegration(raw.googleMaps)
     ? { ...base.googleMaps, ...raw.googleMaps }
     : base.googleMaps;
-  let ai = isAiIntegration(raw.ai) ? { ...base.ai, ...raw.ai } : base.ai;
+  const ai = isAiIntegration(raw.ai) ? { ...base.ai, ...raw.ai } : base.ai;
 
   if (googleMaps.apiKey.trim() && !googleMaps.enabled) {
     googleMaps = { ...googleMaps, enabled: true };
   }
-  if (ai.apiKey.trim() && !ai.enabled) {
-    ai = { ...ai, enabled: true };
-  }
 
-  return { googleMaps, ai };
+  // The OpenAI key never enters browser state, even if a legacy row still
+  // carries one. Redacted here — the single point every read passes through —
+  // so no call site can accidentally surface it.
+  return { googleMaps, ai: { ...ai, apiKey: "" } };
 }
 
 function readLegacyLocalStorage(): IntegrationsConfig | null {
@@ -304,7 +332,10 @@ export async function testGoogleMapsIntegration(
     }
     const payload = (await response.json()) as unknown;
     if (!Array.isArray(payload) || payload.length === 0) {
-      return { ok: false, message: "No results returned. Check API key restrictions and Geocoding API." };
+      return {
+        ok: false,
+        message: "No results returned. Check API key restrictions and Geocoding API.",
+      };
     }
     return { ok: true, message: "Google Maps geocoding is working." };
   } catch (error) {
@@ -324,18 +355,126 @@ export async function recordGoogleMapsTestResult(ok: boolean) {
   });
 }
 
+let aiStatusCache: AiConnectionStatus | null = null;
+let aiStatusPromise: Promise<AiConnectionStatus> | null = null;
+
+const DISCONNECTED: AiConnectionStatus = { connected: false, model: DEFAULT_AI_MODEL };
+
+/** Last known status. `null` until `ensureAiConnectionStatus` has run. */
+export function readAiConnectionStatus(): AiConnectionStatus | null {
+  return aiStatusCache;
+}
+
+export function clearAiConnectionStatusCache() {
+  aiStatusCache = null;
+  aiStatusPromise = null;
+}
+
+/**
+ * Ask the server whether an OpenAI key is installed.
+ *
+ * Replaces the old `getStoredAiApiKey()` presence check. The browser can no
+ * longer see the key, so "is it configured" is a question only the server can
+ * answer.
+ */
+export async function ensureAiConnectionStatus(options?: {
+  force?: boolean;
+}): Promise<AiConnectionStatus> {
+  if (!options?.force && aiStatusCache) return aiStatusCache;
+  if (aiStatusPromise) return aiStatusPromise;
+
+  aiStatusPromise = (async () => {
+    try {
+      const response = await fetch("/api/settings/integrations/status", {
+        headers: { Accept: "application/json", ...(await getCognitoAuthHeaders()) },
+      });
+      if (!response.ok) return DISCONNECTED;
+      const body = (await response.json()) as { ai?: Partial<AiConnectionStatus> };
+      const status: AiConnectionStatus = {
+        connected: Boolean(body.ai?.connected),
+        model: body.ai?.model?.trim() || DEFAULT_AI_MODEL,
+        last4: body.ai?.last4,
+        updatedAt: body.ai?.updatedAt,
+      };
+      aiStatusCache = status;
+      return status;
+    } catch {
+      // Fail closed: unknown status reads as not configured, so the UI offers
+      // setup rather than pretending AI is ready.
+      return DISCONNECTED;
+    } finally {
+      aiStatusPromise = null;
+    }
+  })();
+
+  return aiStatusPromise;
+}
+
+/**
+ * @deprecated The browser cannot read the OpenAI key. Use
+ * `readAiConnectionStatus()?.connected` or `ensureAiConnectionStatus()`.
+ * Retained so stale call sites fail closed instead of type-erroring.
+ */
 export function getStoredAiApiKey(): string {
-  return readIntegrationsConfig().ai.apiKey.trim();
+  return "";
+}
+
+export function isAiKeyConfigured(): boolean {
+  return Boolean(aiStatusCache?.connected);
 }
 
 export function getStoredAiModel(): string {
-  return readIntegrationsConfig().ai.model?.trim() || DEFAULT_AI_MODEL;
+  return (
+    aiStatusCache?.model?.trim() || readIntegrationsConfig().ai.model?.trim() || DEFAULT_AI_MODEL
+  );
 }
 
 /** Workspace AI is available anywhere the product needs LLM assistance. */
 export function isWorkspaceAiEnabled(): boolean {
-  const { ai } = readIntegrationsConfig();
-  return ai.enabled && getStoredAiApiKey().length > 0;
+  return isAiKeyConfigured();
+}
+
+/**
+ * Save the OpenAI key through the server. Admin-only, enforced server-side.
+ *
+ * Omit `apiKey` to change the model without re-entering a key the browser
+ * cannot read back.
+ */
+export async function saveAiIntegration(input: {
+  apiKey?: string;
+  model?: string;
+  enabled?: boolean;
+}): Promise<AiConnectionStatus> {
+  const response = await fetch("/api/settings/integrations/ai", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(await getCognitoAuthHeaders()),
+    },
+    body: JSON.stringify(input),
+  });
+
+  const body = (await response.json().catch(() => null)) as {
+    ai?: Partial<AiConnectionStatus>;
+    error?: string;
+  } | null;
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? `Could not save the AI integration (HTTP ${response.status}).`);
+  }
+
+  const status: AiConnectionStatus = {
+    connected: Boolean(body?.ai?.connected),
+    model: body?.ai?.model?.trim() || DEFAULT_AI_MODEL,
+    last4: body?.ai?.last4,
+    updatedAt: body?.ai?.updatedAt,
+  };
+  aiStatusCache = status;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(INTEGRATIONS_CONFIG_CHANGED));
+  }
+  return status;
 }
 
 export function isAiBiddingCopilotEnabled(): boolean {
@@ -343,17 +482,25 @@ export function isAiBiddingCopilotEnabled(): boolean {
 }
 
 export function getAiConnectionStatus(): IntegrationConnectionStatus {
+  // Connectedness is the server's answer, not a local key check — the browser
+  // cannot see the key any more, so `getStoredAiApiKey()` is always empty and
+  // using it here pinned this to "Disconnected" forever.
+  if (!isAiKeyConfigured()) return "Disconnected";
   const { ai } = readIntegrationsConfig();
-  if (!ai.enabled || !getStoredAiApiKey()) return "Disconnected";
   if (ai.lastTestOk === false) return "Attention";
   if (ai.lastTestOk === true) return "Connected";
-  return "Attention";
+  return "Connected";
 }
 
-export async function testAiIntegration(apiKey?: string): Promise<{ ok: boolean; message: string }> {
+export async function testAiIntegration(
+  apiKey?: string,
+): Promise<{ ok: boolean; message: string }> {
   await ensureIntegrationsConfigLoaded();
-  const key = (apiKey ?? "").trim() || getStoredAiApiKey();
-  if (!key) {
+  // A draft key (typed but not yet saved) is tested directly. With no draft the
+  // server tests the stored key — which the browser cannot read, so it cannot
+  // send it. That is the normal path once a key has been saved.
+  const draftKey = (apiKey ?? "").trim();
+  if (!draftKey && !isAiKeyConfigured()) {
     return {
       ok: false,
       message: "Enter your OpenAI API key in Settings → Integrations and save.",
@@ -365,12 +512,17 @@ export async function testAiIntegration(apiKey?: string): Promise<{ ok: boolean;
       method: "POST",
       headers: {
         Accept: "application/json",
-        [AI_API_KEY_HEADER]: key,
+        // The endpoint is authenticated and role-gated now — without this it
+        // answers 401 regardless of the key.
+        ...(await getCognitoAuthHeaders()),
+        ...(draftKey ? { [AI_API_KEY_HEADER]: draftKey } : {}),
       },
     });
-    const body = (await response.json().catch(() => null)) as
-      | { ok?: boolean; message?: string; error?: string }
-      | null;
+    const body = (await response.json().catch(() => null)) as {
+      ok?: boolean;
+      message?: string;
+      error?: string;
+    } | null;
 
     if (!response.ok) {
       return {

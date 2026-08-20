@@ -34,8 +34,8 @@ const WORKFLOW_LABELS: Record<string, string> = {
 type Listener = () => void;
 
 let liveItems: AppNotificationItem[] = readLiveItems();
-let readIds = readStringSet(READ_KEY);
-let seenEvents = readStringSet(SEEN_EVENTS_KEY);
+const readIds = readStringSet(READ_KEY);
+const seenEvents = readStringSet(SEEN_EVENTS_KEY);
 let seeded = seenEvents.size > 0;
 const listeners = new Set<Listener>();
 
@@ -169,9 +169,11 @@ function notificationFromStatus(
   const isDelivered = entry.status === "delivered";
   return {
     id: eventIdForStatus(load.loadId, entry),
-    type: isDelivered ? "load" : entry.status.includes("route") || entry.status.startsWith("at-")
-      ? "alert"
-      : "load",
+    type: isDelivered
+      ? "load"
+      : entry.status.includes("route") || entry.status.startsWith("at-")
+        ? "alert"
+        : "load",
     title: isDelivered ? `${load.loadId} delivered` : `${load.loadId} · ${label}`,
     description: `${driver} marked status as ${label} on ${route}.`,
     createdAt: entry.at,

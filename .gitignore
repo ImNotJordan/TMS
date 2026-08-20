@@ -39,3 +39,9 @@ dist-ssr
 
 # PWA / Vite build artifacts
 apps/*/dev-dist/
+
+# Rendered IAM policies (contain the AWS account id)
+scripts/iam/
+
+# Transient lint report from scripts/check-tenant-guard.mjs
+.tenant-guard-report.json

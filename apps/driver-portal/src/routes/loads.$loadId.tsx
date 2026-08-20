@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { ArrowRight, CheckCircle2, FileCheck2, FileWarning, MessageSquare, Phone } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  FileCheck2,
+  FileWarning,
+  MessageSquare,
+  Phone,
+  UserCheck,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,8 +16,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LocationShareCard } from "@/components/home/location-share-card";
 import { DocUploadSheet } from "@/components/loads/doc-upload-sheet";
-import { RouteMapPreview } from "@/components/loads/route-map-preview";
-import { StatusStepper } from "@/components/loads/status-stepper";
+import { ShipmentProgressTracker } from "@/components/loads/shipment-progress-tracker";
+import { StatusTimelineCard } from "@/components/loads/status-timeline-card";
 import { useLoads } from "@/lib/loads-store";
 import { STATUS_STEPS, type ActiveLoadStatus, type LoadDocument } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -20,7 +28,8 @@ export const Route = createFileRoute("/loads/$loadId")({
 
 function LoadDetailPage() {
   const { loadId } = useParams({ from: "/loads/$loadId" });
-  const { getLoad, acceptLoad, declineLoad, advanceStatus, markDocumentUploaded } = useLoads();
+  const { getLoad, recordsById, acceptLoad, declineLoad, advanceStatus, markDocumentUploaded } =
+    useLoads();
   const load = getLoad(loadId);
   const [uploadTarget, setUploadTarget] = useState<LoadDocument["type"] | null>(null);
 
@@ -45,6 +54,15 @@ function LoadDetailPage() {
   const nextStep = !isOffer && !isDeclined ? STATUS_STEPS[currentIndex + 1] : undefined;
   const perMile =
     load.distanceMiles > 0 ? (load.rate / load.distanceMiles).toFixed(2) : "—";
+  const progressPercent = isOffer ? 0 : ((currentIndex + 1) / STATUS_STEPS.length) * 100;
+  const nextStepLabel = isOffer ? "Awaiting acceptance" : nextStep ? nextStep.label : "Delivered";
+  const statusHistory = recordsById[load.id]?.driverStatusHistory ?? [];
+  const currentStatusEnteredAt = [...statusHistory]
+    .reverse()
+    .find((entry) => entry.status === load.status)?.at;
+  const statusElapsedMinutes = currentStatusEnteredAt
+    ? Math.max(0, (Date.now() - Date.parse(currentStatusEnteredAt)) / 60_000)
+    : 0;
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-4 px-4 py-5">
@@ -89,94 +107,100 @@ function LoadDetailPage() {
         </CardContent>
       </Card>
 
-      <RouteMapPreview progress={isOffer ? 0 : (currentIndex + 1) / STATUS_STEPS.length} />
+      <ShipmentProgressTracker
+        orderId={load.id}
+        originLabel={load.pickup.city}
+        destinationLabel={load.delivery.city}
+        progress={progressPercent}
+        nextStepLabel={nextStepLabel}
+        statusElapsedMinutes={statusElapsedMinutes}
+      />
 
       {isOffer ? (
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={() => void declineLoad(load.id)}>
-            Decline
-          </Button>
-          <Button className="flex-1" onClick={() => void acceptLoad(load.id)}>
-            Accept load
-          </Button>
-        </div>
-      ) : (
-        <Card className="border-border/70 shadow-sm">
-          <CardContent className="p-4">
-            <h3 className="mb-3 font-heading text-sm font-bold uppercase tracking-wide text-foreground">
-              Status
-            </h3>
-            <StatusStepper status={load.status as ActiveLoadStatus} />
-            {nextStep ? (
-              <Button
-                variant="amber"
-                className="w-full gap-1.5"
-                onClick={() => void advanceStatus(load.id)}
-              >
-                Mark as: {nextStep.label} <ArrowRight className="h-4 w-4" />
-              </Button>
-            ) : (
-              <div className="space-y-2">
-                <div className="rounded-lg bg-success/10 py-2 text-center text-sm font-medium text-success">
-                  Delivered ✓
+        <>
+          {load.assignedByDispatch ? (
+            <div className="rounded-xl border border-primary/30 bg-primary/8 px-3 py-3">
+              <div className="flex items-start gap-2.5">
+                <UserCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">Dispatch assigned you this load</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    Accept to confirm you're taking it — dispatch tracks this load as waiting on
+                    you until then.
+                  </p>
                 </div>
-                {(() => {
-                  const pod = load.documents.find((d) => d.type === "Proof of Delivery");
-                  const bol = load.documents.find((d) => d.type === "Bill of Lading");
-                  const needsPod = !pod?.fileName;
-                  const needsBol = !bol?.fileName;
-                  return (
-                    <div
-                      className={cn(
-                        "rounded-xl border px-3 py-3",
-                        needsPod
-                          ? "border-amber/40 bg-amber/10"
-                          : "border-success/25 bg-success/8",
+              </div>
+            </div>
+          ) : null}
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => void declineLoad(load.id)}>
+              Decline
+            </Button>
+            <Button className="flex-1" onClick={() => void acceptLoad(load.id)}>
+              Accept load
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <StatusTimelineCard
+            currentStage={load.status as ActiveLoadStatus}
+            onAdvance={() => void advanceStatus(load.id)}
+          />
+          {!nextStep
+            ? (() => {
+                const pod = load.documents.find((d) => d.type === "Proof of Delivery");
+                const bol = load.documents.find((d) => d.type === "Bill of Lading");
+                const needsPod = !pod?.fileName;
+                const needsBol = !bol?.fileName;
+                return (
+                  <div
+                    className={cn(
+                      "rounded-xl border px-3 py-3",
+                      needsPod ? "border-amber/40 bg-amber/10" : "border-success/25 bg-success/8",
+                    )}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      {needsPod ? (
+                        <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
+                      ) : (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
                       )}
-                    >
-                      <div className="flex items-start gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          {needsPod ? "Next: upload Proof of Delivery" : "You're done on this load"}
+                        </p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                          {needsPod
+                            ? "Dispatch needs your POD photo to close the load and invoice the customer."
+                            : "Dispatch will verify your POD and complete the load. You can still replace docs below if needed."}
+                        </p>
                         {needsPod ? (
-                          <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-                        ) : (
-                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-foreground">
-                            {needsPod ? "Next: upload Proof of Delivery" : "You're done on this load"}
-                          </p>
-                          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                            {needsPod
-                              ? "Dispatch needs your POD photo to close the load and invoice the customer."
-                              : "Dispatch will verify your POD and complete the load. You can still replace docs below if needed."}
-                          </p>
-                          {needsPod ? (
-                            <Button
-                              variant="amber"
-                              size="sm"
-                              className="mt-2.5 w-full gap-1.5"
-                              onClick={() => setUploadTarget("Proof of Delivery")}
-                            >
-                              Upload POD <ArrowRight className="h-3.5 w-3.5" />
-                            </Button>
-                          ) : needsBol ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-2.5 w-full gap-1.5"
-                              onClick={() => setUploadTarget("Bill of Lading")}
-                            >
-                              Upload BOL (optional)
-                            </Button>
-                          ) : null}
-                        </div>
+                          <Button
+                            variant="amber"
+                            size="sm"
+                            className="mt-2.5 w-full gap-1.5"
+                            onClick={() => setUploadTarget("Proof of Delivery")}
+                          >
+                            Upload POD <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : needsBol ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2.5 w-full gap-1.5"
+                            onClick={() => setUploadTarget("Bill of Lading")}
+                          >
+                            Upload BOL (optional)
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
-                  );
-                })()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  </div>
+                );
+              })()
+            : null}
+        </>
       )}
 
       {!isOffer ? (

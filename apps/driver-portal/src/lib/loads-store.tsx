@@ -10,18 +10,9 @@ import {
 import { toast } from "sonner";
 
 import { useAuth } from "./auth";
-import {
-  getLoadById,
-  listAllLoads,
-  updateLoadRecord,
-  type DriverLoadRecord,
-} from "./aws-loads";
+import { getLoadById, listDriverLoads, patchLoadRecord, type DriverLoadRecord } from "./aws-loads";
 import { putTrackingMessage } from "./aws-messages";
-import {
-  buildDriverAliases,
-  mapLoadRecordToPortalLoad,
-  nextWorkflowStatus,
-} from "./load-mapper";
+import { isAssignedTo, mapLoadRecordToPortalLoad, nextWorkflowStatus } from "./load-mapper";
 import {
   createDocumentId,
   documentTagsFromAssets,
@@ -30,6 +21,7 @@ import {
   prepareLoadDocumentFile,
   upsertDocumentAsset,
 } from "./load-documents";
+import { reconcileRecord } from "./record-freshness";
 import {
   STATUS_STEPS,
   type ActiveLoadStatus,
@@ -56,24 +48,6 @@ function writeLocationSharingPref(userId: string, value: boolean) {
   } catch {
     /* ignore */
   }
-}
-
-function appendStatusHistory(
-  existing: DriverLoadRecord,
-  status: string,
-  driver: { userId: string; name: string },
-) {
-  const at = new Date().toISOString();
-  const entry = {
-    status,
-    at,
-    by: driver.userId,
-    byName: driver.name,
-  };
-  return {
-    entry,
-    history: [...(existing.driverStatusHistory ?? []), entry].slice(-40),
-  };
 }
 
 async function notifyDispatchChat(
@@ -146,18 +120,16 @@ type LoadsContextValue = {
   acceptLoad: (id: string) => Promise<void>;
   declineLoad: (id: string) => Promise<void>;
   advanceStatus: (id: string) => Promise<void>;
-  markDocumentUploaded: (
-    id: string,
-    type: LoadDocument["type"],
-    file: File,
-  ) => Promise<void>;
+  markDocumentUploaded: (id: string, type: LoadDocument["type"], file: File) => Promise<void>;
 };
 
 const LoadsContext = createContext<LoadsContextValue | null>(null);
 
 function buildActivity(loads: Load[]): ActivityItem[] {
   return loads
-    .filter((l) => l.status === "delivered" || l.status === "assigned" || l.status.startsWith("en-route"))
+    .filter(
+      (l) => l.status === "delivered" || l.status === "assigned" || l.status.startsWith("en-route"),
+    )
     .slice(0, 5)
     .map((l, i) => ({
       id: `act-${l.id}-${i}`,
@@ -186,24 +158,36 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const fetchGen = useRef(0);
+  /**
+   * Records this device wrote, by loadId, kept until the backend catches up.
+   *
+   * `listDriverLoads` queries a GSI, which is eventually consistent: a poll that
+   * started before a write — or simply reads a replica that hasn't caught up — comes
+   * back holding the pre-write item and rolls the driver's status backwards on screen.
+   * Keyed on `updatedAt`, which the writer stamps, so any read older than our own last
+   * write is discarded instead of clobbering it.
+   */
+  const localWrites = useRef(new Map<string, DriverLoadRecord>());
+  /** Load ids with a status advance in flight, to swallow double-taps. */
+  const advancing = useRef(new Set<string>());
 
-  const aliases = useMemo(() => {
-    if (!driver) return [] as string[];
-    return buildDriverAliases({
-      userId: driver.userId,
-      email: driver.email,
-      name: driver.name,
-      attributes: driver.attributes as Record<string, string | undefined>,
-    });
-  }, [driver]);
+  /** Record a successful write so stale reads can't roll it back. */
+  const rememberLocalWrite = useCallback((record: DriverLoadRecord) => {
+    localWrites.current.set(record.loadId, record);
+  }, []);
 
   const remap = useCallback(
-    (records: DriverLoadRecord[], declined: Set<string>, aliasList: string[]) => {
+    (records: DriverLoadRecord[], declined: Set<string>, driverId: string) => {
       const mapped: Load[] = [];
       const byId: Record<string, DriverLoadRecord> = {};
-      for (const record of records) {
+      for (const incoming of records) {
+        const { record, settled } = reconcileRecord(
+          incoming,
+          localWrites.current.get(incoming.loadId),
+        );
+        if (settled) localWrites.current.delete(incoming.loadId);
         byId[record.loadId] = record;
-        const load = mapLoadRecordToPortalLoad(record, aliasList, declined);
+        const load = mapLoadRecordToPortalLoad(record, driverId, declined);
         if (load) mapped.push(load);
       }
       mapped.sort((a, b) => a.id.localeCompare(b.id));
@@ -230,15 +214,9 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
     try {
       const declined = readDeclinedIds(driver.userId);
       setDeclinedIds(declined);
-      const aliasList = buildDriverAliases({
-        userId: driver.userId,
-        email: driver.email,
-        name: driver.name,
-        attributes: driver.attributes as Record<string, string | undefined>,
-      });
-      const all = await listAllLoads();
+      const all = await listDriverLoads();
       if (gen !== fetchGen.current) return;
-      remap(all, declined, aliasList);
+      remap(all, declined, driver.userId);
       const latestPing = all
         .map((r) => r.driverGps?.lastPingAt)
         .filter((v): v is string => Boolean(v))
@@ -261,6 +239,9 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (authStatus === "loading") return;
+    // Pending writes belong to the previous identity — never carry them across a
+    // sign-out or driver switch.
+    localWrites.current.clear();
     if (authStatus === "unauthenticated") {
       setLoads([]);
       setRecordsById({});
@@ -314,10 +295,8 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
 
       await Promise.all(
         targets.map(async (existing) => {
-          const updated = await updateLoadRecord({
-            ...existing,
-            driverGps: ping,
-          });
+          const updated = await patchLoadRecord(existing.loadId, { driverGps: ping });
+          rememberLocalWrite(updated);
           setRecordsById((prev) => ({ ...prev, [updated.loadId]: updated }));
         }),
       );
@@ -332,7 +311,7 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setGpsPublishing(false);
     }
-  }, [driver, loads, recordsById]);
+  }, [driver, loads, recordsById, rememberLocalWrite]);
 
   const getLoad = useCallback((id: string) => loads.find((l) => l.id === id), [loads]);
 
@@ -345,22 +324,28 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        const { history } = appendStatusHistory(existing, "assigned", driver);
-        const updated = await updateLoadRecord({
-          ...existing,
-          assignedDriver: driver.userId,
+        // No `assignedDriver` here, deliberately.
+        //
+        // Every load this portal can see is already assigned to this driver —
+        // the listing queries `assignedDriver = <their sub>` — so writing it
+        // would set the value the row already holds. The API rejects the field
+        // outright, and that is the right call: a driver who could write it
+        // could hand their load to another driver, or to a string matching
+        // nobody, which would orphan it. Accepting is a workflow transition,
+        // not a claim of ownership.
+        const updated = await patchLoadRecord(id, {
           loadStatus: "driver-assigned",
           driverWorkflowStatus: "assigned",
-          driverStatusHistory: history,
         });
+        rememberLocalWrite(updated);
         setRecordsById((prev) => ({ ...prev, [id]: updated }));
         setLoads((prev) => {
-          const next = prev.map((l) => (l.id === id ? { ...l, status: "assigned" as const } : l));
-          if (!next.some((l) => l.id === id)) {
-            const mapped = mapLoadRecordToPortalLoad(updated, aliases, declinedIds);
-            if (mapped) next.push(mapped);
-          }
-          return next;
+          // Remap from the written record so derived flags (assignedByDispatch) stay
+          // in sync with what Dynamo now holds, instead of patching `status` alone.
+          const mapped = mapLoadRecordToPortalLoad(updated, driver.userId, declinedIds);
+          if (!mapped) return prev.filter((l) => l.id !== id);
+          if (!prev.some((l) => l.id === id)) return [...prev, mapped];
+          return prev.map((l) => (l.id === id ? mapped : l));
         });
         void notifyDispatchChat(id, `${driver.name} accepted the load.`);
         toast.success(`Load ${id} accepted`, { description: "Head to pickup when you're ready." });
@@ -370,7 +355,7 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [aliases, declinedIds, driver, recordsById],
+    [declinedIds, driver, recordsById, rememberLocalWrite],
   );
 
   const declineLoad = useCallback(
@@ -381,9 +366,37 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
       setDeclinedIds(nextDeclined);
       writeDeclinedIds(driver.userId, nextDeclined);
       setLoads((prev) => prev.filter((l) => l.id !== id));
-      toast.info(`Load ${id} declined`);
+
+      const existing = recordsById[id];
+      // Passing on an open marketplace offer is a local-only choice — nothing was
+      // assigned, so there is nothing to release back to dispatch.
+      if (!existing || !isAssignedTo(existing.assignedDriver, driver.userId)) {
+        toast.info(`Load ${id} declined`);
+        return;
+      }
+
+      try {
+        const updated = await patchLoadRecord(id, {
+          driverWorkflowStatus: "declined",
+        });
+        rememberLocalWrite(updated);
+        setRecordsById((prev) => ({ ...prev, [id]: updated }));
+        void notifyDispatchChat(id, `${driver.name} declined the assignment.`);
+        toast.info(`Load ${id} declined`, { description: "Dispatch has been notified." });
+      } catch (err) {
+        // Roll the local decline back so the load reappears rather than vanishing
+        // from the driver's app while dispatch still shows it assigned.
+        nextDeclined.delete(id);
+        const restored = new Set(nextDeclined);
+        setDeclinedIds(restored);
+        writeDeclinedIds(driver.userId, restored);
+        remap(Object.values(recordsById), restored, driver.userId);
+        toast.error("Decline failed", {
+          description: err instanceof Error ? err.message : "Try again",
+        });
+      }
     },
-    [declinedIds, driver],
+    [declinedIds, driver, recordsById, remap, rememberLocalWrite],
   );
 
   const advanceStatus = useCallback(
@@ -393,14 +406,15 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
       if (!load || !existing || !driver) return;
       const next = nextWorkflowStatus(load.status);
       if (!next) return;
+      // Writes are rate-limited to one per 1.2s, so a double-tap would otherwise queue
+      // a second write built from the pre-first-tap record and drop a history entry.
+      if (advancing.current.has(id)) return;
+      advancing.current.add(id);
 
       try {
-        const { history } = appendStatusHistory(existing, next, driver);
         const label = STATUS_STEPS.find((s) => s.key === next)?.label ?? next;
-        const updated = await updateLoadRecord({
-          ...existing,
+        const updated = await patchLoadRecord(id, {
           driverWorkflowStatus: next,
-          driverStatusHistory: history,
           loadStatus:
             next === "delivered"
               ? "delivered"
@@ -410,17 +424,24 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
                   ? "driver-assigned"
                   : existing.loadStatus,
         });
+        rememberLocalWrite(updated);
         setRecordsById((prev) => ({ ...prev, [id]: updated }));
-        setLoads((prev) => prev.map((l) => (l.id === id ? { ...l, status: next } : l)));
+        setLoads((prev) =>
+          prev.map((l) =>
+            l.id === id ? (mapLoadRecordToPortalLoad(updated, driver.userId, declinedIds) ?? l) : l,
+          ),
+        );
         void notifyDispatchChat(id, `${driver.name} marked status: ${label}.`);
         toast.success("Status updated", { description: `${id} → ${label}` });
       } catch (err) {
         toast.error("Status update failed", {
           description: err instanceof Error ? err.message : "Try again",
         });
+      } finally {
+        advancing.current.delete(id);
       }
     },
-    [driver, loads, recordsById],
+    [declinedIds, driver, loads, recordsById, rememberLocalWrite],
   );
 
   const markDocumentUploaded = useCallback(
@@ -451,11 +472,8 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
         };
         const documentAssets = upsertDocumentAsset(existing.documentAssets, asset);
         const documents = documentTagsFromAssets(documentAssets);
-        const updated = await updateLoadRecord({
-          ...existing,
-          documentAssets,
-          documents,
-        });
+        const updated = await patchLoadRecord(id, { documentAssets, documents });
+        rememberLocalWrite(updated);
         setRecordsById((prev) => ({ ...prev, [id]: updated }));
         setLoads((prev) =>
           prev.map((l) => {
@@ -494,7 +512,7 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
         throw err;
       }
     },
-    [driver, recordsById],
+    [driver, recordsById, rememberLocalWrite],
   );
 
   const activeLoad = useMemo(
@@ -504,7 +522,17 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
       ),
     [loads],
   );
-  const offeredLoads = useMemo(() => loads.filter((l) => l.status === "offered"), [loads]);
+  // Loads dispatch assigned to this driver outrank open freight — they're blocking
+  // the Tracking board until the driver accepts.
+  const offeredLoads = useMemo(
+    () =>
+      loads
+        .filter((l) => l.status === "offered")
+        .sort(
+          (a, b) => Number(b.assignedByDispatch ?? false) - Number(a.assignedByDispatch ?? false),
+        ),
+    [loads],
+  );
   const myLoads = useMemo(
     () => loads.filter((l) => l.status !== "offered" && l.status !== "declined"),
     [loads],
@@ -562,11 +590,7 @@ export function LoadsProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
-  return (
-    <LoadsContext.Provider value={value}>
-      {children}
-    </LoadsContext.Provider>
-  );
+  return <LoadsContext.Provider value={value}>{children}</LoadsContext.Provider>;
 }
 
 export function useLoads() {

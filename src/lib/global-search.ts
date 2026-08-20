@@ -234,7 +234,10 @@ function buildTruckResults(trucks: TruckRecord[]): GlobalSearchResult[] {
     }
 
     const origin = formatPlace(truck.currentCity, truck.currentState);
-    const destination = formatPlace(truck.preferredDestinationCity, truck.preferredDestinationState);
+    const destination = formatPlace(
+      truck.preferredDestinationCity,
+      truck.preferredDestinationState,
+    );
     const preferred = truck.preferredLanes?.trim();
     const laneCandidates = unique([
       origin && destination ? `${origin} -> ${destination}` : "",

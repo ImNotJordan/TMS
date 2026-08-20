@@ -39,10 +39,7 @@ export function getAppSettingBool(
   return fallback;
 }
 
-export function mergeAppSettings(
-  defaults: AppSettingsData,
-  partial: unknown,
-): AppSettingsData {
+export function mergeAppSettings(defaults: AppSettingsData, partial: unknown): AppSettingsData {
   const merged = { ...defaults };
   if (!partial || typeof partial !== "object") return merged;
 

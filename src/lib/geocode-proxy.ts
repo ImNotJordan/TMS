@@ -53,7 +53,9 @@ function googleComponent(
   return (useShort ? match?.short_name : match?.long_name)?.trim() ?? "";
 }
 
-function mapGoogleResult(result: NonNullable<GoogleGeocodeResponse["results"]>[number]): GeocodeSearchResult | null {
+function mapGoogleResult(
+  result: NonNullable<GoogleGeocodeResponse["results"]>[number],
+): GeocodeSearchResult | null {
   const lat = result.geometry?.location?.lat;
   const lng = result.geometry?.location?.lng;
   if (lat === undefined || lng === undefined) return null;
@@ -83,10 +85,7 @@ function mapGoogleResult(result: NonNullable<GoogleGeocodeResponse["results"]>[n
   };
 }
 
-async function handleGoogleGeocodeSearch(
-  requestUrl: URL,
-  apiKey: string,
-): Promise<Response> {
+async function handleGoogleGeocodeSearch(requestUrl: URL, apiKey: string): Promise<Response> {
   const q = requestUrl.searchParams.get("q")?.trim();
   if (!q) {
     return Response.json({ error: "Missing q parameter" }, { status: 400 });

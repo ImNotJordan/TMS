@@ -18,6 +18,7 @@ import {
 } from "@/lib/admin-user-constants";
 import {
   getAdminDirectoryUserById,
+  syncUserRole,
   type AdminUserDirectoryEntry,
 } from "@/lib/admin-users-store";
 import { isDynamoConfigured } from "@/lib/dynamodb";
@@ -159,8 +160,7 @@ function entryToDraft(
     manager: asString(permissions.manager),
     assignedTeam: asString(permissions.teams) || entry?.team || "",
     assignedBranch: asString(permissions.branch) || "",
-    dataAccessScope:
-      (asString(permissions.dataAccessScope) as AccessScope) || "Assigned Team Only",
+    dataAccessScope: (asString(permissions.dataAccessScope) as AccessScope) || "Assigned Team Only",
     accountStatus,
     inviteStatus: normalizeInviteStatus(
       asString(security.inviteStatus) || entry?.inviteStatus,
@@ -237,7 +237,14 @@ export async function saveAdminUserEditDraft(
   if (!email) throw new Error("Email is required.");
   if (!firstName || !lastName) throw new Error("First and last name are required.");
 
-  const storageRole = roleToStorageKey(draft.role);
+  // Role is written by the server, which also syncs the Cognito group. Done
+  // before the profile writes so a refused grant aborts the save rather than
+  // leaving the form looking as if it applied.
+  const current = await getAdminDirectoryUserById(userId);
+  const roleChanged = normalizeRole(current?.role ?? "") !== draft.role;
+  if (roleChanged) {
+    await syncUserRole(userId, draft.role);
+  }
 
   await putSection(userId, "personal", {
     given_name: firstName,
@@ -256,7 +263,8 @@ export async function saveAdminUserEditDraft(
     userId,
     "permissions",
     stripUndefinedDeep({
-      role: storageRole,
+      // `role` is deliberately absent: the server owns it, alongside the
+      // Cognito group. A browser-writable role would let a user claim one.
       permissionGroup: draft.permissionTemplate,
       accessLevel: draft.accessLevel,
       branch: draft.assignedBranch.trim() || draft.officeBranch.trim() || undefined,

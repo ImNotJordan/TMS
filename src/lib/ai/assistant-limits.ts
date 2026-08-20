@@ -40,9 +40,11 @@ export function sanitizeSummary(raw: unknown): string | undefined {
 function textFromUiMessage(message: UIMessage): string {
   if (!Array.isArray(message.parts)) return "";
   return message.parts
-    .map((part) => (part && typeof part === "object" && "type" in part && part.type === "text" && "text" in part
-      ? String((part as { text?: unknown }).text ?? "")
-      : ""))
+    .map((part) =>
+      part && typeof part === "object" && "type" in part && part.type === "text" && "text" in part
+        ? String((part as { text?: unknown }).text ?? "")
+        : "",
+    )
     .join("");
 }
 
@@ -69,7 +71,10 @@ export function sanitizeAssistantMessages(raw: unknown): UIMessage[] | null {
     if (total > ASSISTANT_MAX_TOTAL_CHARS) break;
 
     out.push({
-      id: typeof (message as UIMessage).id === "string" ? (message as UIMessage).id : `msg-${out.length}`,
+      id:
+        typeof (message as UIMessage).id === "string"
+          ? (message as UIMessage).id
+          : `msg-${out.length}`,
       role,
       parts: [{ type: "text", text: clamped }],
     } as UIMessage);

@@ -153,7 +153,7 @@ export function computeAnalyticsSnapshot(
   const dwellHours = avg(dwell.map((e) => e.metrics.dwellHours ?? 0));
   const exceptionRate =
     covered.length + delivered.length + exceptions.length > 0
-      ? exceptions.length / Math.max(1, covered.length + delivered.length) 
+      ? exceptions.length / Math.max(1, covered.length + delivered.length)
       : null;
 
   const opsScorecard: ScorecardRow[] = [...reliability]
@@ -301,10 +301,34 @@ export function computeAnalyticsSnapshot(
     seriesLabel: "Margin",
     secondarySeriesLabel: "Revenue",
     scorecard: [
-      { id: "ar0", name: "0–30 days", score: agedBuckets[0]!, meta: formatMoneyCompact(agedBuckets[0]!), eventIds: aged.filter((e) => e.metrics.bucket === 0).map((e) => e.id) },
-      { id: "ar1", name: "31–60 days", score: agedBuckets[1]!, meta: formatMoneyCompact(agedBuckets[1]!), eventIds: aged.filter((e) => e.metrics.bucket === 1).map((e) => e.id) },
-      { id: "ar2", name: "61–90 days", score: agedBuckets[2]!, meta: formatMoneyCompact(agedBuckets[2]!), eventIds: aged.filter((e) => e.metrics.bucket === 2).map((e) => e.id) },
-      { id: "ar3", name: "90+ days", score: agedBuckets[3]!, meta: formatMoneyCompact(agedBuckets[3]!), eventIds: aged.filter((e) => e.metrics.bucket === 3).map((e) => e.id) },
+      {
+        id: "ar0",
+        name: "0–30 days",
+        score: agedBuckets[0]!,
+        meta: formatMoneyCompact(agedBuckets[0]!),
+        eventIds: aged.filter((e) => e.metrics.bucket === 0).map((e) => e.id),
+      },
+      {
+        id: "ar1",
+        name: "31–60 days",
+        score: agedBuckets[1]!,
+        meta: formatMoneyCompact(agedBuckets[1]!),
+        eventIds: aged.filter((e) => e.metrics.bucket === 1).map((e) => e.id),
+      },
+      {
+        id: "ar2",
+        name: "61–90 days",
+        score: agedBuckets[2]!,
+        meta: formatMoneyCompact(agedBuckets[2]!),
+        eventIds: aged.filter((e) => e.metrics.bucket === 2).map((e) => e.id),
+      },
+      {
+        id: "ar3",
+        name: "90+ days",
+        score: agedBuckets[3]!,
+        meta: formatMoneyCompact(agedBuckets[3]!),
+        eventIds: aged.filter((e) => e.metrics.bucket === 3).map((e) => e.id),
+      },
     ].map((r) => ({ ...r, score: Math.round(r.score) })),
     scorecardTitle: "Aged AR buckets",
   };
@@ -370,9 +394,9 @@ export function computeAnalyticsSnapshot(
       .map((e) => ({
         id: e.id,
         name: e.label,
-        score: Math.round(
-          ((e.metrics.conversions ?? 0) / Math.max(1, e.metrics.touches ?? 1)) * 1000,
-        ) / 10,
+        score:
+          Math.round(((e.metrics.conversions ?? 0) / Math.max(1, e.metrics.touches ?? 1)) * 1000) /
+          10,
         meta: `${e.metrics.touches ?? 0} touches · ${e.metrics.conversions ?? 0} conv.`,
         href: hrefFromEvent(e),
         eventIds: [e.id],
@@ -455,30 +479,30 @@ export function computeAnalyticsSnapshot(
   const lanes = ofType(events, "lane.profitability");
   const credit = ofType(events, "customer.credit_risk");
   const aiKpis: AnalyticsKpi[] = [
-      {
-        id: "ai.rel",
-        label: "Avg reliability",
-        value: (() => {
-          const a = avg(reliability.map((e) => e.metrics.score ?? 0));
-          return a == null ? "—" : num(a, 1);
-        })(),
-        eventTypes: ["carrier.reliability_score"],
-        tone: "info",
-      },
-      {
-        id: "ai.lane",
-        label: "Lane scores",
-        value: String(lanes.length),
-        eventTypes: ["lane.profitability"],
-      },
-      {
-        id: "ai.credit",
-        label: "Credit watchlist",
-        value: String(credit.filter((e) => (e.metrics.score ?? 100) < 55).length),
-        eventTypes: ["customer.credit_risk"],
-        tone: "warning",
-      },
-    ];
+    {
+      id: "ai.rel",
+      label: "Avg reliability",
+      value: (() => {
+        const a = avg(reliability.map((e) => e.metrics.score ?? 0));
+        return a == null ? "—" : num(a, 1);
+      })(),
+      eventTypes: ["carrier.reliability_score"],
+      tone: "info",
+    },
+    {
+      id: "ai.lane",
+      label: "Lane scores",
+      value: String(lanes.length),
+      eventTypes: ["lane.profitability"],
+    },
+    {
+      id: "ai.credit",
+      label: "Credit watchlist",
+      value: String(credit.filter((e) => (e.metrics.score ?? 100) < 55).length),
+      eventTypes: ["customer.credit_risk"],
+      tone: "warning",
+    },
+  ];
 
   const ai = {
     reliability: opsScorecard,
@@ -565,7 +589,7 @@ export function scoreBackhaulWhatIf(input: {
     h ^= seed.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
-  const u = (h >>> 0) % 10_000 / 10_000;
+  const u = ((h >>> 0) % 10_000) / 10_000;
   const emptyPenalty = Math.max(0, input.emptyMiles - 50) * 1.15;
   const baseUplift = 420 + u * 880;
   const uplift = Math.max(80, Math.round(baseUplift - emptyPenalty));

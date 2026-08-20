@@ -4,16 +4,28 @@ import { STATUS_STEPS } from "./mock-data";
 
 const ACTIVE_KEYS = new Set(STATUS_STEPS.map((s) => s.key));
 
-const OFFER_STATUSES = new Set([
-  "tendered",
-  "booked",
-  "active",
-  "open",
-  "available",
-  "posted",
-]);
+const OFFER_STATUSES = new Set(["tendered", "booked", "active", "open", "available", "posted"]);
 
 const TERMINAL_STATUSES = new Set(["delivered", "completed", "cancelled", "canceled", "draft"]);
+
+/**
+ * Ops `loadStatus` values that already describe driver progress on the road.
+ * Anything not in here (`driver-assigned`, `dispatched`, `active`, `booked`, …)
+ * only records what dispatch did, never what the driver did.
+ */
+const DRIVER_PROGRESS_BY_LOAD_STATUS: Record<string, ActiveLoadStatus> = {
+  "en-route-pickup": "en-route-pickup",
+  en_route_pickup: "en-route-pickup",
+  "at-pickup": "at-pickup",
+  at_pickup: "at-pickup",
+  loaded: "loaded",
+  "in-transit": "en-route-delivery",
+  in_transit: "en-route-delivery",
+  "en-route-delivery": "en-route-delivery",
+  en_route_delivery: "en-route-delivery",
+  "at-delivery": "at-delivery",
+  at_delivery: "at-delivery",
+};
 
 function parseMoney(value?: string): number {
   if (!value) return 0;
@@ -82,60 +94,98 @@ function mapDocuments(record: DriverLoadRecord): LoadDocument[] {
 function formatUploadedAt(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "On file";
-  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-export function aliasesMatchDriver(value: string | undefined, aliases: string[]): boolean {
-  if (!value?.trim() || aliases.length === 0) return false;
-  const needle = value.trim().toLowerCase();
-  return aliases.some((a) => a.toLowerCase() === needle);
+/**
+ * Is this load assigned to this driver?
+ *
+ * Exact match on the Cognito `sub`. This replaced an alias match that also
+ * accepted the driver's email, their email local-part, and their display name —
+ * so two drivers called "J. Smith" at different carriers matched each other's
+ * loads. Identity is the sub; everything else is a label.
+ */
+export function isAssignedTo(value: string | undefined, driverId: string): boolean {
+  const assigned = value?.trim();
+  const owner = driverId?.trim();
+  return Boolean(assigned && owner && assigned === owner);
 }
 
-export function buildDriverAliases(input: {
-  userId: string;
-  email?: string;
-  name?: string;
-  attributes?: Record<string, string | undefined>;
-}): string[] {
-  const set = new Set<string>();
-  const add = (v?: string) => {
-    const t = v?.trim();
-    if (t) set.add(t);
-  };
-  add(input.userId);
-  add(input.email);
-  add(input.email?.split("@")[0]);
-  add(input.name);
-  add(input.attributes?.["custom:driverId"]);
-  add(input.attributes?.["custom:driver_id"]);
-  add(input.attributes?.preferred_username);
-  return [...set];
+/**
+ * `driverWorkflowStatus` is shared with the ops console, which parses and writes it in
+ * its own `TrackingState` vocabulary. Map those spellings onto the portal's steps so an
+ * ops write-through can't strand a load on an unrecognised value.
+ */
+const WORKFLOW_ALIASES: Record<string, ActiveLoadStatus> = {
+  accepted: "assigned",
+  "driver-accepted": "assigned",
+  en_route_pickup: "en-route-pickup",
+  at_pickup: "at-pickup",
+  "in-transit": "en-route-delivery",
+  in_transit: "en-route-delivery",
+  en_route_delivery: "en-route-delivery",
+  at_delivery: "at-delivery",
+  // The driver's view of the load ends at delivered; close-out is dispatch's job.
+  "pod-uploaded": "delivered",
+  completed: "delivered",
+};
+
+/** Ops-side placeholder meaning "assigned, but the driver has not acted yet". */
+const WORKFLOW_UNACKNOWLEDGED = "waiting-driver";
+
+function normalizeWorkflowStatus(raw: string): ActiveLoadStatus | null {
+  if (ACTIVE_KEYS.has(raw as ActiveLoadStatus)) return raw as ActiveLoadStatus;
+  return WORKFLOW_ALIASES[raw] ?? null;
+}
+
+/**
+ * True once the *driver* has acted on the load, as opposed to dispatch assigning it.
+ *
+ * Dispatch assigning a driver writes `assignedDriver`/`loadStatus` only — it never
+ * writes `driverWorkflowStatus`. Ops Tracking derives "Waiting for Driver" from that
+ * missing field, so the portal must not treat a bare assignment as an acceptance:
+ * doing so hides the Accept action and pins Tracking on "Waiting for Driver" forever.
+ */
+export function hasDriverAcknowledged(record: DriverLoadRecord): boolean {
+  const workflow = (record.driverWorkflowStatus ?? "").trim().toLowerCase();
+  // "waiting-driver" is ops saying the opposite — it must not count as acknowledgement.
+  if (workflow && workflow !== WORKFLOW_UNACKNOWLEDGED) return true;
+  if (record.driverStatusHistory?.length) return true;
+  const raw = (record.loadStatus ?? "").trim().toLowerCase();
+  return Boolean(DRIVER_PROGRESS_BY_LOAD_STATUS[raw]) || raw === "delivered" || raw === "completed";
 }
 
 function resolvePortalStatus(
   record: DriverLoadRecord,
-  aliases: string[],
+  driverId: string,
   declinedIds: Set<string>,
 ): LoadStatus | null {
   if (declinedIds.has(record.loadId)) return "declined";
 
   const raw = (record.loadStatus ?? "").trim().toLowerCase();
   const workflow = (record.driverWorkflowStatus ?? "").trim().toLowerCase();
-  const assigned = aliasesMatchDriver(record.assignedDriver, aliases);
+  const assigned = isAssignedTo(record.assignedDriver, driverId);
 
-  if (workflow && ACTIVE_KEYS.has(workflow as ActiveLoadStatus)) {
-    return workflow as ActiveLoadStatus;
-  }
+  // Declines are persisted on the record so they survive a device change.
+  if (workflow === "declined") return "declined";
+
+  const workflowStep = workflow ? normalizeWorkflowStatus(workflow) : null;
+  if (workflowStep) return workflowStep;
 
   if (raw === "delivered" || raw === "completed") return "delivered";
   if (raw === "cancelled" || raw === "canceled" || raw === "draft") return null;
 
   if (assigned) {
-    if (raw === "in-transit" || raw === "in_transit") return "en-route-delivery";
-    if (raw === "en-route-pickup" || raw === "en_route_pickup") return "en-route-pickup";
-    if (raw === "at-pickup" || raw === "at_pickup") return "at-pickup";
-    if (raw === "at-delivery" || raw === "at_delivery") return "at-delivery";
-    if (raw === "driver-assigned" || raw === "dispatched" || raw === "active") return "assigned";
+    const progress = DRIVER_PROGRESS_BY_LOAD_STATUS[raw];
+    if (progress) return progress;
+    // Assigned by dispatch but the driver has not accepted yet — present it as an
+    // offer so Accept writes `driverWorkflowStatus` back and Tracking advances.
+    if (!hasDriverAcknowledged(record)) return "offered";
     return "assigned";
   }
 
@@ -145,7 +195,10 @@ function resolvePortalStatus(
     // Untagged but actionable freight rows (common in early Dynamo data).
     if (
       !raw &&
-      (record.pickupCity || record.deliveryCity || record.pickupAddress || record.deliveryAddress) &&
+      (record.pickupCity ||
+        record.deliveryCity ||
+        record.pickupAddress ||
+        record.deliveryAddress) &&
       !TERMINAL_STATUSES.has(raw)
     ) {
       return "offered";
@@ -157,10 +210,10 @@ function resolvePortalStatus(
 
 export function mapLoadRecordToPortalLoad(
   record: DriverLoadRecord,
-  aliases: string[],
+  driverId: string,
   declinedIds: Set<string>,
 ): Load | null {
-  const status = resolvePortalStatus(record, aliases, declinedIds);
+  const status = resolvePortalStatus(record, driverId, declinedIds);
   if (!status) return null;
 
   const rate =
@@ -174,6 +227,8 @@ export function mapLoadRecordToPortalLoad(
   return {
     id: record.loadId,
     status,
+    // Distinguishes "dispatch picked you for this load" from open marketplace freight.
+    assignedByDispatch: status === "offered" && isAssignedTo(record.assignedDriver, driverId),
     equipment,
     distanceMiles: 0,
     rate,
@@ -221,7 +276,8 @@ export function mapLoadRecordToPortalLoad(
 export function isOfferEligibleRecord(record: DriverLoadRecord): boolean {
   const raw = (record.loadStatus ?? "").trim().toLowerCase();
   if (TERMINAL_STATUSES.has(raw)) return false;
-  if (record.assignedDriver?.trim()) return false;
+  // An assigned load is still pending until the driver accepts it.
+  if (record.assignedDriver?.trim()) return !hasDriverAcknowledged(record);
   return OFFER_STATUSES.has(raw) || raw === "";
 }
 

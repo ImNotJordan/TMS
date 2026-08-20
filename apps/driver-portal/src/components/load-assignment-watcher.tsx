@@ -147,7 +147,8 @@ export function LoadAssignmentWatcher() {
     const toToast = fresh.slice(0, TOAST_CAP);
 
     for (const load of toToast) {
-      const kind: "offer" | "assigned" = load.status === "offered" ? "offer" : "assigned";
+      const kind: "offer" | "assigned" =
+        load.status === "offered" && !load.assignedByDispatch ? "offer" : "assigned";
       const open = () => {
         markAssignmentsSeen(userId, [load.id]);
         toast.dismiss(`assign-${load.id}`);

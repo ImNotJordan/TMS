@@ -1,7 +1,26 @@
-import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+/**
+ * The administrative audit trail.
+ *
+ * ## Transport
+ *
+ * `/api/admin/audit`, not DynamoDB. Three things were wrong with reaching the
+ * table directly, and all three were security problems rather than style:
+ *
+ * 1. Entries live in `UsersTable`, on which the browser held `DeleteItem`. The
+ *    record that exists to catch abuse could be erased by whoever it named.
+ * 2. `actorUserId` and `actorName` were sent by the client, so an entry could
+ *    name anyone. The server takes them from the verified token now and ignores
+ *    what the body claims.
+ * 3. Every entry shared the partition key `"ADMIN#audit"`, so each company's
+ *    admins read every other company's history. Entries are partitioned per
+ *    company server-side.
+ *
+ * The `actor` argument survives on `recordAdminAuditLog` so call sites did not
+ * have to change, but only its display name is honoured.
+ */
+import { fetchAuthSession } from "aws-amplify/auth";
 
 import type { AuthUser } from "@/lib/auth";
-import { getDynamoDocClient, getProfileTableName, isDynamoConfigured } from "@/lib/dynamodb";
 import { createRateLimitedExecutor } from "@/lib/rate-limit";
 import type { AdminUserEditDraft } from "@/lib/admin-user-edit";
 
@@ -58,10 +77,7 @@ export function formatAuditWhen(iso: string): string {
 
 export function auditActorFromAuth(user: AuthUser | null | undefined): AdminAuditActor {
   const name =
-    user?.name?.trim() ||
-    user?.attributes?.given_name ||
-    user?.email?.split("@")[0] ||
-    "Unknown";
+    user?.name?.trim() || user?.attributes?.given_name || user?.email?.split("@")[0] || "Unknown";
   return {
     actorUserId: user?.userId ?? "unknown",
     actorName: name,
@@ -124,61 +140,39 @@ export function prependAdminAuditLogsCache(entry: AdminAuditLogEntry) {
   memoryLoaded = true;
 }
 
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
+const AUDIT_PATH = "/api/admin/audit";
+
 export async function listAdminAuditLogs(options?: {
   limit?: number;
 }): Promise<AdminAuditLogEntry[]> {
-  if (!isDynamoConfigured()) {
-    return readAdminAuditLogsCache();
-  }
+  return runAuditReadLimited(async () => {
+    const limit = options?.limit ?? 500;
+    const response = await fetch(`${AUDIT_PATH}?limit=${limit}`, {
+      headers: { Accept: "application/json", ...(await authHeaders()) },
+    });
 
-  const client = await getDynamoDocClient();
-  const tableName = getProfileTableName();
-  const items: AdminAuditLogEntry[] = [];
-  let cursor: Record<string, unknown> | undefined;
-
-  do {
-    const out = (await runAuditReadLimited(() =>
-      client.send(
-        new QueryCommand({
-          TableName: tableName,
-          KeyConditionExpression: "userId = :u",
-          ExpressionAttributeValues: { ":u": ADMIN_AUDIT_USER_ID },
-          ...(cursor ? { ExclusiveStartKey: cursor } : {}),
-        }) as never,
-      ),
-    )) as {
-      Items?: Array<{ section?: string; data?: unknown; updatedAt?: string }>;
-      LastEvaluatedKey?: Record<string, unknown>;
-    };
-
-    for (const item of out.Items ?? []) {
-      const fromData = normalizeEntry(item.data);
-      if (fromData) {
-        items.push(fromData);
-        continue;
-      }
-      if (item.section?.startsWith("log-") && item.updatedAt) {
-        items.push({
-          id: item.section,
-          when: item.updatedAt,
-          actorUserId: "unknown",
-          actorName: "Unknown",
-          action: "Action",
-          module: "Admin",
-          record: "—",
-          status: "Success",
-          details: "",
-        });
-      }
+    // A non-admin has no audit trail to show. An empty list is the honest
+    // answer and keeps the panel from erroring for ordinary users.
+    if (response.status === 403 || response.status === 401) return readAdminAuditLogsCache();
+    if (!response.ok) {
+      throw new Error(`Could not load the audit trail (HTTP ${response.status}).`);
     }
 
-    cursor = out.LastEvaluatedKey;
-  } while (cursor);
-
-  const sorted = sortNewestFirst(items);
-  setMemoryLogs(sorted);
-  const limit = options?.limit ?? 500;
-  return sorted.slice(0, limit);
+    const body = (await response.json()) as { entries?: AdminAuditLogEntry[] };
+    const sorted = sortNewestFirst(body.entries ?? []);
+    setMemoryLogs(sorted);
+    return sorted.slice(0, limit);
+  });
 }
 
 export async function fetchAdminAuditLogsCached(options?: {
@@ -205,7 +199,7 @@ export async function recordAdminAuditLog(input: {
   ip?: string;
   device?: string;
 }): Promise<AdminAuditLogEntry> {
-  const entry: AdminAuditLogEntry = {
+  const optimistic: AdminAuditLogEntry = {
     id: newAuditId(),
     when: new Date().toISOString(),
     actorUserId: input.actor.actorUserId,
@@ -219,35 +213,51 @@ export async function recordAdminAuditLog(input: {
     details: input.details,
   };
 
-  prependAdminAuditLogsCache(entry);
-
-  if (!isDynamoConfigured()) {
-    return entry;
-  }
-
-  await runAuditWriteLimited(async () => {
-    const client = await getDynamoDocClient();
-    await client.send(
-      new PutCommand({
-        TableName: getProfileTableName(),
-        Item: {
-          userId: ADMIN_AUDIT_USER_ID,
-          section: entry.id,
-          data: entry,
-          updatedAt: entry.when,
-        },
+  return runAuditWriteLimited(async () => {
+    const response = await fetch(AUDIT_PATH, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "content-type": "application/json",
+        ...(await authHeaders()),
+      },
+      body: JSON.stringify({
+        action: input.action,
+        module: input.module,
+        record: input.record,
+        status: input.status,
+        details: input.details,
+        // Display name only. The server stamps the real identity, the id and
+        // the source IP from the request it can see.
+        actorName: input.actor.actorName,
+        device: input.device ?? getClientAuditDevice(),
       }),
-    );
-  });
+    });
 
-  return entry;
+    if (!response.ok) {
+      // An audit write must never break the action it records, but it must not
+      // be silent either — a missing entry is exactly what an attacker wants.
+      console.error(`[audit] failed to record entry (HTTP ${response.status})`, input.action);
+      prependAdminAuditLogsCache(optimistic);
+      return optimistic;
+    }
+
+    const body = (await response.json()) as { entry?: AdminAuditLogEntry };
+    const entry = body.entry ?? optimistic;
+    prependAdminAuditLogsCache(entry);
+    return entry;
+  });
 }
 
-export function summarizeUserEditDiff(before: AdminUserEditDraft, after: AdminUserEditDraft): string {
+export function summarizeUserEditDiff(
+  before: AdminUserEditDraft,
+  after: AdminUserEditDraft,
+): string {
   const parts: string[] = [];
 
   const push = (label: string, from: string, to: string) => {
-    if (from.trim() !== to.trim()) parts.push(`${label}: ${from.trim() || "—"} → ${to.trim() || "—"}`);
+    if (from.trim() !== to.trim())
+      parts.push(`${label}: ${from.trim() || "—"} → ${to.trim() || "—"}`);
   };
 
   push("Name", `${before.firstName} ${before.lastName}`, `${after.firstName} ${after.lastName}`);

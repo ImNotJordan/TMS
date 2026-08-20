@@ -5,11 +5,10 @@ import { ASSISTANT_CONFIG_CACHE_TTL_MS } from "@/lib/ai/assistant-limits";
 import { authorizeAiRequest } from "@/lib/ai/ai-authz";
 import {
   CognitoRequestAuthFailure,
-  assertValidIdToken,
-  readBearerToken,
-  readIdTokenClaims,
+  tryVerifiedIdClaims,
 } from "@/lib/ai/cognito-request-credentials";
 import { getAiDynamoClient, getWorkspaceSettingsTable } from "@/lib/ai/server-aws";
+import { OPENAI_SECRET_SECTION, SECRETS_SCOPE } from "@/lib/ai/settings-scopes";
 import { GLOBAL_SETTINGS_SCOPE } from "@/lib/workspace-settings-store";
 
 const ALLOWED_MODELS = new Set(["gpt-4o-mini", "gpt-4o"]);
@@ -26,9 +25,7 @@ export type OpenAiConfigMiss =
   | { status: "forbidden"; message: string }
   | { status: "error"; message: string };
 
-export type OpenAiConfigResult =
-  | ({ status: "ok" } & ConnectedOpenAiConfig)
-  | OpenAiConfigMiss;
+export type OpenAiConfigResult = ({ status: "ok" } & ConnectedOpenAiConfig) | OpenAiConfigMiss;
 
 type IntegrationsRow = {
   data?: {
@@ -67,25 +64,61 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
-async function loadIntegrationsFromDynamo(request: Request): Promise<OpenAiConfigResult> {
+async function getRow(
+  request: Request,
+  scope: string,
+  section: string,
+): Promise<Record<string, unknown> | null> {
   const client = await getAiDynamoClient(request);
-  const table = getWorkspaceSettingsTable();
-
   const out = (await withTimeout(
-    (client as { send: (command: unknown) => Promise<{ Item?: IntegrationsRow }> }).send(
+    (client as { send: (command: unknown) => Promise<{ Item?: { data?: unknown } }> }).send(
       new GetCommand({
-        TableName: table,
-        Key: { scope: GLOBAL_SETTINGS_SCOPE, section: "integrations" },
+        TableName: getWorkspaceSettingsTable(),
+        Key: { scope, section },
       }),
     ),
     6_000,
     "DynamoDB GetItem",
-  )) as { Item?: IntegrationsRow };
+  )) as { Item?: { data?: unknown } };
 
-  const item = out.Item;
-  const ai = item?.data?.ai;
-  const apiKey = typeof ai?.apiKey === "string" ? ai.apiKey.trim() : "";
-  const enabled = Boolean(ai?.enabled) && apiKey.length > 0;
+  const data = out.Item?.data;
+  return data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+}
+
+/**
+ * Load the workspace OpenAI key.
+ *
+ * Reads the server-only `secrets` partition first. Falls back to the legacy
+ * browser-readable `global/integrations` row so AI keeps working on
+ * installations that have not migrated yet — with a warning, because that row
+ * is readable by every signed-in browser and the key in it should be treated as
+ * disclosed. Migrate by re-saving the key in Settings → Integrations.
+ */
+async function loadIntegrationsFromDynamo(request: Request): Promise<OpenAiConfigResult> {
+  const secret = await getRow(request, SECRETS_SCOPE, OPENAI_SECRET_SECTION);
+  let apiKey = typeof secret?.apiKey === "string" ? secret.apiKey.trim() : "";
+  let model = typeof secret?.model === "string" ? secret.model : undefined;
+  let enabledFlag = secret?.enabled;
+
+  if (!apiKey) {
+    const legacy = (await getRow(request, GLOBAL_SETTINGS_SCOPE, "integrations")) as {
+      ai?: { apiKey?: unknown; model?: unknown; enabled?: unknown };
+    } | null;
+    const legacyKey = typeof legacy?.ai?.apiKey === "string" ? legacy.ai.apiKey.trim() : "";
+    if (legacyKey) {
+      console.warn(
+        "[ai] using OpenAI key from the legacy browser-readable settings row — " +
+          "re-save it in Settings → Integrations to move it server-side, and rotate it",
+      );
+      apiKey = legacyKey;
+      model = typeof legacy?.ai?.model === "string" ? legacy.ai.model : model;
+      enabledFlag = legacy?.ai?.enabled;
+    }
+  }
+
+  // `enabled` defaults to true when a key is present — an admin who saved a key
+  // meant to turn it on.
+  const enabled = apiKey.length > 0 && enabledFlag !== false;
 
   if (!enabled || !apiKey) {
     return {
@@ -97,7 +130,7 @@ async function loadIntegrationsFromDynamo(request: Request): Promise<OpenAiConfi
   return {
     status: "ok",
     apiKey,
-    model: normalizeModel(typeof ai?.model === "string" ? ai.model : undefined),
+    model: normalizeModel(model),
     enabled: true,
   };
 }
@@ -110,28 +143,8 @@ export async function getConnectedOpenAiConfig(
   request: Request,
   options?: { bypassCache?: boolean; skipAuthz?: boolean },
 ): Promise<OpenAiConfigResult> {
-  const token = readBearerToken(request);
-  if (!token) {
-    return {
-      status: "not_authenticated",
-      message: "Sign in to use Logistics AI.",
-    };
-  }
-
-  try {
-    assertValidIdToken(token);
-  } catch (err) {
-    if (err instanceof CognitoRequestAuthFailure) {
-      return {
-        status: "not_authenticated",
-        message: "Sign in to use Logistics AI.",
-      };
-    }
-    throw err;
-  }
-
-  // Cheap claim check before Dynamo
-  const claims = readIdTokenClaims(request);
+  // Full signature + claim verification before Dynamo is touched.
+  const claims = await tryVerifiedIdClaims(request);
   if (!claims?.sub) {
     return {
       status: "not_authenticated",
@@ -150,11 +163,7 @@ export async function getConnectedOpenAiConfig(
   }
 
   const now = Date.now();
-  if (
-    !options?.bypassCache &&
-    integrationsCache &&
-    integrationsCache.expiresAtMs > now
-  ) {
+  if (!options?.bypassCache && integrationsCache && integrationsCache.expiresAtMs > now) {
     return integrationsCache.result;
   }
 

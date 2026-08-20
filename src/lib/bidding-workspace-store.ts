@@ -1,22 +1,35 @@
-import { DeleteCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
-
+/**
+ * Bidding workspace — quotes, saved searches and the bidding audit trail.
+ *
+ * ## Transport
+ *
+ * `/api/bidding-workspace`, not DynamoDB. The browser holds no credentials for
+ * the table.
+ *
+ * ## About the `workspaceId` arguments
+ *
+ * They are still in these signatures so no screen had to change, and they still
+ * key the local cache. They are **not sent to the server**. A workspace is a
+ * user, and the server takes that identity from the verified token; there is no
+ * field on the wire for a workspace id, so passing someone else's sub here now
+ * reads and writes your own workspace rather than theirs.
+ *
+ * That is the fix. Previously the id travelled from `bidding-page.tsx` —
+ * `user?.userId ?? "_"` — straight into the partition key, so anyone who
+ * substituted a colleague's sub got their draft quotes, saved lanes, buy rates
+ * and audit history.
+ */
 import type { SearchCriteria } from "./bidding-data";
-import {
-  getAwsRegion,
-  getBiddingWorkspaceTableName,
-  getDynamoDocClient,
-  isBiddingWorkspaceConfigured,
-  isDynamoAccessDenied,
-  isDynamoResourceNotFound,
-  queryAllItems,
-} from "./dynamodb";
 import { createRateLimitedExecutor } from "./rate-limit";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 const READ_RATE_LIMIT_MS = 300;
 const WRITE_RATE_LIMIT_MS = 800;
 
 const runReadLimited = createRateLimitedExecutor(READ_RATE_LIMIT_MS);
 const runWriteLimited = createRateLimitedExecutor(WRITE_RATE_LIMIT_MS);
+
+const PATH = "/api/bidding-workspace";
 
 export type BidQuoteStatus = "draft" | "saved" | "sent" | "approved" | "attached";
 
@@ -108,6 +121,45 @@ export type BiddingWorkspaceSnapshot = {
   audit: BiddingAuditRecord[];
 };
 
+/** Fields the server owns. Stripped before sending; the API rejects them. */
+function withoutServerOwnedFields<T extends Record<string, unknown>>(input: T) {
+  const { workspaceId: _w, companyId: _c, createdBy: _b, ...rest } = input;
+  return rest;
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
+async function send(path: string, init?: RequestInit): Promise<Response> {
+  const headers = await authHeaders();
+  return fetch(path, {
+    ...init,
+    headers: { ...headers, ...(init?.body ? { "content-type": "application/json" } : {}) },
+  });
+}
+
+async function failure(response: Response, op: string): Promise<Error> {
+  if (response.status === 503) {
+    markWorkspaceTableUnavailable();
+  }
+  let message = `Bidding workspace ${op} failed (HTTP ${response.status})`;
+  try {
+    const body = (await response.json()) as { error?: string };
+    if (body?.error) message = body.error;
+  } catch {
+    /* non-JSON error body — the status line is enough */
+  }
+  console.error(`[BiddingWorkspace ${op}]`, message);
+  return new Error(message);
+}
+
 function canUseSessionStorage() {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
 }
@@ -184,6 +236,25 @@ export function readBiddingWorkspaceCacheSnapshot(
   return cached ? cloneSnapshot(cached.snapshot) : null;
 }
 
+/**
+ * Drop every cached workspace.
+ *
+ * Called on sign-out and on identity changes: the snapshot is another user's
+ * commercial data once the session behind it is gone, and sessionStorage
+ * outlives a client-side route change.
+ */
+export function clearBiddingWorkspaceCache(): void {
+  invalidateWorkspaceSnapshot();
+  if (!canUseSessionStorage()) return;
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith(CACHE_PREFIX)) sessionStorage.removeItem(key);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function invalidateWorkspaceSnapshot(workspaceId?: string): void {
   if (workspaceId) {
     memoryCache.delete(workspaceId);
@@ -201,7 +272,9 @@ function invalidateWorkspaceSnapshot(workspaceId?: string): void {
 
 function upsertQuoteInCache(workspaceId: string, quote: BidQuoteRecord) {
   const cached = readWorkspaceCache(workspaceId);
-  const snapshot = cached ? cloneSnapshot(cached.snapshot) : { quotes: [], searches: [], audit: [] };
+  const snapshot = cached
+    ? cloneSnapshot(cached.snapshot)
+    : { quotes: [], searches: [], audit: [] };
   const index = snapshot.quotes.findIndex((row) => row.quoteId === quote.quoteId);
   if (index >= 0) snapshot.quotes[index] = quote;
   else snapshot.quotes.unshift(quote);
@@ -219,7 +292,9 @@ function removeQuoteFromCache(workspaceId: string, quoteId: string) {
 
 function upsertSearchInCache(workspaceId: string, search: BiddingSavedSearchRecord) {
   const cached = readWorkspaceCache(workspaceId);
-  const snapshot = cached ? cloneSnapshot(cached.snapshot) : { quotes: [], searches: [], audit: [] };
+  const snapshot = cached
+    ? cloneSnapshot(cached.snapshot)
+    : { quotes: [], searches: [], audit: [] };
   const index = snapshot.searches.findIndex((row) => row.searchName === search.searchName);
   if (index >= 0) snapshot.searches[index] = search;
   else snapshot.searches.unshift(search);
@@ -237,23 +312,25 @@ function removeSearchFromCache(workspaceId: string, searchName: string) {
 
 function prependAuditInCache(workspaceId: string, entry: BiddingAuditRecord) {
   const cached = readWorkspaceCache(workspaceId);
-  const snapshot = cached ? cloneSnapshot(cached.snapshot) : { quotes: [], searches: [], audit: [] };
-  snapshot.audit = sortByRecency([entry, ...snapshot.audit.filter((row) => row.itemKey !== entry.itemKey)]);
+  const snapshot = cached
+    ? cloneSnapshot(cached.snapshot)
+    : { quotes: [], searches: [], audit: [] };
+  snapshot.audit = sortByRecency([
+    entry,
+    ...snapshot.audit.filter((row) => row.itemKey !== entry.itemKey),
+  ]);
   writeWorkspaceCache(workspaceId, snapshot);
 }
 
 export function isBiddingWorkspaceAvailable(): boolean {
-  return isBiddingWorkspaceConfigured() && !workspaceTableUnavailable;
+  return !workspaceTableUnavailable;
 }
 
 export function getBiddingWorkspaceTableMissingMessage(): string | null {
-  if (!isBiddingWorkspaceConfigured() || !workspaceTableUnavailable) return null;
-  const table = getBiddingWorkspaceTableName();
-  const awsRegion = getAwsRegion() ?? "your AWS region";
+  if (!workspaceTableUnavailable) return null;
   return (
-    `DynamoDB table "${table}" was not found in ${awsRegion}. ` +
-    `Create it with partition key "workspaceId" (String) and sort key "itemKey" (String) ` +
-    `to persist quotes, saved searches, and audit logs. Until then, workspace data stays local.`
+    "The bidding workspace table is not available on the server. " +
+    "Quotes, saved searches and audit entries stay local until it is configured."
   );
 }
 
@@ -262,11 +339,9 @@ function markWorkspaceTableUnavailable(): void {
   invalidateWorkspaceSnapshot();
   if (!workspaceTableMissingLogged) {
     workspaceTableMissingLogged = true;
-    const table = getBiddingWorkspaceTableName();
-    const awsRegion = getAwsRegion() ?? "your AWS region";
     console.warn(
-      `[BiddingWorkspace] DynamoDB table "${table}" was not found in ${awsRegion}. ` +
-        `Using local-only mode until the table exists (keys: workspaceId + itemKey).`,
+      "[BiddingWorkspace] server reports the workspace table is unavailable. " +
+        "Using local-only mode.",
     );
   }
 }
@@ -279,31 +354,45 @@ function sortByRecency<T extends { updatedAt?: string; createdAt?: string }>(ite
   });
 }
 
-async function fetchWorkspaceSnapshotRemote(workspaceId: string): Promise<BiddingWorkspaceSnapshot> {
+/** PUT one item. `mode` carries the condition the direct write used to apply. */
+async function putWorkspaceItem<T extends Record<string, unknown>>(
+  item: T,
+  mode: "create" | "update" | "put",
+  op: string,
+): Promise<T> {
+  const response = await send(PATH, {
+    method: "PUT",
+    body: JSON.stringify({ ...withoutServerOwnedFields(item), mode }),
+  });
+  if (!response.ok) throw await failure(response, op);
+  const body = (await response.json()) as { item?: T };
+  return body.item ?? item;
+}
+
+async function deleteWorkspaceItem(itemKey: string, op: string): Promise<void> {
+  const response = await send(`${PATH}?itemKey=${encodeURIComponent(itemKey)}`, {
+    method: "DELETE",
+  });
+  // Already gone is the desired end state.
+  if (response.status === 404) return;
+  if (!response.ok) throw await failure(response, op);
+}
+
+async function fetchWorkspaceSnapshotRemote(): Promise<BiddingWorkspaceSnapshot> {
   const empty: BiddingWorkspaceSnapshot = { quotes: [], searches: [], audit: [] };
-  if (!isBiddingWorkspaceConfigured() || workspaceTableUnavailable) return empty;
+  if (workspaceTableUnavailable) return empty;
 
   return runReadLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      const items = await queryAllItems<
-        BidQuoteRecord | BiddingSavedSearchRecord | BiddingAuditRecord
-      >(client, {
-        TableName: getBiddingWorkspaceTableName(),
-        KeyConditionExpression: "workspaceId = :w",
-        ExpressionAttributeValues: {
-          ":w": workspaceId,
-        },
-        ScanIndexForward: false,
-      });
-      return splitWorkspaceItems(items);
-    } catch (err) {
-      if (isDynamoResourceNotFound(err)) {
-        markWorkspaceTableUnavailable();
-        return empty;
-      }
-      throw describeError(err, "Sync");
+    const response = await send(PATH);
+    if (response.status === 503) {
+      markWorkspaceTableUnavailable();
+      return empty;
     }
+    if (!response.ok) throw await failure(response, "Sync");
+    const body = (await response.json()) as {
+      items?: Array<BidQuoteRecord | BiddingSavedSearchRecord | BiddingAuditRecord>;
+    };
+    return splitWorkspaceItems(body.items ?? []);
   });
 }
 
@@ -314,7 +403,7 @@ export async function fetchBiddingWorkspaceSnapshotCached(options: {
   const { workspaceId, force = false } = options;
   const empty: BiddingWorkspaceSnapshot = { quotes: [], searches: [], audit: [] };
 
-  if (!isBiddingWorkspaceConfigured() || workspaceTableUnavailable) {
+  if (workspaceTableUnavailable) {
     return readBiddingWorkspaceCacheSnapshot(workspaceId) ?? empty;
   }
 
@@ -326,7 +415,7 @@ export async function fetchBiddingWorkspaceSnapshotCached(options: {
   const pending = inflight.get(workspaceId);
   if (pending) return pending;
 
-  const remotePromise = fetchWorkspaceSnapshotRemote(workspaceId)
+  const remotePromise = fetchWorkspaceSnapshotRemote()
     .then((snapshot) => {
       const remoteFp = snapshotFingerprint(snapshot);
       if (cached && force && cached.fingerprint === remoteFp) {
@@ -381,36 +470,6 @@ function auditItemKey(iso: string, searchId: string) {
   return `${AUDIT_PREFIX}${iso}#${searchId}`;
 }
 
-function describeError(err: unknown, op: string): Error {
-  if (err instanceof Error) {
-    if (isDynamoResourceNotFound(err)) {
-      markWorkspaceTableUnavailable();
-      const table = getBiddingWorkspaceTableName();
-      const awsRegion = getAwsRegion() ?? "your AWS region";
-      return new Error(
-        `DynamoDB table "${table}" was not found in ${awsRegion}. ` +
-          `Create it with partition key "workspaceId" (String) and sort key "itemKey" (String), ` +
-          `then set VITE_BIDDING_WORKSPACE_TABLE_NAME=${table} in .env.`,
-      );
-    }
-    if (isDynamoAccessDenied(err)) {
-      return new Error(
-        `Access denied for DynamoDB table "${getBiddingWorkspaceTableName()}". ` +
-          `Add dynamodb:Query, PutItem, and DeleteItem on this table to your Cognito Identity Pool authenticated role.`,
-      );
-    }
-    const awsName = (err as { name?: string }).name;
-    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
-    const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
-      .filter(Boolean)
-      .join(" · ");
-    console.error(`[DynamoDB BiddingWorkspace ${op}]`, err);
-    return new Error(`Bidding workspace ${op} failed: ${detail}`);
-  }
-  console.error(`[DynamoDB BiddingWorkspace ${op}]`, err);
-  return new Error(`Bidding workspace ${op} failed`);
-}
-
 export async function listBidQuotes(workspaceId: string): Promise<BidQuoteRecord[]> {
   const snapshot = await fetchBiddingWorkspaceSnapshotCached({ workspaceId });
   return snapshot.quotes;
@@ -454,8 +513,7 @@ export async function createBidQuote(input: {
 }): Promise<BidQuoteRecord> {
   if (!isBiddingWorkspaceAvailable()) {
     throw new Error(
-      getBiddingWorkspaceTableMissingMessage() ??
-        "Bidding workspace table is not configured. Set VITE_BIDDING_WORKSPACE_TABLE_NAME in .env.",
+      getBiddingWorkspaceTableMissingMessage() ?? "Bidding workspace is not available.",
     );
   }
 
@@ -491,28 +549,16 @@ export async function createBidQuote(input: {
   };
 
   return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new PutCommand({
-          TableName: getBiddingWorkspaceTableName(),
-          Item: item,
-          ConditionExpression: "attribute_not_exists(itemKey)",
-        }),
-      );
-      upsertQuoteInCache(input.workspaceId, item);
-      return item;
-    } catch (err) {
-      throw describeError(err, "CreateQuote");
-    }
+    const saved = await putWorkspaceItem(item, "create", "CreateQuote");
+    upsertQuoteInCache(input.workspaceId, saved);
+    return saved;
   });
 }
 
 export async function updateBidQuote(record: BidQuoteRecord): Promise<BidQuoteRecord> {
   if (!isBiddingWorkspaceAvailable()) {
     throw new Error(
-      getBiddingWorkspaceTableMissingMessage() ??
-        "Bidding workspace table is not configured. Set VITE_BIDDING_WORKSPACE_TABLE_NAME in .env.",
+      getBiddingWorkspaceTableMissingMessage() ?? "Bidding workspace is not available.",
     );
   }
 
@@ -522,48 +568,22 @@ export async function updateBidQuote(record: BidQuoteRecord): Promise<BidQuoteRe
   };
 
   return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new PutCommand({
-          TableName: getBiddingWorkspaceTableName(),
-          Item: item,
-          ConditionExpression: "attribute_exists(itemKey)",
-        }),
-      );
-      upsertQuoteInCache(record.workspaceId, item);
-      return item;
-    } catch (err) {
-      throw describeError(err, "UpdateQuote");
-    }
+    const saved = await putWorkspaceItem(item, "update", "UpdateQuote");
+    upsertQuoteInCache(record.workspaceId, saved);
+    return saved;
   });
 }
 
 export async function deleteBidQuote(workspaceId: string, quoteId: string): Promise<void> {
   if (!isBiddingWorkspaceAvailable()) {
     throw new Error(
-      getBiddingWorkspaceTableMissingMessage() ??
-        "Bidding workspace table is not configured. Set VITE_BIDDING_WORKSPACE_TABLE_NAME in .env.",
+      getBiddingWorkspaceTableMissingMessage() ?? "Bidding workspace is not available.",
     );
   }
 
   return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new DeleteCommand({
-          TableName: getBiddingWorkspaceTableName(),
-          Key: {
-            workspaceId,
-            itemKey: quoteItemKey(quoteId),
-          },
-          ConditionExpression: "attribute_exists(itemKey)",
-        }),
-      );
-      removeQuoteFromCache(workspaceId, quoteId);
-    } catch (err) {
-      throw describeError(err, "DeleteQuote");
-    }
+    await deleteWorkspaceItem(quoteItemKey(quoteId), "DeleteQuote");
+    removeQuoteFromCache(workspaceId, quoteId);
   });
 }
 
@@ -575,8 +595,7 @@ export async function upsertBiddingSavedSearch(input: {
 }): Promise<BiddingSavedSearchRecord> {
   if (!isBiddingWorkspaceAvailable()) {
     throw new Error(
-      getBiddingWorkspaceTableMissingMessage() ??
-        "Bidding workspace table is not configured. Set VITE_BIDDING_WORKSPACE_TABLE_NAME in .env.",
+      getBiddingWorkspaceTableMissingMessage() ?? "Bidding workspace is not available.",
     );
   }
 
@@ -593,19 +612,9 @@ export async function upsertBiddingSavedSearch(input: {
   };
 
   return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new PutCommand({
-          TableName: getBiddingWorkspaceTableName(),
-          Item: item,
-        }),
-      );
-      upsertSearchInCache(input.workspaceId, item);
-      return item;
-    } catch (err) {
-      throw describeError(err, "UpsertSearch");
-    }
+    const saved = await putWorkspaceItem(item, "put", "UpsertSearch");
+    upsertSearchInCache(input.workspaceId, saved);
+    return saved;
   });
 }
 
@@ -615,27 +624,13 @@ export async function deleteBiddingSavedSearch(
 ): Promise<void> {
   if (!isBiddingWorkspaceAvailable()) {
     throw new Error(
-      getBiddingWorkspaceTableMissingMessage() ??
-        "Bidding workspace table is not configured. Set VITE_BIDDING_WORKSPACE_TABLE_NAME in .env.",
+      getBiddingWorkspaceTableMissingMessage() ?? "Bidding workspace is not available.",
     );
   }
 
   return runWriteLimited(async () => {
-    try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new DeleteCommand({
-          TableName: getBiddingWorkspaceTableName(),
-          Key: {
-            workspaceId,
-            itemKey: searchItemKey(searchName),
-          },
-        }),
-      );
-      removeSearchFromCache(workspaceId, searchName);
-    } catch (err) {
-      throw describeError(err, "DeleteSearch");
-    }
+    await deleteWorkspaceItem(searchItemKey(searchName), "DeleteSearch");
+    removeSearchFromCache(workspaceId, searchName);
   });
 }
 
@@ -645,16 +640,6 @@ export async function appendBiddingAuditLog(
     createdAt?: string;
   },
 ): Promise<BiddingAuditRecord> {
-  if (!isBiddingWorkspaceAvailable()) {
-    return {
-      workspaceId,
-      itemKey: auditItemKey(entry.createdAt ?? new Date().toISOString(), entry.searchId),
-      recordType: "audit",
-      createdAt: entry.createdAt ?? new Date().toISOString(),
-      ...entry,
-    };
-  }
-
   const createdAt = entry.createdAt ?? new Date().toISOString();
   const item: BiddingAuditRecord = {
     workspaceId,
@@ -680,23 +665,17 @@ export async function appendBiddingAuditLog(
     attachedRfpId: entry.attachedRfpId,
   };
 
+  if (!isBiddingWorkspaceAvailable()) return item;
+
   return runWriteLimited(async () => {
     try {
-      const client = await getDynamoDocClient();
-      await client.send(
-        new PutCommand({
-          TableName: getBiddingWorkspaceTableName(),
-          Item: item,
-        }),
-      );
-      prependAuditInCache(workspaceId, item);
-      return item;
+      const saved = await putWorkspaceItem(item, "put", "AppendAudit");
+      prependAuditInCache(workspaceId, saved);
+      return saved;
     } catch (err) {
-      if (isDynamoResourceNotFound(err)) {
-        markWorkspaceTableUnavailable();
-        return item;
-      }
-      throw describeError(err, "AppendAudit");
+      // An audit entry must never break the action it records.
+      if (workspaceTableUnavailable) return item;
+      throw err;
     }
   });
 }

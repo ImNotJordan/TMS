@@ -1,7 +1,14 @@
 /**
  * Server-side OpenAI-compatible chat proxy.
- * Prefer Cognito Bearer auth + server-held workspace key.
- * X-Titan-Ai-Key remains only for Settings "Test connection" with a draft key.
+ *
+ * Chat always runs on the server-held workspace key, behind verified Cognito
+ * auth, the role allowlist, the rate limiter and the daily budget. There is no
+ * client-supplied-key path: it previously let a caller skip all four, and turned
+ * this endpoint into a general-purpose relay to OpenAI with an arbitrary key.
+ *
+ * X-Titan-Ai-Key survives on `/api/ai/test` only, so Settings can validate a key
+ * before saving it — and only for an authenticated, AI-authorized, rate-limited
+ * caller.
  */
 
 export const AI_API_KEY_HEADER = "X-Titan-Ai-Key";
@@ -78,25 +85,12 @@ async function openAiErrorMessage(response: Response): Promise<string> {
   return `OpenAI request failed (HTTP ${response.status}).`;
 }
 
-async function resolveWorkspaceApiKey(request: Request): Promise<
+async function resolveWorkspaceApiKey(
+  request: Request,
+): Promise<
   | { ok: true; apiKey: string; model: string }
   | { ok: false; status: number; message: string; code?: string }
 > {
-  const headerKey = readApiKey(request);
-  if (headerKey) {
-    // Draft key from Settings still requires a signed-in user.
-    const { readIdTokenClaims } = await import("@/lib/ai/cognito-request-credentials");
-    if (!readIdTokenClaims(request)?.sub) {
-      return {
-        ok: false,
-        status: 401,
-        message: "Sign in required to use workspace AI.",
-        code: "not_authenticated",
-      };
-    }
-    return { ok: true, apiKey: headerKey, model: DEFAULT_AI_MODEL };
-  }
-
   const { getConnectedOpenAiConfig } = await import("@/lib/ai/get-openai-key");
   const { enforceDistributedRateLimit } = await import("@/lib/ai/distributed-rate-limit");
   const { consumeDailyAiBudget } = await import("@/lib/ai/ai-authz");
@@ -133,9 +127,37 @@ async function resolveWorkspaceApiKey(request: Request): Promise<
 }
 
 export async function handleAiTestRequest(request: Request): Promise<Response> {
-  const apiKey = readApiKey(request);
+  // This route makes an outbound authenticated call using a caller-supplied
+  // credential. Unauthenticated, that is a public oracle for validating stolen
+  // OpenAI keys against our egress. Gate it exactly like the AI features it
+  // configures: verified token, role allowlist, rate limit.
+  const { authorizeAiRequest } = await import("@/lib/ai/ai-authz");
+  const authz = await authorizeAiRequest(request);
+  if (!authz.ok) {
+    return jsonError(authz.message, authz.code === "forbidden" ? 403 : 401, authz.code);
+  }
+
+  const { enforceDistributedRateLimit } = await import("@/lib/ai/distributed-rate-limit");
+  const limited = await enforceDistributedRateLimit(request, "status");
+  if (!limited.ok) {
+    return jsonError("Too many connection tests. Try again shortly.", 429, "rate_limited");
+  }
+
+  // A draft key from the Settings dialog is tested as supplied. With none, test
+  // the stored key — the browser cannot read it to send it, so this is the
+  // normal path once a key has been saved.
+  let apiKey = readApiKey(request);
   if (!apiKey) {
-    return jsonError("Missing AI API key. Configure it in Settings → Integrations.", 400);
+    const { getConnectedOpenAiConfig } = await import("@/lib/ai/get-openai-key");
+    const stored = await getConnectedOpenAiConfig(request, { skipAuthz: true });
+    if (stored.status !== "ok") {
+      return jsonError(
+        "No OpenAI key is configured. Add one in Settings → Integrations.",
+        409,
+        "not_connected",
+      );
+    }
+    apiKey = stored.apiKey;
   }
 
   try {
@@ -153,7 +175,8 @@ export async function handleAiTestRequest(request: Request): Promise<Response> {
 
     return Response.json({
       ok: true,
-      message: "OpenAI API key is valid. Workspace AI is ready across Bidding, RFPs, and Content Studio.",
+      message:
+        "OpenAI API key is valid. Workspace AI is ready across Bidding, RFPs, and Content Studio.",
       provider: "openai",
     });
   } catch (error) {
@@ -179,10 +202,7 @@ export async function handleAiChatRequest(request: Request): Promise<Response> {
 
   const messages = sanitizeMessages(body.messages);
   if (!messages) {
-    return jsonError(
-      `Provide 1–${MAX_MESSAGES} chat messages with non-empty string content.`,
-      400,
-    );
+    return jsonError(`Provide 1–${MAX_MESSAGES} chat messages with non-empty string content.`, 400);
   }
 
   const allowed = new Set(["gpt-4o-mini", "gpt-4o"]);
@@ -238,9 +258,6 @@ export async function handleAiChatRequest(request: Request): Promise<Response> {
     if (request.signal.aborted) {
       return jsonError("AI request cancelled.", 499 as number);
     }
-    return jsonError(
-      error instanceof Error ? error.message : "Network error calling OpenAI.",
-      502,
-    );
+    return jsonError(error instanceof Error ? error.message : "Network error calling OpenAI.", 502);
   }
 }

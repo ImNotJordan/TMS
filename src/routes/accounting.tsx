@@ -6,6 +6,7 @@ import {
   Building2,
   CheckCircle2,
   ClipboardList,
+  FileText,
   FileWarning,
   Loader2,
   MapPin,
@@ -56,13 +57,7 @@ import {
 import { listAllLoadsCached } from "@/lib/loads-store";
 import { cn } from "@/lib/utils";
 
-const ACCOUNTING_TABS = [
-  "queues",
-  "builder",
-  "factoring",
-  "collections",
-  "payouts",
-] as const;
+const ACCOUNTING_TABS = ["queues", "builder", "factoring", "collections", "payouts"] as const;
 
 type AccountingTab = (typeof ACCOUNTING_TABS)[number];
 
@@ -109,7 +104,8 @@ const queueTone: Record<InvoiceQueue, string> = {
   sent: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
   "in-dispute": "border-destructive/30 bg-destructive/10 text-destructive",
   factored: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300",
-  "sent-to-collections": "border-orange-500/30 bg-orange-500/10 text-orange-800 dark:text-orange-300",
+  "sent-to-collections":
+    "border-orange-500/30 bg-orange-500/10 text-orange-800 dark:text-orange-300",
 };
 
 function prettyDate(iso?: string) {
@@ -297,8 +293,7 @@ function Page() {
           <TabsContent value="queues" className="mt-4 space-y-4">
             <div className="flex flex-wrap gap-2">
               {INVOICE_QUEUES.map((q) => {
-                const count =
-                  snapshot?.invoices.filter((i) => i.status === q.id).length ?? 0;
+                const count = snapshot?.invoices.filter((i) => i.status === q.id).length ?? 0;
                 return (
                   <button
                     key={q.id}
@@ -358,7 +353,8 @@ function Page() {
                         key={inv.invoiceId}
                         className={cn(
                           "flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-muted/30",
-                          search.invoiceId === inv.invoiceId && "bg-primary/5 ring-1 ring-inset ring-primary/20",
+                          search.invoiceId === inv.invoiceId &&
+                            "bg-primary/5 ring-1 ring-inset ring-primary/20",
                         )}
                       >
                         <div className="min-w-0 flex-1">
@@ -393,7 +389,9 @@ function Page() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm font-semibold tabular-nums">{moneyExact(inv.total)}</div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {moneyExact(inv.total)}
+                          </div>
                           <div className="text-[11px] text-muted-foreground">
                             {inv.issuedAt ? `Due ${prettyDate(inv.dueAt)}` : inv.terms}
                           </div>
@@ -407,6 +405,17 @@ function Page() {
                           <Button size="sm" variant="ghost" className="h-8 px-2" asChild>
                             <Link to="/tracking" search={{ loadId: inv.loadId }}>
                               <MapPin className="mr-1 h-3.5 w-3.5" /> Track
+                            </Link>
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8 px-2" asChild>
+                            {/* The document the customer receives. Opens standalone so
+                                the browser prints the invoice and nothing else. */}
+                            <Link
+                              to="/invoices/$invoiceId/print"
+                              params={{ invoiceId: inv.invoiceId }}
+                              target="_blank"
+                            >
+                              <FileText className="mr-1 h-3.5 w-3.5" /> Invoice
                             </Link>
                           </Button>
                           <Button
@@ -431,9 +440,7 @@ function Page() {
           <TabsContent value="builder" className="mt-4">
             <InvoiceBuilderPanel
               invoice={builderInvoice}
-              readyList={
-                snapshot?.invoices.filter((i) => i.status === "ready-to-bill") ?? []
-              }
+              readyList={snapshot?.invoices.filter((i) => i.status === "ready-to-bill") ?? []}
               loading={loading}
               onSelect={setBuilderInvoice}
               onGenerated={(next) => {
@@ -456,18 +463,22 @@ function Page() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {(snapshot?.invoices.filter((i) =>
-                  ["sent", "factored", "in-dispute"].includes(i.status),
-                ) ?? []).length === 0 && !loading ? (
+                {(
+                  snapshot?.invoices.filter((i) =>
+                    ["sent", "factored", "in-dispute"].includes(i.status),
+                  ) ?? []
+                ).length === 0 && !loading ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">
                     Generate an invoice first, then submit it to your factor.
                   </p>
                 ) : loading ? (
                   <Skeleton className="h-24 w-full" />
                 ) : (
-                  (snapshot?.invoices.filter((i) =>
-                    ["sent", "factored", "in-dispute"].includes(i.status),
-                  ) ?? []).map((inv) => (
+                  (
+                    snapshot?.invoices.filter((i) =>
+                      ["sent", "factored", "in-dispute"].includes(i.status),
+                    ) ?? []
+                  ).map((inv) => (
                     <div
                       key={inv.invoiceId}
                       className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-background/60 p-3"
@@ -569,9 +580,11 @@ function Page() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {(snapshot?.invoices.filter((i) =>
-                    ["sent", "in-dispute", "sent-to-collections", "factored"].includes(i.status),
-                  ) ?? []).map((inv) => (
+                  {(
+                    snapshot?.invoices.filter((i) =>
+                      ["sent", "in-dispute", "sent-to-collections", "factored"].includes(i.status),
+                    ) ?? []
+                  ).map((inv) => (
                     <div
                       key={inv.invoiceId}
                       className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 p-3"
@@ -581,9 +594,7 @@ function Page() {
                         <div className="text-xs text-muted-foreground">
                           {inv.customer} · {moneyExact(inv.total)}
                           {inv.disputeReason ? ` · ${inv.disputeReason}` : ""}
-                          {inv.collectionsPartner
-                            ? ` · Partner: ${inv.collectionsPartner}`
-                            : ""}
+                          {inv.collectionsPartner ? ` · Partner: ${inv.collectionsPartner}` : ""}
                         </div>
                       </div>
                       <Button
@@ -637,83 +648,30 @@ function Page() {
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Carrier payables</CardTitle>
-                <CardDescription>
-                  Brokerage payouts, quick-pay options, and 1099 prep (v1.1 staging).
-                </CardDescription>
+                <CardDescription>Not implemented — no settlement model exists yet.</CardDescription>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <Skeleton className="h-32 w-full" />
-                ) : (snapshot?.payables.length ?? 0) === 0 ? (
-                  <p className="py-10 text-center text-sm text-muted-foreground">
-                    No carrier payables from delivered loads yet.
+                {/*
+                  This panel previously listed payables generated from the array
+                  index: whether a carrier had been paid, when payment was due,
+                  whether quick-pay applied, and the YTD figure that would feed a
+                  1099 were all placeholders. A "Schedule quick-pay" button mutated
+                  React state and toasted success while persisting nothing.
+
+                  It is deliberately empty rather than approximated. A money screen
+                  that reports plausible untruths is worse than one that reports
+                  nothing, because only the second prompts anyone to ask.
+                */}
+                <div className="rounded-xl border border-dashed border-border/70 px-4 py-10 text-center">
+                  <p className="text-sm font-medium text-foreground">
+                    Carrier settlements are not built yet
                   </p>
-                ) : (
-                  <ul className="divide-y divide-border/60 rounded-xl border border-border/70">
-                    {snapshot!.payables.map((p) => (
-                      <li
-                        key={p.id}
-                        className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium text-foreground">{p.carrier}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {p.loadId} · due {prettyDate(p.dueAt)} · YTD {money(p.ytdPaid)} (
-                            {p.taxYear} · 1099)
-                          </div>
-                        </div>
-                        <div className="text-right tabular-nums font-semibold">
-                          {moneyExact(
-                            p.quickPay ? p.amount * (1 - p.quickPayFeePct / 100) : p.amount,
-                          )}
-                        </div>
-                        <Badge variant="outline" className="text-[10px]">
-                          {p.quickPay ? `Quick-pay −${p.quickPayFeePct}%` : "Standard"}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={
-                            p.status === "paid"
-                              ? "border-success/30 bg-success/10 text-success"
-                              : p.status === "scheduled"
-                                ? "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
-                                : "text-muted-foreground"
-                          }
-                        >
-                          {p.status}
-                        </Badge>
-                        {p.status === "open" ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            onClick={() => {
-                              setSnapshot((prev) => {
-                                if (!prev) return prev;
-                                return {
-                                  ...prev,
-                                  payables: prev.payables.map((row) =>
-                                    row.id === p.id
-                                      ? { ...row, status: "scheduled" as const, quickPay: true }
-                                      : row,
-                                  ),
-                                };
-                              });
-                              toast.success("Quick-pay scheduled", {
-                                description: `${p.carrier} · ${moneyExact(p.amount * (1 - p.quickPayFeePct / 100))}`,
-                              });
-                            }}
-                          >
-                            Schedule quick-pay
-                          </Button>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="mt-3 text-[11px] text-muted-foreground">
-                  1099 prep (v1.1): YTD totals roll up by carrier for year-end export.
-                </p>
+                  <p className="mx-auto mt-1.5 max-w-md text-xs text-muted-foreground">
+                    Paying a carrier needs a settlement record, deductions, compliance and factoring
+                    gates, and an approval step. None of those exist, so nothing is shown here.
+                    Carrier rates are on the load record.
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -956,10 +914,7 @@ function InvoiceBuilderPanel({
                 variant="ghost"
                 className="h-8 px-2 text-xs text-muted-foreground"
                 onClick={() =>
-                  setLines((prev) => [
-                    ...prev,
-                    { id: "tax", kind: "tax", label: "Tax", amount: 0 },
-                  ])
+                  setLines((prev) => [...prev, { id: "tax", kind: "tax", label: "Tax", amount: 0 }])
                 }
               >
                 + Add tax line

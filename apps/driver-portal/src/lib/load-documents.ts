@@ -106,7 +106,9 @@ export async function prepareLoadDocumentFile(file: File): Promise<{
   }
   if (type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
     if (file.size > MAX_DOCUMENT_BYTES) {
-      throw new Error("PDF must be under ~280KB for in-app storage. Upload a photo of the page instead.");
+      throw new Error(
+        "PDF must be under ~280KB for in-app storage. Upload a photo of the page instead.",
+      );
     }
     const dataUrl = await readFileAsDataUrl(file);
     if (dataUrl.length > MAX_DOCUMENT_BYTES) {
@@ -133,7 +135,9 @@ export function friendlyDocumentFileName(input: {
   const original = (input.originalName ?? "").trim();
   const base = original.replace(/\.[^.]+$/, "");
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(base);
-  const isGeneric = /^(image|photo|blob|capture|img_?\d*|screenshot.*|pxl_.*|dsc_?\d*)$/i.test(base);
+  const isGeneric = /^(image|photo|blob|capture|img_?\d*|screenshot.*|pxl_.*|dsc_?\d*)$/i.test(
+    base,
+  );
   const ext = input.contentType.includes("pdf") || /\.pdf$/i.test(original) ? "pdf" : "jpg";
   if (original && !isUuid && !isGeneric) {
     return /\.[^.]+$/.test(original) ? original : `${original}.${ext}`;

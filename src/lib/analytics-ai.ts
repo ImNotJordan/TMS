@@ -168,7 +168,9 @@ Do not invent different dollar amounts than the provided uplift / bid — interp
       strategy?: unknown;
     };
     const notes = Array.isArray(parsed.notes)
-      ? parsed.notes.filter((n): n is string => typeof n === "string" && n.trim().length > 0).slice(0, 4)
+      ? parsed.notes
+          .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
+          .slice(0, 4)
       : [];
     return {
       notes: notes.length > 0 ? notes : context.baselineNotes,
