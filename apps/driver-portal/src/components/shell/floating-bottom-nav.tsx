@@ -50,7 +50,7 @@ export function FloatingBottomNav() {
   };
 
   return (
-    <div className="relative px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div className="relative px-4 pb-[var(--safe-bottom)]">
       <nav className="flex items-center justify-between rounded-full bg-ink px-2 py-2">
         {renderTab(homeTab)}
         {renderTab(loadsTab)}

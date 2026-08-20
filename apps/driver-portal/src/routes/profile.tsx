@@ -30,30 +30,12 @@ import {
   writePushPreference,
 } from "@/lib/load-notifications";
 import { isIosDevice, isStandaloneDisplay } from "@/lib/pwa";
+import { applyDarkModeClass, readDarkModePref, writeDarkModePref } from "@/lib/theme";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/profile")({
   component: ProfilePage,
 });
-
-const DARK_MODE_KEY = "driver-portal.dark-mode";
-
-function readDarkModePref(): boolean {
-  if (document.documentElement.classList.contains("dark")) return true;
-  try {
-    return localStorage.getItem(DARK_MODE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeDarkModePref(value: boolean) {
-  try {
-    localStorage.setItem(DARK_MODE_KEY, value ? "1" : "0");
-  } catch {
-    /* ignore quota */
-  }
-}
 
 function ProfilePage() {
   useEffect(() => {
@@ -69,7 +51,7 @@ function ProfilePage() {
   const [signOutOpen, setSignOutOpen] = useState(false);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
+    applyDarkModeClass(dark);
   }, [dark]);
 
   useEffect(() => {
@@ -107,15 +89,15 @@ function ProfilePage() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-5 px-4 py-5">
-      <div className="flex items-center gap-4">
-        <Avatar className="h-16 w-16">
-          <AvatarFallback className="bg-ink text-lg font-heading font-bold text-amber">
+      <div className="flex items-center gap-3">
+        <Avatar className="h-14 w-14">
+          <AvatarFallback className="bg-ink text-base font-heading font-bold text-amber">
             {driver.initials}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <h1 className="truncate font-heading text-lg font-bold text-foreground">{driver.name}</h1>
+            <h1 className="truncate font-heading text-base font-bold text-foreground">{driver.name}</h1>
             <Badge variant="secondary" className="gap-1 text-[10px]">
               <ShieldCheck className="h-3 w-3 text-success" /> Verified
             </Badge>
@@ -134,14 +116,14 @@ function ProfilePage() {
           value={driver.totalMiles > 0 ? `${Math.round(driver.totalMiles / 1000)}k` : "–"}
         />
       </div>
-      <p className="-mt-1 text-center text-xs text-muted-foreground">
+      <p className="-mt-2 text-center text-[11px] text-muted-foreground">
         Stats will populate after your first completed load
       </p>
 
       <Card className="border-border/70 shadow-none">
         <CardContent className="divide-y divide-border p-0">
           {!isStandaloneDisplay() ? (
-            <div className="flex items-center gap-3 p-3.5">
+            <div className="flex items-center gap-3 p-2.5">
               <Download className="h-4 w-4 text-muted-foreground" />
               <span className="flex-1 text-sm text-foreground">Install app on this device</span>
               <button
@@ -195,22 +177,22 @@ function ProfilePage() {
             href={DISPATCH_APP_URL}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-3 p-3.5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex items-center gap-3 p-2.5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <ExternalLink className="h-4 w-4 text-muted-foreground" />
             <span className="flex-1 text-sm text-foreground">Open dispatcher console</span>
           </a>
           <SettingRow icon={HelpCircle} label="Help & support" chevron />
+          <button
+            type="button"
+            onClick={() => setSignOutOpen(true)}
+            className="flex w-full items-center gap-3 p-2.5 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <LogOut className="h-4 w-4 text-destructive" />
+            <span className="flex-1 text-sm text-destructive">Sign out</span>
+          </button>
         </CardContent>
       </Card>
-
-      <Button
-        variant="ghost"
-        className="w-full gap-2 bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
-        onClick={() => setSignOutOpen(true)}
-      >
-        <LogOut className="h-4 w-4" /> Sign out
-      </Button>
 
       <Dialog open={signOutOpen} onOpenChange={setSignOutOpen}>
         <DialogContent showCloseButton={false} className="rounded-2xl shadow-none sm:rounded-2xl">
@@ -252,8 +234,8 @@ function ProfilePage() {
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <Card className="border-border/70 shadow-none">
-      <CardContent className="p-3 text-center">
-        <div className="font-mono text-lg font-semibold tracking-tight text-foreground">{value}</div>
+      <CardContent className="p-2 text-center">
+        <div className="font-mono text-base font-semibold tracking-tight text-foreground">{value}</div>
         <div className="text-[10px] text-muted-foreground">{label}</div>
       </CardContent>
     </Card>
@@ -274,7 +256,7 @@ function SettingRow({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 p-3.5">
+    <div className="flex items-center gap-3 p-2.5">
       <Icon className="h-4 w-4 text-muted-foreground" />
       <span className="flex-1 text-sm text-foreground">{label}</span>
       {trailing ? <span className="text-xs text-muted-foreground">{trailing}</span> : null}
