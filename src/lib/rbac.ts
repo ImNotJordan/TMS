@@ -45,6 +45,7 @@ export const ROUTE_MODULE_RULES: { prefix: string; module: ModuleName }[] = [
   { prefix: "/dashboard", module: "Dashboard" },
   { prefix: "/loads", module: "Loads" },
   { prefix: "/truckboard", module: "TruckBoard" },
+  { prefix: "/inventory", module: "Inventory" },
   { prefix: "/tracking", module: "Tracking" },
   { prefix: "/bidding", module: "Bidding" },
   { prefix: "/rfps", module: "RFPs" },

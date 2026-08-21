@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 import { CHANNEL_LABELS, languageDisplayName } from "../lib/formatters";
 import type { KeywordHit, Message } from "../types";
+import { t } from "@/lib/i18n/t";
 
 export function TranslationToggle({
   showingOriginal,
@@ -17,13 +18,7 @@ export function TranslationToggle({
   originalLang: string;
 }) {
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className="h-7 px-2 text-xs"
-      onClick={onToggle}
-    >
+    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onToggle}>
       {showingOriginal
         ? "Show translation"
         : `Show original (${languageDisplayName(originalLang)})`}
@@ -62,13 +57,7 @@ function highlightHits(text: string, hits: KeywordHit[]): React.ReactNode {
   return parts;
 }
 
-export function MessageBubble({
-  message,
-  onRetry,
-}: {
-  message: Message;
-  onRetry?: () => void;
-}) {
+export function MessageBubble({ message, onRetry }: { message: Message; onRetry?: () => void }) {
   const [showOriginal, setShowOriginal] = React.useState(false);
   const outbound = message.direction === "outbound";
   const displayBody =
@@ -149,7 +138,7 @@ export function MessageBubble({
             <span>{message.failureReason ?? "Send failed."}</span>
             {onRetry ? (
               <Button type="button" variant="outline" size="sm" className="h-7" onClick={onRetry}>
-                Retry
+                {t("Retry")}
               </Button>
             ) : null}
           </div>
@@ -190,14 +179,12 @@ export function MessageThread({
   }
 
   return (
-    <div className="space-y-3" aria-live="polite" role="log" aria-label="Message thread">
+    <div className="space-y-3" aria-live="polite" role="log" aria-label={t("Message thread")}>
       {messages.map((message) => (
         <MessageBubble
           key={message.id}
           message={message}
-          onRetry={
-            message.status === "failed" && onRetry ? () => onRetry(message) : undefined
-          }
+          onRetry={message.status === "failed" && onRetry ? () => onRetry(message) : undefined}
         />
       ))}
     </div>

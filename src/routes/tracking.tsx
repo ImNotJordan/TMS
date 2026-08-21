@@ -65,6 +65,7 @@ import {
   type TrackingSession,
   type TrackingState,
 } from "@/lib/tracking-workflow-store";
+import { t } from "@/lib/i18n/t";
 
 const TRACKING_TABS = ["timeline", "map", "alerts", "messages", "documents", "history"] as const;
 
@@ -355,8 +356,10 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="Tracking"
-        description="Driver assignment, acceptance workflow, live progress, and delivery proof in one command center."
+        title={t("Tracking")}
+        description={t(
+          "Driver assignment, acceptance workflow, live progress, and delivery proof in one command center.",
+        )}
         actions={
           <>
             <Button
@@ -365,16 +368,16 @@ function Page() {
               className="gap-1.5"
               onClick={() => void fetchLoads(true)}
             >
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t("Refresh")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Share2 className="h-4 w-4" /> Share tracking
+              <Share2 className="h-4 w-4" /> {t("Share tracking")}
             </Button>
             <Button
               size="sm"
               className="gap-1.5 bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
             >
-              <Download className="h-4 w-4" /> Export activity
+              <Download className="h-4 w-4" /> {t("Export activity")}
             </Button>
           </>
         }
@@ -382,27 +385,32 @@ function Page() {
 
       <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Metric label="Tracked Loads" value={String(counts.total)} tone="default" icon={Truck} />
           <Metric
-            label="Waiting Driver"
+            label={t("Tracked Loads")}
+            value={String(counts.total)}
+            tone="default"
+            icon={Truck}
+          />
+          <Metric
+            label={t("Waiting Driver")}
             value={String(counts.waiting)}
             tone="warning"
             icon={Clock3}
           />
           <Metric
-            label="Active Sessions"
+            label={t("Active Sessions")}
             value={String(counts.active)}
             tone="info"
             icon={Navigation}
           />
           <Metric
-            label="Completed"
+            label={t("Completed")}
             value={String(counts.completed)}
             tone="success"
             icon={CheckCircle2}
           />
           <Metric
-            label="Exceptions"
+            label={t("Exceptions")}
             value={String(counts.exception)}
             tone="destructive"
             icon={Siren}
@@ -413,17 +421,19 @@ function Page() {
           <div className="space-y-6">
             <Card className="border-border/70 shadow-sm">
               <CardContent className="space-y-3 p-4">
-                <div className="text-sm font-semibold text-foreground">Driver Portal</div>
-                <div className="text-xs text-muted-foreground">Assigned loads for driver ID</div>
+                <div className="text-sm font-semibold text-foreground">{t("Driver Portal")}</div>
+                <div className="text-xs text-muted-foreground">
+                  {t("Assigned loads for driver ID")}
+                </div>
                 <Input
                   value={driverId}
                   onChange={(e) => setDriverId(e.target.value)}
-                  placeholder="Driver ID (e.g. d-101)"
+                  placeholder={t("Driver ID (e.g. d-101)")}
                 />
                 <div className="space-y-2">
                   {driverAssigned.length === 0 ? (
                     <div className="rounded-md border border-border/70 bg-muted/30 p-2 text-xs text-muted-foreground">
-                      No assigned loads for this driver.
+                      {t("No assigned loads for this driver.")}
                     </div>
                   ) : (
                     driverAssigned.map((s) => (
@@ -457,7 +467,9 @@ function Page() {
             <Card className="border-border/70 shadow-sm">
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-foreground">Tracking Sessions</div>
+                  <div className="text-sm font-semibold text-foreground">
+                    {t("Tracking Sessions")}
+                  </div>
                   <Badge variant="outline">{filteredSessions.length}</Badge>
                 </div>
                 <div className="relative">
@@ -466,7 +478,7 @@ function Page() {
                     className="pl-8"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search load, driver, city..."
+                    placeholder={t("Search load, driver, city...")}
                   />
                 </div>
                 {error && (
@@ -483,7 +495,7 @@ function Page() {
                     <ListSkeleton items={5} className="p-2" />
                   ) : filteredSessions.length === 0 ? (
                     <p className="py-6 text-center text-xs text-muted-foreground">
-                      No tracking sessions found.
+                      {t("No tracking sessions found.")}
                     </p>
                   ) : (
                     <ul className="divide-y divide-border/60">
@@ -577,13 +589,13 @@ function Page() {
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <Fact
-                      label="Route Progress"
+                      label={t("Route Progress")}
                       value={`${Math.round(selected.routeProgressPct)}%`}
                     />
-                    <Fact label="Miles Remaining" value={String(selected.milesRemaining)} />
-                    <Fact label="Speed" value={`${selected.gps.speedMph} mph`} />
+                    <Fact label={t("Miles Remaining")} value={String(selected.milesRemaining)} />
+                    <Fact label={t("Speed")} value={`${selected.gps.speedMph} mph`} />
                     <Fact
-                      label="GPS Location"
+                      label={t("GPS Location")}
                       value={`${selected.gps.location.city ?? "In transit"}${selected.gps.location.state ? `, ${selected.gps.location.state}` : ""}`}
                     />
                   </div>
@@ -591,7 +603,7 @@ function Page() {
                   <Progress value={selected.routeProgressPct} className="h-2" />
                   <div className="rounded-xl border border-border/70 bg-gradient-to-br from-muted/25 via-card to-info/10 p-4">
                     <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Live Route + Geofences
+                      {t("Live Route + Geofences")}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-4 text-sm text-foreground">
                       <span className="inline-flex items-center gap-1">
@@ -637,7 +649,9 @@ function Page() {
                   />
 
                   <div className="space-y-2">
-                    <div className="text-sm font-semibold text-foreground">Driver Actions</div>
+                    <div className="text-sm font-semibold text-foreground">
+                      {t("Driver Actions")}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {getNextDriverActions(selected.trackingState).map((action) => (
                         <Button
@@ -679,7 +693,7 @@ function Page() {
                               performAction("accept-load", "Driver accepted in portal.")
                             }
                           >
-                            <UserCheck className="h-3.5 w-3.5" /> Accept Load
+                            <UserCheck className="h-3.5 w-3.5" /> {t("Accept Load")}
                           </Button>
                           <Button
                             size="sm"
@@ -689,7 +703,7 @@ function Page() {
                               performAction("decline-load", "Driver declined assignment.")
                             }
                           >
-                            <XCircle className="h-3.5 w-3.5" /> Decline Load
+                            <XCircle className="h-3.5 w-3.5" /> {t("Decline Load")}
                           </Button>
                         </>
                       )}
@@ -705,7 +719,7 @@ function Page() {
                           )
                         }
                       >
-                        <AlertTriangle className="h-3.5 w-3.5" /> Report Exception
+                        <AlertTriangle className="h-3.5 w-3.5" /> {t("Report Exception")}
                       </Button>
                     </div>
                   </div>
@@ -720,22 +734,22 @@ function Page() {
                   >
                     <TabsList className="grid h-auto w-full grid-cols-3 gap-1 sm:grid-cols-6">
                       <TabsTrigger value="timeline" className="gap-1.5 px-2 text-xs sm:text-sm">
-                        <Activity className="h-3.5 w-3.5 shrink-0" /> Timeline
+                        <Activity className="h-3.5 w-3.5 shrink-0" /> {t("Timeline")}
                       </TabsTrigger>
                       <TabsTrigger value="map" className="gap-1.5 px-2 text-xs sm:text-sm">
-                        <Map className="h-3.5 w-3.5 shrink-0" /> Map
+                        <Map className="h-3.5 w-3.5 shrink-0" /> {t("Map")}
                       </TabsTrigger>
                       <TabsTrigger value="alerts" className="gap-1.5 px-2 text-xs sm:text-sm">
-                        <Siren className="h-3.5 w-3.5" /> Alerts
+                        <Siren className="h-3.5 w-3.5" /> {t("Alerts")}
                       </TabsTrigger>
                       <TabsTrigger value="messages" className="gap-1.5 px-2 text-xs sm:text-sm">
-                        <MessageSquare className="h-3.5 w-3.5 shrink-0" /> Messages
+                        <MessageSquare className="h-3.5 w-3.5 shrink-0" /> {t("Messages")}
                       </TabsTrigger>
                       <TabsTrigger value="documents" className="gap-1.5 px-2 text-xs sm:text-sm">
-                        <FileText className="h-3.5 w-3.5 shrink-0" /> Documents
+                        <FileText className="h-3.5 w-3.5 shrink-0" /> {t("Documents")}
                       </TabsTrigger>
                       <TabsTrigger value="history" className="gap-1.5 px-2 text-xs sm:text-sm">
-                        <Shield className="h-3.5 w-3.5 shrink-0" /> History
+                        <Shield className="h-3.5 w-3.5 shrink-0" /> {t("History")}
                       </TabsTrigger>
                     </TabsList>
 
@@ -801,7 +815,7 @@ function Page() {
                     <TabsContent value="alerts" className="mt-4 space-y-2">
                       {selected.alerts.length === 0 ? (
                         <div className="rounded-md border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
-                          No active alerts.
+                          {t("No active alerts.")}
                         </div>
                       ) : (
                         selected.alerts.map((alert) => (
@@ -886,14 +900,14 @@ function Page() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-sm font-semibold text-foreground">
-                        Customer Tracking Link
+                        {t("Customer Tracking Link")}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Shareable read-only tracking experience
+                        {t("Shareable read-only tracking experience")}
                       </div>
                     </div>
                     <Badge variant="outline" className={toneBadge.success}>
-                      Active
+                      {t("Active")}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2 py-1.5">
@@ -909,8 +923,9 @@ function Page() {
                     </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Includes live state, route progress, ETA, and timeline while hiding internal
-                    pricing.
+                    {t(
+                      "Includes live state, route progress, ETA, and timeline while hiding internal\r\n                    pricing.",
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -918,7 +933,7 @@ function Page() {
           ) : (
             <Card className="border-border/70 shadow-sm">
               <CardContent className="p-8 text-center text-muted-foreground">
-                Select a row in the Tracking Sessions table to view full details.
+                {t("Select a row in the Tracking Sessions table to view full details.")}
               </CardContent>
             </Card>
           )}

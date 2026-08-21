@@ -1,12 +1,5 @@
 import * as React from "react";
-import {
-  Download,
-  Eye,
-  FileText,
-  FileUp,
-  ImageIcon,
-  X,
-} from "lucide-react";
+import { Download, Eye, FileText, FileUp, ImageIcon, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +13,7 @@ import {
 import { formatBytes } from "@/lib/load-documents";
 import type { TrackingDocument } from "@/lib/tracking-workflow-store";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 function prettyTime(iso?: string | null) {
   if (!iso) return "—";
@@ -71,7 +65,7 @@ export function TrackingDocumentsPanel({
         <div className="flex flex-wrap gap-2">
           {onMarkPod ? (
             <Button size="sm" variant="outline" className="gap-1.5" onClick={onMarkPod}>
-              <FileUp className="h-3.5 w-3.5" /> Mark POD received
+              <FileUp className="h-3.5 w-3.5" /> {t("Mark POD received")}
             </Button>
           ) : null}
         </div>
@@ -80,7 +74,9 @@ export function TrackingDocumentsPanel({
       <div className="space-y-2">
         {documents.map((doc) => {
           const canView = Boolean(doc.viewUrl);
-          const isImage = Boolean(doc.contentType?.startsWith("image/") || doc.viewUrl?.startsWith("data:image"));
+          const isImage = Boolean(
+            doc.contentType?.startsWith("image/") || doc.viewUrl?.startsWith("data:image"),
+          );
           return (
             <button
               key={doc.id}
@@ -126,7 +122,11 @@ export function TrackingDocumentsPanel({
                 variant="outline"
                 className={
                   toneBadge[
-                    doc.status === "Received" ? "success" : doc.status === "Pending" ? "warning" : "info"
+                    doc.status === "Received"
+                      ? "success"
+                      : doc.status === "Pending"
+                        ? "warning"
+                        : "info"
                   ]
                 }
               >
@@ -150,7 +150,8 @@ export function TrackingDocumentsPanel({
                 </DialogDescription>
               </DialogHeader>
               <div className="max-h-[min(70vh,640px)] overflow-auto bg-muted/30 p-4">
-                {active.contentType?.includes("pdf") || active.viewUrl?.startsWith("data:application/pdf") ? (
+                {active.contentType?.includes("pdf") ||
+                active.viewUrl?.startsWith("data:application/pdf") ? (
                   <iframe
                     title={active.name}
                     src={active.viewUrl}
@@ -165,8 +166,14 @@ export function TrackingDocumentsPanel({
                 )}
               </div>
               <div className="flex items-center justify-end gap-2 border-t border-border/70 px-4 py-3">
-                <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setActive(null)}>
-                  <X className="h-3.5 w-3.5" /> Close
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setActive(null)}
+                >
+                  <X className="h-3.5 w-3.5" /> {t("Close")}
                 </Button>
                 <Button
                   type="button"
@@ -175,7 +182,7 @@ export function TrackingDocumentsPanel({
                   onClick={() => downloadAsset(active)}
                   disabled={!active.viewUrl}
                 >
-                  <Download className="h-3.5 w-3.5" /> Download
+                  <Download className="h-3.5 w-3.5" /> {t("Download")}
                 </Button>
               </div>
             </>

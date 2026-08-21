@@ -124,9 +124,7 @@ describe("self-service", () => {
 
   it("allows an ordinary self-service write", async () => {
     companies({ [ME]: "acme" });
-    const res = await handleProfileRequest(
-      put({ section: "personal", data: { nickname: "JA" } }),
-    );
+    const res = await handleProfileRequest(put({ section: "personal", data: { nickname: "JA" } }));
 
     expect(res.status).toBe(200);
     expect(sent("PutCommand")[0]?.input).toMatchObject({
@@ -142,10 +140,12 @@ describe("another user's profile", () => {
 
     expect(res.status).toBe(404);
     // The colleague's row is never fetched, so nothing about them leaks.
-    expect(sent("GetCommand").some((c) => {
-      const key = (c.input as { Key?: { userId?: string; section?: string } }).Key;
-      return key?.userId === COLLEAGUE && key?.section === "personal";
-    })).toBe(false);
+    expect(
+      sent("GetCommand").some((c) => {
+        const key = (c.input as { Key?: { userId?: string; section?: string } }).Key;
+        return key?.userId === COLLEAGUE && key?.section === "personal";
+      }),
+    ).toBe(false);
   });
 
   it("lets an admin read a colleague in their own company", async () => {
@@ -252,5 +252,108 @@ describe("input", () => {
 
     expect(res.status).toBe(401);
     expect(dynamoSend).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * An admin editing their own row in the admin console.
+ *
+ * Regression: this payload names the caller, which used to be treated as
+ * self-service and refused with `privileged_field` — so the admin console could
+ * save every user's permission grids except the signed-in admin's own.
+ */
+describe("admin editing their own permissions", () => {
+  const GRIDS = {
+    permissionGroup: "Admin Template",
+    accessLevel: "Elevated",
+    dataAccessScope: "All Company Data",
+    modulePermissions: { Inventory: { "Full Access": true } },
+    fieldPermissions: { "Can View Inventory Valuation": true },
+  };
+
+  it("saves the permission grids when the caller is an admin", async () => {
+    authorizeAdminRequest.mockResolvedValue({ ok: true, sub: ME, role: "Admin" });
+    companies({ [ME]: "acme" });
+
+    const res = await handleProfileRequest(
+      put({ userId: ME, section: "permissions", data: GRIDS }),
+    );
+
+    expect(res.status).toBe(200);
+    const written = sent("PutCommand")[0].input as {
+      Item: { userId: string; data: Record<string, unknown> };
+    };
+    expect(written.Item.userId).toBe(ME);
+    expect(written.Item.data.modulePermissions).toEqual(GRIDS.modulePermissions);
+    expect(written.Item.data.fieldPermissions).toEqual(GRIDS.fieldPermissions);
+    expect(written.Item.data.dataAccessScope).toBe("All Company Data");
+  });
+
+  it("still refuses a non-admin naming themselves", async () => {
+    authorizeAdminRequest.mockResolvedValue({ ok: false, code: "forbidden" });
+    companies({ [ME]: "acme" });
+
+    const res = await handleProfileRequest(
+      put({ userId: ME, section: "permissions", data: GRIDS }),
+    );
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("privileged_field");
+    expect(sent("PutCommand")).toHaveLength(0);
+  });
+
+  /**
+   * The escalation that must stay closed: an admin may rewrite their own grids,
+   * which grants them nothing, but not their own role — that would be
+   * self-promotion to SuperAdmin.
+   */
+  it("refuses role even for an admin editing themselves", async () => {
+    authorizeAdminRequest.mockResolvedValue({ ok: true, sub: ME, role: "Admin" });
+    companies({ [ME]: "acme" });
+
+    const res = await handleProfileRequest(
+      put({ userId: ME, section: "permissions", data: { role: "SuperAdmin" } }),
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("server_owned_field");
+    expect(sent("PutCommand")).toHaveLength(0);
+  });
+
+  it("refuses companyId even for an admin editing themselves", async () => {
+    authorizeAdminRequest.mockResolvedValue({ ok: true, sub: ME, role: "Admin" });
+    companies({ [ME]: "acme" });
+
+    const res = await handleProfileRequest(
+      put({ userId: ME, section: "permissions", data: { companyId: "rival" } }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(sent("PutCommand")).toHaveLength(0);
+  });
+
+  /**
+   * The implicit-self path stays self-service even for an admin, so the profile
+   * page cannot become a privilege-writing surface through a UI mistake.
+   */
+  it("keeps the no-userId path self-service for an admin", async () => {
+    authorizeAdminRequest.mockResolvedValue({ ok: true, sub: ME, role: "Admin" });
+    companies({ [ME]: "acme" });
+
+    const res = await handleProfileRequest(put({ section: "permissions", data: GRIDS }));
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("privileged_field");
+  });
+
+  it("leaves ordinary self-service saves working", async () => {
+    authorizeAdminRequest.mockResolvedValue({ ok: false, code: "forbidden" });
+    companies({ [ME]: "acme" });
+
+    const res = await handleProfileRequest(
+      put({ section: "personal", data: { given_name: "Jordan" } }),
+    );
+
+    expect(res.status).toBe(200);
   });
 });

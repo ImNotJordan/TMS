@@ -4,6 +4,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { CHANNEL_LABELS, formatDuration } from "../lib/formatters";
 import type { AgentConfig, ConsentRecord, Conversation, DncEntry, Message } from "../types";
+import { t } from "@/lib/i18n/t";
 
 export function ThreadHeader({ conversation }: { conversation: Conversation }) {
   return (
@@ -49,7 +50,7 @@ export function ContextPanel({
   if (!conversation) {
     return (
       <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-        Select a conversation to see load, contact, and activity context.
+        {t("Select a conversation to see load, contact, and activity context.")}
       </div>
     );
   }
@@ -60,23 +61,23 @@ export function ContextPanel({
     <div className="space-y-4 text-sm">
       <section className="space-y-1.5 rounded-lg border border-border/70 bg-muted/20 p-3">
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Linked load
+          {t("Linked load")}
         </h3>
         {conversation.loadId ? (
           <div>
             <p className="font-medium tabular-nums text-foreground">Load #{conversation.loadId}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Open Loads for pickup, delivery, status, and carrier details.
+              {t("Open Loads for pickup, delivery, status, and carrier details.")}
             </p>
           </div>
         ) : (
-          <p className="text-muted-foreground">No load linked.</p>
+          <p className="text-muted-foreground">{t("No load linked.")}</p>
         )}
       </section>
 
       <section className="space-y-1.5 rounded-lg border border-border/70 bg-muted/20 p-3">
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Contact
+          {t("Contact")}
         </h3>
         <p className="font-medium text-foreground">{conversation.contactId}</p>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -95,7 +96,7 @@ export function ContextPanel({
 
       <section className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          AI agent
+          {t("AI agent")}
         </h3>
         <p className="text-xs text-muted-foreground">
           Persona: {agentConfig.persona.replace("-", " ")} · Tone: {agentConfig.tone}
@@ -105,7 +106,9 @@ export function ContextPanel({
           variant="outline"
           size="sm"
           className="h-8 w-full cursor-pointer"
-          disabled={!aiConnected || suggesting || !agentConfig.allowedActions.includes("draft-reply")}
+          disabled={
+            !aiConnected || suggesting || !agentConfig.allowedActions.includes("draft-reply")
+          }
           title={
             !aiConnected
               ? "AI integration is disconnected."
@@ -119,7 +122,7 @@ export function ContextPanel({
         </Button>
         {!aiConnected ? (
           <p className="text-xs text-muted-foreground">
-            AI is disconnected. Connect it in Settings → Integrations.
+            {t("AI is disconnected. Connect it in Settings → Integrations.")}
           </p>
         ) : null}
       </section>
@@ -128,10 +131,10 @@ export function ContextPanel({
 
       <section className="space-y-1.5">
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Activity
+          {t("Activity")}
         </h3>
         {conversation.keywordFlags.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No keyword hits on this thread.</p>
+          <p className="text-xs text-muted-foreground">{t("No keyword hits on this thread.")}</p>
         ) : (
           <ul className="space-y-1.5">
             {conversation.keywordFlags.slice(0, 8).map((hit) => (
@@ -172,13 +175,13 @@ export function VoiceCallPanel({
     <div className="rounded-md border border-border/70 p-3">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-medium">Voice</p>
+          <p className="text-sm font-medium">{t("Voice")}</p>
           <p className="text-xs text-muted-foreground">
             {available ? "Click to place a call via Twilio." : reason}
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" disabled={!available} onClick={onCall}>
-          Call
+          {t("Call")}
         </Button>
       </div>
     </div>

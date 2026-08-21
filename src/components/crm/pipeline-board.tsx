@@ -16,6 +16,7 @@ import {
   type CrmLeadStage,
 } from "@/lib/crm-store";
 import { CRM_STAGE_BADGE_CLASS, CRM_STAGE_TONE, formatCurrency } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
 export function PipelineBoard({
   leads,
@@ -100,7 +101,10 @@ export function PipelineBoard({
           const stageLeads = byStage.get(stage) ?? [];
           const forecastTotal = stageLeads.reduce((sum, l) => sum + crmLeadRevenueForecast(l), 0);
           return (
-            <div key={stage} className="flex flex-col rounded-xl border border-border/70 bg-muted/20">
+            <div
+              key={stage}
+              className="flex flex-col rounded-xl border border-border/70 bg-muted/20"
+            >
               <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className={CRM_STAGE_BADGE_CLASS[CRM_STAGE_TONE[stage]]}>
@@ -114,18 +118,23 @@ export function PipelineBoard({
               </div>
               <div className="flex-1 space-y-2 p-2">
                 {stageLeads.length === 0 ? (
-                  <div className="py-6 text-center text-[11px] text-muted-foreground">No leads</div>
+                  <div className="py-6 text-center text-[11px] text-muted-foreground">
+                    {t("No leads")}
+                  </div>
                 ) : (
                   stageLeads.map((lead) => {
                     const margin = crmLeadMarginPct(lead);
-                    const floorBreach = margin != null && lead.marginFloorPct != null && margin < lead.marginFloorPct;
+                    const floorBreach =
+                      margin != null && lead.marginFloorPct != null && margin < lead.marginFloorPct;
                     return (
                       <div
                         key={lead.leadId}
                         className="cursor-pointer rounded-lg border border-border/60 bg-card p-3 shadow-sm transition-colors hover:border-primary/40"
                         onClick={() => onOpenLead(lead)}
                       >
-                        <div className="text-sm font-medium leading-tight text-foreground">{lead.title}</div>
+                        <div className="text-sm font-medium leading-tight text-foreground">
+                          {lead.title}
+                        </div>
                         {(lead.origin || lead.destination) && (
                           <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
                             <MapPin className="h-3 w-3 shrink-0" />
@@ -142,7 +151,9 @@ export function PipelineBoard({
                             <span
                               className={cn(
                                 "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium",
-                                floorBreach ? "bg-destructive/12 text-destructive" : "bg-success/12 text-success",
+                                floorBreach
+                                  ? "bg-destructive/12 text-destructive"
+                                  : "bg-success/12 text-success",
                               )}
                             >
                               <Percent className="h-2.5 w-2.5" />

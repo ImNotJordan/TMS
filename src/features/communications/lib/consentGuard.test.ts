@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { consentGuard } from "@/features/communications/lib/consentGuard";
 import type { ConsentRecord, DncEntry } from "@/features/communications/types";
 
-const consent = (partial: Partial<ConsentRecord> & Pick<ConsentRecord, "state">): ConsentRecord => ({
+const consent = (
+  partial: Partial<ConsentRecord> & Pick<ConsentRecord, "state">,
+): ConsentRecord => ({
   id: "c1",
   contactId: "contact-1",
   channel: "sms",

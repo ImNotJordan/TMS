@@ -90,6 +90,7 @@ export type AdminUserEditDraft = {
   manager: string;
   assignedTeam: string;
   assignedBranch: string;
+  assignedCustomers: string;
   dataAccessScope: AccessScope;
   accountStatus: UserStatus;
   inviteStatus: InviteStatus;
@@ -117,6 +118,7 @@ export function buildEmptyAdminUserEditDraft(userId: string): AdminUserEditDraft
     manager: "",
     assignedTeam: "",
     assignedBranch: "",
+    assignedCustomers: "",
     dataAccessScope: "Assigned Team Only",
     accountStatus: "Active",
     inviteStatus: "Accepted",
@@ -160,6 +162,7 @@ function entryToDraft(
     manager: asString(permissions.manager),
     assignedTeam: asString(permissions.teams) || entry?.team || "",
     assignedBranch: asString(permissions.branch) || "",
+    assignedCustomers: asString(permissions.assignedCustomers),
     dataAccessScope: (asString(permissions.dataAccessScope) as AccessScope) || "Assigned Team Only",
     accountStatus,
     inviteStatus: normalizeInviteStatus(
@@ -269,6 +272,7 @@ export async function saveAdminUserEditDraft(
       accessLevel: draft.accessLevel,
       branch: draft.assignedBranch.trim() || draft.officeBranch.trim() || undefined,
       teams: draft.assignedTeam.trim() || undefined,
+      assignedCustomers: draft.assignedCustomers.trim() || undefined,
       manager: draft.manager.trim() || undefined,
       status: draft.accountStatus,
       dataAccessScope: draft.dataAccessScope,

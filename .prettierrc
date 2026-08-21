@@ -2,5 +2,15 @@
   "printWidth": 100,
   "semi": true,
   "singleQuote": false,
-  "trailingComma": "all"
+  "trailingComma": "all",
+  "overrides": [
+    {
+      "files": [
+        "src/lib/i18n/phrases.*.ts"
+      ],
+      "options": {
+        "quoteProps": "consistent"
+      }
+    }
+  ]
 }

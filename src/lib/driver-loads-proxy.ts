@@ -27,7 +27,9 @@ import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 import { getServerDataClient, ServerDataPrincipalMissingError } from "@/lib/server/server-dynamo";
 import { readServerEnv } from "@/lib/server-env";
+import { syncLoadInventoryForTenant } from "@/lib/inventory-proxy";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
+import { refuseClientOnOpsApi } from "@/lib/tenant/client-scope";
 import {
   loadStatusForDriverWorkflow,
   normalizeLoadStatus,
@@ -187,6 +189,7 @@ const DRIVER_READABLE_FIELDS: ReadonlySet<string> = new Set([
   "deliveryReference",
   // What is on the trailer.
   "commodityDescription",
+  "inventoryLines",
   "weight",
   "weightUnit",
   "dimensions",
@@ -775,7 +778,29 @@ async function patchAssigned(
         ReturnValues: "ALL_NEW",
       }) as never,
     )) as { Attributes?: LoadItem };
-    return Response.json({ load: forDriver(out.Attributes as LoadItem) });
+    const updated = out.Attributes as LoadItem;
+    if (typeof updated?.loadId === "string") {
+      try {
+        const sync = await syncLoadInventoryForTenant(
+          ctx,
+          {
+            loadId: updated.loadId,
+            loadStatus: typeof updated.loadStatus === "string" ? updated.loadStatus : undefined,
+            inventoryLines: updated.inventoryLines,
+          },
+          { previous: { inventoryLines: current.inventoryLines } },
+        );
+        if (!sync.ok) {
+          console.error("[driver-loads] inventory sync refused", sync.code, sync.message);
+        }
+      } catch (err) {
+        console.error(
+          "[driver-loads] inventory sync failed",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    return Response.json({ load: forDriver(updated) });
   } catch (err) {
     if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
       logTenantDenial(ctx, "driver write to an unassigned load", `${DRIVER_LOADS_PATH}/:id`);
@@ -796,6 +821,9 @@ export async function handleDriverLoadsRequest(request: Request): Promise<Respon
   } catch (err) {
     return tenantErrorResponse(err) ?? jsonError("Sign in required.", 401, "not_authenticated");
   }
+
+  const refused = refuseClientOnOpsApi(ctx, url.pathname);
+  if (refused) return refused;
 
   // Scoped to the caller's own assignments, whoever they are. No company
   // predicate — a driver has no company — and no way to ask about anyone else's

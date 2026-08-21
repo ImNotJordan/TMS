@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadsProvider } from "@/lib/loads-store";
 import { NotificationsProvider } from "@/lib/notifications-store";
 import { DriverLocationWatcher } from "@/components/driver-location-watcher";
-import { DISPATCH_APP_URL } from "@/lib/external-links";
+import { DISPATCH_APP_URL, CLIENT_APP_URL } from "@/lib/external-links";
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -50,16 +50,25 @@ function AuthGate() {
     }
   }, [status, isLoginRoute, navigate]);
 
-  // Soft gate: dedicated ops accounts should use the operations console.
+  // Soft gate: dedicated ops and client accounts belong on their own apps.
   useEffect(() => {
     if (status !== "authenticated" || !driver) return;
-    if (driver.audience !== "ops") return;
-    toast.message("This account belongs on the Operations Console", {
-      description: "Redirecting…",
-    });
+    const dest =
+      driver.audience === "ops"
+        ? DISPATCH_APP_URL
+        : driver.audience === "client"
+          ? CLIENT_APP_URL
+          : null;
+    if (!dest) return;
+    toast.message(
+      driver.audience === "client"
+        ? "This account belongs on the Customer Portal"
+        : "This account belongs on the Operations Console",
+      { description: "Redirecting…" },
+    );
     void (async () => {
       await signOut();
-      window.location.assign(DISPATCH_APP_URL);
+      window.location.assign(dest);
     })();
   }, [status, driver, signOut]);
 
@@ -71,7 +80,7 @@ function AuthGate() {
     return <AuthBootSkeleton />;
   }
 
-  if (driver?.audience === "ops") {
+  if (driver?.audience === "ops" || driver?.audience === "client") {
     return <AuthBootSkeleton />;
   }
 

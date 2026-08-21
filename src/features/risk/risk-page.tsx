@@ -68,6 +68,7 @@ import {
 } from "@/lib/risk-models-store";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 type ModelStatus = "Draft" | "Published" | "Archived" | "Deprecated" | "Testing" | "Rolled Back";
 type RiskLevel = "Low Risk" | "Medium Risk" | "High Risk" | "Critical Risk";
@@ -579,8 +580,7 @@ function suggestedAction(level: RiskLevel) {
   if (level === "Low Risk") return "Auto-approve and monitor during transit.";
   if (level === "Medium Risk")
     return "Dispatch with standard check calls and watchlist monitoring.";
-  if (level === "High Risk")
-    return "Require manager approval before dispatching this load.";
+  if (level === "High Risk") return "Require manager approval before dispatching this load.";
   return "Block dispatch until risk manager approval and mitigation plan are complete.";
 }
 
@@ -612,7 +612,8 @@ function buildAttribution(
     const weight = weights.get(featureName) ?? 0;
     const contribution = weight * inputValue;
     const abs = Math.abs(contribution);
-    const impactLevel: AttributionRow["impactLevel"] = abs >= 15 ? "High" : abs >= 7 ? "Medium" : "Low";
+    const impactLevel: AttributionRow["impactLevel"] =
+      abs >= 15 ? "High" : abs >= 7 ? "Medium" : "Low";
 
     return {
       featureName,
@@ -636,8 +637,12 @@ function buildAttribution(
 }
 
 function whySummary(rows: AttributionRow[], level: RiskLevel) {
-  const positives = rows.filter((row) => row.contribution > 0).sort((a, b) => b.contribution - a.contribution);
-  const negatives = rows.filter((row) => row.contribution < 0).sort((a, b) => a.contribution - b.contribution);
+  const positives = rows
+    .filter((row) => row.contribution > 0)
+    .sort((a, b) => b.contribution - a.contribution);
+  const negatives = rows
+    .filter((row) => row.contribution < 0)
+    .sort((a, b) => a.contribution - b.contribution);
 
   const primaryA = positives[0]?.featureName ?? "market pressure";
   const primaryB = positives[1]?.featureName ?? "operational friction";
@@ -801,9 +806,8 @@ export function RiskPage() {
   usePageReady(modelsLoading);
 
   const [selectedModelId, setSelectedModelId] = React.useState("");
-  const [editorRoleSelect, setEditorRoleSelect] = React.useState<(typeof ROLE_OPTIONS)[number]>(
-    "Risk Manager",
-  );
+  const [editorRoleSelect, setEditorRoleSelect] =
+    React.useState<(typeof ROLE_OPTIONS)[number]>("Risk Manager");
   const [dslInsertToken, setDslInsertToken] = React.useState("clamp(");
 
   const [testValues, setTestValues] = React.useState<TestHarnessValues>(BASE_TEST_CASE);
@@ -933,9 +937,7 @@ export function RiskPage() {
       }
     }
 
-    return rows
-      .sort((a, b) => (a.dateTime < b.dateTime ? 1 : -1))
-      .slice(0, 120);
+    return rows.sort((a, b) => (a.dateTime < b.dateTime ? 1 : -1)).slice(0, 120);
   }, [models]);
 
   const metricCards = React.useMemo(() => {
@@ -1367,7 +1369,11 @@ export function RiskPage() {
       return;
     }
 
-    const compared = runEvaluation(activeModel, selectedVersion.formulaSnapshot, selectedVersion.version);
+    const compared = runEvaluation(
+      activeModel,
+      selectedVersion.formulaSnapshot,
+      selectedVersion.version,
+    );
     setCompareResult(compared);
   };
 
@@ -1448,8 +1454,10 @@ export function RiskPage() {
   return (
     <div>
       <PageHeader
-        title="Risk Models"
-        description="Enterprise command center for scoring logic, explainability, version governance, and reproducible risk evaluation."
+        title={t("Risk Models")}
+        description={t(
+          "Enterprise command center for scoring logic, explainability, version governance, and reproducible risk evaluation.",
+        )}
         actions={
           <>
             <Button
@@ -1458,7 +1466,7 @@ export function RiskPage() {
               className="gap-1.5"
               onClick={() => setActiveTab("audit")}
             >
-              <History className="h-4 w-4" /> View Audit Log
+              <History className="h-4 w-4" /> {t("View Audit Log")}
             </Button>
             <Button
               variant="outline"
@@ -1466,10 +1474,15 @@ export function RiskPage() {
               className="gap-1.5"
               onClick={() => setActiveTab("versions")}
             >
-              <GitBranch className="h-4 w-4" /> Version History
+              <GitBranch className="h-4 w-4" /> {t("Version History")}
             </Button>
-            <Button size="sm" className="gap-1.5" disabled={modelActionPending} onClick={() => void createModel()}>
-              <Plus className="h-4 w-4" /> Create Model
+            <Button
+              size="sm"
+              className="gap-1.5"
+              disabled={modelActionPending}
+              onClick={() => void createModel()}
+            >
+              <Plus className="h-4 w-4" /> {t("Create Model")}
             </Button>
           </>
         }
@@ -1479,36 +1492,36 @@ export function RiskPage() {
         {modelsLoading ? (
           <StatCardsSkeleton count={4} />
         ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            label="Published Models"
-            value={String(metricCards.published)}
-            subtitle="Production scoring active"
-            tone="success"
-            icon={<BadgeCheck className="h-4 w-4" />}
-          />
-          <MetricCard
-            label="Draft Models"
-            value={String(metricCards.drafts)}
-            subtitle="Pending review"
-            tone="info"
-            icon={<FileCode2 className="h-4 w-4" />}
-          />
-          <MetricCard
-            label="Testing Queue"
-            value={String(metricCards.testing)}
-            subtitle="In harness validation"
-            tone="warning"
-            icon={<FlaskConical className="h-4 w-4" />}
-          />
-          <MetricCard
-            label="Rolled Back"
-            value={String(metricCards.rolledBack)}
-            subtitle="Monitored for regression"
-            tone="default"
-            icon={<RotateCcw className="h-4 w-4" />}
-          />
-        </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              label={t("Published Models")}
+              value={String(metricCards.published)}
+              subtitle={t("Production scoring active")}
+              tone="success"
+              icon={<BadgeCheck className="h-4 w-4" />}
+            />
+            <MetricCard
+              label={t("Draft Models")}
+              value={String(metricCards.drafts)}
+              subtitle={t("Pending review")}
+              tone="info"
+              icon={<FileCode2 className="h-4 w-4" />}
+            />
+            <MetricCard
+              label={t("Testing Queue")}
+              value={String(metricCards.testing)}
+              subtitle={t("In harness validation")}
+              tone="warning"
+              icon={<FlaskConical className="h-4 w-4" />}
+            />
+            <MetricCard
+              label={t("Rolled Back")}
+              value={String(metricCards.rolledBack)}
+              subtitle={t("Monitored for regression")}
+              tone="default"
+              icon={<RotateCcw className="h-4 w-4" />}
+            />
+          </div>
         )}
         {modelsWarning && (
           <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
@@ -1559,10 +1572,11 @@ export function RiskPage() {
           <TabsContent value="list" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Risk Models List</CardTitle>
+                <CardTitle>{t("Risk Models List")}</CardTitle>
                 <CardDescription>
-                  Create, test, publish, roll back, and govern risk models used across dispatch
-                  and pricing workflows.
+                  {t(
+                    "Create, test, publish, roll back, and govern risk models used across dispatch\n                  and pricing workflows.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1573,7 +1587,7 @@ export function RiskPage() {
                       className="pl-9"
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
-                      placeholder="Search by model, owner, or usage"
+                      placeholder={t("Search by model, owner, or usage")}
                     />
                   </div>
                   <Select
@@ -1581,10 +1595,10 @@ export function RiskPage() {
                     onValueChange={(value) => setStatusFilter(value as "all" | ModelStatus)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Status" />
+                      <SelectValue placeholder={t("Status")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="all">{t("All Statuses")}</SelectItem>
                       {MODEL_STATUSES.map((status) => (
                         <SelectItem key={status} value={status}>
                           {status}
@@ -1597,10 +1611,10 @@ export function RiskPage() {
                     onValueChange={(value) => setRiskTypeFilter(value as "all" | RiskType)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Risk Type" />
+                      <SelectValue placeholder={t("Risk Type")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Risk Types</SelectItem>
+                      <SelectItem value="all">{t("All Risk Types")}</SelectItem>
                       {RISK_TYPES.map((riskType) => (
                         <SelectItem key={riskType} value={riskType}>
                           {riskType}
@@ -1615,10 +1629,15 @@ export function RiskPage() {
                       className="gap-1.5"
                       onClick={() => setActiveTab("audit")}
                     >
-                      <History className="h-4 w-4" /> Audit
+                      <History className="h-4 w-4" /> {t("Audit")}
                     </Button>
-                    <Button size="sm" className="gap-1.5" disabled={modelActionPending} onClick={() => void createModel()}>
-                      <Plus className="h-4 w-4" /> Create Model
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={modelActionPending}
+                      onClick={() => void createModel()}
+                    >
+                      <Plus className="h-4 w-4" /> {t("Create Model")}
                     </Button>
                   </div>
                 </div>
@@ -1627,22 +1646,25 @@ export function RiskPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Model Name</TableHead>
-                        <TableHead>Version</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Owner</TableHead>
-                        <TableHead>Last Modified</TableHead>
-                        <TableHead>Last Published</TableHead>
-                        <TableHead>Risk Type</TableHead>
-                        <TableHead>Used By</TableHead>
-                        <TableHead className="min-w-[340px]">Actions</TableHead>
+                        <TableHead>{t("Model Name")}</TableHead>
+                        <TableHead>{t("Version")}</TableHead>
+                        <TableHead>{t("Status")}</TableHead>
+                        <TableHead>{t("Owner")}</TableHead>
+                        <TableHead>{t("Last Modified")}</TableHead>
+                        <TableHead>{t("Last Published")}</TableHead>
+                        <TableHead>{t("Risk Type")}</TableHead>
+                        <TableHead>{t("Used By")}</TableHead>
+                        <TableHead className="min-w-[340px]">{t("Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredModels.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
-                            No risk models yet. Create a model to begin.
+                          <TableCell
+                            colSpan={9}
+                            className="py-8 text-center text-sm text-muted-foreground"
+                          >
+                            {t("No risk models yet. Create a model to begin.")}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -1682,7 +1704,7 @@ export function RiskPage() {
                                     setActiveTab("editor");
                                   }}
                                 >
-                                  Edit Model
+                                  {t("Edit Model")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1691,7 +1713,7 @@ export function RiskPage() {
                                   disabled={modelActionPending}
                                   onClick={() => void duplicateModel(model)}
                                 >
-                                  <Copy className="mr-1 h-3.5 w-3.5" /> Duplicate
+                                  <Copy className="mr-1 h-3.5 w-3.5" /> {t("Duplicate")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1702,7 +1724,7 @@ export function RiskPage() {
                                     setActiveTab("test");
                                   }}
                                 >
-                                  <FlaskConical className="mr-1 h-3.5 w-3.5" /> Test
+                                  <FlaskConical className="mr-1 h-3.5 w-3.5" /> {t("Test")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1711,7 +1733,7 @@ export function RiskPage() {
                                   disabled={modelActionPending}
                                   onClick={() => void publishModel(model)}
                                 >
-                                  <Send className="mr-1 h-3.5 w-3.5" /> Publish
+                                  <Send className="mr-1 h-3.5 w-3.5" /> {t("Publish")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1720,7 +1742,7 @@ export function RiskPage() {
                                   disabled={modelActionPending}
                                   onClick={() => void rollbackModel(model)}
                                 >
-                                  <RotateCcw className="mr-1 h-3.5 w-3.5" /> Roll Back
+                                  <RotateCcw className="mr-1 h-3.5 w-3.5" /> {t("Roll Back")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1729,7 +1751,7 @@ export function RiskPage() {
                                   disabled={modelActionPending}
                                   onClick={() => void archiveModel(model)}
                                 >
-                                  <Archive className="mr-1 h-3.5 w-3.5" /> Archive
+                                  <Archive className="mr-1 h-3.5 w-3.5" /> {t("Archive")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1738,7 +1760,7 @@ export function RiskPage() {
                                   disabled={modelActionPending}
                                   onClick={() => void deleteModel(model)}
                                 >
-                                  Delete
+                                  {t("Delete")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1749,7 +1771,7 @@ export function RiskPage() {
                                     setActiveTab("audit");
                                   }}
                                 >
-                                  View Audit Log
+                                  {t("View Audit Log")}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1760,7 +1782,7 @@ export function RiskPage() {
                                     setActiveTab("versions");
                                   }}
                                 >
-                                  View Version History
+                                  {t("View Version History")}
                                 </Button>
                               </div>
                             </TableCell>
@@ -1779,10 +1801,11 @@ export function RiskPage() {
               <CardHeader>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <CardTitle>Risk Model Editor</CardTitle>
+                    <CardTitle>{t("Risk Model Editor")}</CardTitle>
                     <CardDescription>
-                      Define formulas, thresholds, governance details, and role access for model
-                      lifecycle management.
+                      {t(
+                        "Define formulas, thresholds, governance details, and role access for model\n                      lifecycle management.",
+                      )}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1795,7 +1818,7 @@ export function RiskPage() {
                         variant="outline"
                         className="border-warning/30 bg-warning/15 text-warning-foreground"
                       >
-                        Published models are locked; save creates a new draft version
+                        {t("Published models are locked; save creates a new draft version")}
                       </Badge>
                     )}
                   </div>
@@ -1803,19 +1826,19 @@ export function RiskPage() {
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid gap-4 xl:grid-cols-3">
-                  <Field label="Model Name" required>
+                  <Field label={t("Model Name")} required>
                     <Input
                       value={editorDraft.modelName}
                       onChange={(event) => updateEditorField("modelName", event.target.value)}
                     />
                   </Field>
-                  <Field label="Risk Type" required>
+                  <Field label={t("Risk Type")} required>
                     <Select
                       value={editorDraft.riskType}
                       onValueChange={(value) => updateEditorField("riskType", value as RiskType)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select risk type" />
+                        <SelectValue placeholder={t("Select risk type")} />
                       </SelectTrigger>
                       <SelectContent>
                         {RISK_TYPES.map((riskType) => (
@@ -1826,7 +1849,7 @@ export function RiskPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Owner" required>
+                  <Field label={t("Owner")} required>
                     <Input
                       value={editorDraft.owner}
                       onChange={(event) => updateEditorField("owner", event.target.value)}
@@ -1834,7 +1857,7 @@ export function RiskPage() {
                   </Field>
                 </div>
 
-                <Field label="Model Description" required>
+                <Field label={t("Model Description")} required>
                   <Textarea
                     className="min-h-[80px]"
                     value={editorDraft.description}
@@ -1844,9 +1867,11 @@ export function RiskPage() {
 
                 <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
                   <Field
-                    label="Formula"
+                    label={t("Formula")}
                     required
-                    hint="Supports numeric weights, variables, + - * /, parentheses, min(), max(), clamp(), comments (# or //), and conditional placeholders via ternary logic."
+                    hint={t(
+                      "Supports numeric weights, variables, + - * /, parentheses, min(), max(), clamp(), comments (# or //), and conditional placeholders via ternary logic.",
+                    )}
                   >
                     <Textarea
                       className="min-h-[160px] font-mono text-xs"
@@ -1855,9 +1880,9 @@ export function RiskPage() {
                     />
                   </Field>
                   <div className="space-y-3 rounded-md border border-border/70 p-3">
-                    <div className="text-sm font-semibold">Formula DSL Builder</div>
+                    <div className="text-sm font-semibold">{t("Formula DSL Builder")}</div>
                     <p className="text-xs text-muted-foreground">
-                      Insert helper snippets into the formula editor.
+                      {t("Insert helper snippets into the formula editor.")}
                     </p>
                     <Select value={dslInsertToken} onValueChange={setDslInsertToken}>
                       <SelectTrigger>
@@ -1867,20 +1892,25 @@ export function RiskPage() {
                         <SelectItem value="clamp(value, 0, 100)">clamp(value, 0, 100)</SelectItem>
                         <SelectItem value="min(a, b)">min(a, b)</SelectItem>
                         <SelectItem value="max(a, b)">max(a, b)</SelectItem>
-                        <SelectItem value="(condition ? a : b)">(condition ? a : b)</SelectItem>
+                        <SelectItem value="(condition ? a : b)">
+                          {t("(condition ? a : b)")}
+                        </SelectItem>
                         <SelectItem value="# note: adjust weight for seasonality">
                           # comment / note
                         </SelectItem>
                       </SelectContent>
                     </Select>
                     <Button size="sm" variant="outline" className="w-full" onClick={appendDslToken}>
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Insert DSL Snippet
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5" /> {t("Insert DSL Snippet")}
                     </Button>
                   </div>
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-3">
-                  <Field label="Input Variables" hint="Toggle available variables for this model.">
+                  <Field
+                    label={t("Input Variables")}
+                    hint={t("Toggle available variables for this model.")}
+                  >
                     <div className="space-y-2 rounded-md border border-border/70 p-3">
                       {INPUT_CATALOG.map((input) => {
                         const enabled = editorDraft.inputVariables.includes(input.name);
@@ -1907,7 +1937,7 @@ export function RiskPage() {
                     </div>
                   </Field>
 
-                  <Field label="Output Scale">
+                  <Field label={t("Output Scale")}>
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         type="number"
@@ -1932,7 +1962,10 @@ export function RiskPage() {
                     </div>
                   </Field>
 
-                  <Field label="Risk Thresholds" hint="Low / Medium / High boundaries (0-100).">
+                  <Field
+                    label={t("Risk Thresholds")}
+                    hint={t("Low / Medium / High boundaries (0-100).")}
+                  >
                     <div className="grid grid-cols-3 gap-2">
                       <Input
                         type="number"
@@ -1969,7 +2002,10 @@ export function RiskPage() {
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-2">
-                  <Field label="Allowed Users / Roles" hint="Role-based model access control.">
+                  <Field
+                    label={t("Allowed Users / Roles")}
+                    hint={t("Role-based model access control.")}
+                  >
                     <div className="rounded-md border border-border/70 p-3">
                       <div className="mb-3 flex gap-2">
                         <Select
@@ -1994,7 +2030,7 @@ export function RiskPage() {
                           variant="outline"
                           onClick={() => toggleAllowedRole(editorRoleSelect, true)}
                         >
-                          Add Role
+                          {t("Add Role")}
                         </Button>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -2012,7 +2048,7 @@ export function RiskPage() {
                     </div>
                   </Field>
 
-                  <Field label="Notes">
+                  <Field label={t("Notes")}>
                     <Textarea
                       className="min-h-[96px]"
                       value={editorDraft.notes}
@@ -2022,7 +2058,7 @@ export function RiskPage() {
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-3">
-                  <Field label="Change Reason">
+                  <Field label={t("Change Reason")}>
                     <Input
                       value={editorDraft.governance.changeReason}
                       onChange={(event) =>
@@ -2033,7 +2069,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Required Reviewer">
+                  <Field label={t("Required Reviewer")}>
                     <Input
                       value={editorDraft.governance.requiredReviewer}
                       onChange={(event) =>
@@ -2044,7 +2080,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Effective Date">
+                  <Field label={t("Effective Date")}>
                     <Input
                       type="date"
                       value={editorDraft.governance.effectiveDate}
@@ -2064,7 +2100,7 @@ export function RiskPage() {
                     disabled={modelActionPending || !hasSelectedModel}
                     onClick={() => void saveModelDraft()}
                   >
-                    <CheckCircle2 className="h-4 w-4" /> Save and Version
+                    <CheckCircle2 className="h-4 w-4" /> {t("Save and Version")}
                   </Button>
                   <Button
                     variant="outline"
@@ -2072,7 +2108,7 @@ export function RiskPage() {
                     disabled={modelActionPending || !hasSelectedModel}
                     onClick={() => void publishModel(editorDraft)}
                   >
-                    <Send className="h-4 w-4" /> Publish Model
+                    <Send className="h-4 w-4" /> {t("Publish Model")}
                   </Button>
                   <Button
                     variant="outline"
@@ -2080,7 +2116,7 @@ export function RiskPage() {
                     disabled={modelActionPending || !hasSelectedModel}
                     onClick={() => void rollbackModel(editorDraft)}
                   >
-                    <RotateCcw className="h-4 w-4" /> Roll Back
+                    <RotateCcw className="h-4 w-4" /> {t("Roll Back")}
                   </Button>
                 </div>
               </CardContent>
@@ -2090,10 +2126,11 @@ export function RiskPage() {
           <TabsContent value="inputs" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Inputs Catalog</CardTitle>
+                <CardTitle>{t("Inputs Catalog")}</CardTitle>
                 <CardDescription>
-                  Variable inventory with source, update cadence, ranges, and data quality
-                  context.
+                  {t(
+                    "Variable inventory with source, update cadence, ranges, and data quality\n                  context.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -2101,15 +2138,15 @@ export function RiskPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Input Name</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Data Type</TableHead>
-                        <TableHead>Source</TableHead>
-                        <TableHead>Refresh Frequency</TableHead>
-                        <TableHead>Allowed Range</TableHead>
-                        <TableHead>Example Value</TableHead>
-                        <TableHead>Last Updated</TableHead>
-                        <TableHead>Required / Optional</TableHead>
+                        <TableHead>{t("Input Name")}</TableHead>
+                        <TableHead>{t("Description")}</TableHead>
+                        <TableHead>{t("Data Type")}</TableHead>
+                        <TableHead>{t("Source")}</TableHead>
+                        <TableHead>{t("Refresh Frequency")}</TableHead>
+                        <TableHead>{t("Allowed Range")}</TableHead>
+                        <TableHead>{t("Example Value")}</TableHead>
+                        <TableHead>{t("Last Updated")}</TableHead>
+                        <TableHead>{t("Required / Optional")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2159,8 +2196,9 @@ export function RiskPage() {
                       <CardContent className="p-4">
                         <p className="text-sm font-medium">{source}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Connected data feed for model input refresh and reproducible evaluation
-                          snapshots.
+                          {t(
+                            "Connected data feed for model input refresh and reproducible evaluation\n                          snapshots.",
+                          )}
                         </p>
                       </CardContent>
                     </Card>
@@ -2173,35 +2211,41 @@ export function RiskPage() {
           <TabsContent value="dsl" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Formula DSL Builder</CardTitle>
+                <CardTitle>{t("Formula DSL Builder")}</CardTitle>
                 <CardDescription>
-                  Developer-friendly formula editor with business-readable syntax and safe model
-                  evaluation constraints.
+                  {t(
+                    "Developer-friendly formula editor with business-readable syntax and safe model\n                  evaluation constraints.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
                   <div className="space-y-3">
                     <Label>Current Formula ({activeModel.modelName || "No model selected"})</Label>
-                    <Textarea value={editorDraft.formula} readOnly className="min-h-[220px] font-mono text-xs" />
+                    <Textarea
+                      value={editorDraft.formula}
+                      readOnly
+                      className="min-h-[220px] font-mono text-xs"
+                    />
                   </div>
                   <div className="space-y-3 rounded-md border border-border/70 p-3">
-                    <p className="text-sm font-semibold">DSL Features</p>
+                    <p className="text-sm font-semibold">{t("DSL Features")}</p>
                     <ul className="space-y-1 text-xs text-muted-foreground">
-                      <li>- Numeric weights</li>
-                      <li>- Input variables</li>
-                      <li>- Addition, subtraction, multiplication, division</li>
-                      <li>- Parentheses</li>
-                      <li>- min() / max() helper functions</li>
-                      <li>- clamp(value, min, max)</li>
-                      <li>- Conditional placeholder with ternary syntax</li>
-                      <li>- Comments via # or //</li>
+                      <li>{t("- Numeric weights")}</li>
+                      <li>{t("- Input variables")}</li>
+                      <li>{t("- Addition, subtraction, multiplication, division")}</li>
+                      <li>{t("- Parentheses")}</li>
+                      <li>{t("- min() / max() helper functions")}</li>
+                      <li>{t("- clamp(value, min, max)")}</li>
+                      <li>{t("- Conditional placeholder with ternary syntax")}</li>
+                      <li>{t("- Comments via # or //")}</li>
                     </ul>
                     <Separator />
-                    <p className="text-xs text-muted-foreground">Example:</p>
+                    <p className="text-xs text-muted-foreground">{t("Example:")}</p>
                     <code className="block rounded bg-muted p-2 text-[11px] leading-relaxed">
-                      0.35 * lane_volatility + 0.25 * DAT_spread + 0.20 * carrier_reliability +
-                      0.10 * weather_risk + 0.10 * fuel_delta
+                      {t(
+                        "0.35 * lane_volatility + 0.25 * DAT_spread + 0.20 * carrier_reliability +\n                      0.10 * weather_risk + 0.10 * fuel_delta",
+                      )}
                     </code>
                   </div>
                 </div>
@@ -2212,14 +2256,16 @@ export function RiskPage() {
           <TabsContent value="test" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Test Harness</CardTitle>
+                <CardTitle>{t("Test Harness")}</CardTitle>
                 <CardDescription>
-                  Run reproducible evaluations on sample load/lane scenarios and compare versions.
+                  {t(
+                    "Run reproducible evaluations on sample load/lane scenarios and compare versions.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-3 xl:grid-cols-4">
-                  <Field label="Origin">
+                  <Field label={t("Origin")}>
                     <Input
                       value={testValues.origin}
                       onChange={(event) =>
@@ -2227,7 +2273,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Destination">
+                  <Field label={t("Destination")}>
                     <Input
                       value={testValues.destination}
                       onChange={(event) =>
@@ -2235,7 +2281,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Equipment Type">
+                  <Field label={t("Equipment Type")}>
                     <Input
                       value={testValues.equipmentType}
                       onChange={(event) =>
@@ -2243,7 +2289,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Carrier">
+                  <Field label={t("Carrier")}>
                     <Input
                       value={testValues.carrier}
                       onChange={(event) =>
@@ -2251,7 +2297,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Pickup Date">
+                  <Field label={t("Pickup Date")}>
                     <Input
                       type="date"
                       value={testValues.pickupDate}
@@ -2260,7 +2306,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Delivery Date">
+                  <Field label={t("Delivery Date")}>
                     <Input
                       type="date"
                       value={testValues.deliveryDate}
@@ -2269,7 +2315,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Commodity">
+                  <Field label={t("Commodity")}>
                     <Input
                       value={testValues.commodity}
                       onChange={(event) =>
@@ -2277,70 +2323,91 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Weight">
+                  <Field label={t("Weight")}>
                     <Input
                       type="number"
                       value={testValues.weight}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, weight: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          weight: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="Customer Rate">
+                  <Field label={t("Customer Rate")}>
                     <Input
                       type="number"
                       value={testValues.customerRate}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, customerRate: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          customerRate: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="Carrier Rate">
+                  <Field label={t("Carrier Rate")}>
                     <Input
                       type="number"
                       value={testValues.carrierRate}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, carrierRate: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          carrierRate: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="DAT Average Rate">
+                  <Field label={t("DAT Average Rate")}>
                     <Input
                       type="number"
                       value={testValues.datAverageRate}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, datAverageRate: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          datAverageRate: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="DAT Capacity Score">
+                  <Field label={t("DAT Capacity Score")}>
                     <Input
                       type="number"
                       value={testValues.datCapacityScore}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, datCapacityScore: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          datCapacityScore: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="Weather Risk">
+                  <Field label={t("Weather Risk")}>
                     <Input
                       type="number"
                       value={testValues.weatherRisk}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, weatherRisk: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          weatherRisk: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="Fuel Delta">
+                  <Field label={t("Fuel Delta")}>
                     <Input
                       type="number"
                       value={testValues.fuelDelta}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, fuelDelta: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          fuelDelta: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
-                  <Field label="Average Dwell Time">
+                  <Field label={t("Average Dwell Time")}>
                     <Input
                       type="number"
                       value={testValues.averageDwellTime}
@@ -2352,7 +2419,7 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Carrier Reliability">
+                  <Field label={t("Carrier Reliability")}>
                     <Input
                       type="number"
                       value={testValues.carrierReliability}
@@ -2364,12 +2431,15 @@ export function RiskPage() {
                       }
                     />
                   </Field>
-                  <Field label="Lane Volatility">
+                  <Field label={t("Lane Volatility")}>
                     <Input
                       type="number"
                       value={testValues.laneVolatility}
                       onChange={(event) =>
-                        setTestValues((prev) => ({ ...prev, laneVolatility: Number(event.target.value || 0) }))
+                        setTestValues((prev) => ({
+                          ...prev,
+                          laneVolatility: Number(event.target.value || 0),
+                        }))
                       }
                     />
                   </Field>
@@ -2377,30 +2447,30 @@ export function RiskPage() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Button className="gap-1.5" onClick={runCurrentEvaluation}>
-                    <PlayCircle className="h-4 w-4" /> Run Evaluation
+                    <PlayCircle className="h-4 w-4" /> {t("Run Evaluation")}
                   </Button>
                   <Button variant="outline" className="gap-1.5" onClick={loadSampleData}>
-                    <RefreshCw className="h-4 w-4" /> Load Sample Data
+                    <RefreshCw className="h-4 w-4" /> {t("Load Sample Data")}
                   </Button>
                   <Button variant="outline" className="gap-1.5" onClick={resetTestValues}>
-                    <RotateCcw className="h-4 w-4" /> Reset Inputs
+                    <RotateCcw className="h-4 w-4" /> {t("Reset Inputs")}
                   </Button>
                   <Button variant="outline" className="gap-1.5" onClick={saveTestCase}>
-                    <CheckCircle2 className="h-4 w-4" /> Save Test Case
+                    <CheckCircle2 className="h-4 w-4" /> {t("Save Test Case")}
                   </Button>
                   <Button variant="outline" className="gap-1.5" onClick={exportEvaluation}>
-                    <Download className="h-4 w-4" /> Export Result
+                    <Download className="h-4 w-4" /> {t("Export Result")}
                   </Button>
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-3">
-                  <Field label="Compare Versions">
+                  <Field label={t("Compare Versions")}>
                     <Select value={compareVersion} onValueChange={setCompareVersion}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="latest">Current Version</SelectItem>
+                        <SelectItem value="latest">{t("Current Version")}</SelectItem>
                         {activeModel.versionHistory.map((entry) => (
                           <SelectItem key={entry.version} value={entry.version}>
                             {entry.version} ({entry.status})
@@ -2411,17 +2481,18 @@ export function RiskPage() {
                   </Field>
                   <div className="xl:col-span-2 flex items-end">
                     <Button variant="outline" className="gap-1.5" onClick={runCompareEvaluation}>
-                      <GitBranch className="h-4 w-4" /> Compare Versions
+                      <GitBranch className="h-4 w-4" /> {t("Compare Versions")}
                     </Button>
                   </div>
                 </div>
 
                 <Card className="border-border/70 bg-muted/20">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Reproducibility Ledger</CardTitle>
+                    <CardTitle className="text-base">{t("Reproducibility Ledger")}</CardTitle>
                     <CardDescription>
-                      Stored evaluation details: model ID/version, formula snapshot, input values,
-                      timestamps, output, and evaluator.
+                      {t(
+                        "Stored evaluation details: model ID/version, formula snapshot, input values,\n                      timestamps, output, and evaluator.",
+                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -2429,13 +2500,13 @@ export function RiskPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Model ID</TableHead>
-                            <TableHead>Model Version</TableHead>
-                            <TableHead>Output Score</TableHead>
-                            <TableHead>Risk Level</TableHead>
-                            <TableHead>Evaluation Timestamp</TableHead>
-                            <TableHead>Evaluated By</TableHead>
-                            <TableHead>Test Case ID</TableHead>
+                            <TableHead>{t("Model ID")}</TableHead>
+                            <TableHead>{t("Model Version")}</TableHead>
+                            <TableHead>{t("Output Score")}</TableHead>
+                            <TableHead>{t("Risk Level")}</TableHead>
+                            <TableHead>{t("Evaluation Timestamp")}</TableHead>
+                            <TableHead>{t("Evaluated By")}</TableHead>
+                            <TableHead>{t("Test Case ID")}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -2445,7 +2516,7 @@ export function RiskPage() {
                                 colSpan={7}
                                 className="py-8 text-center text-sm text-muted-foreground"
                               >
-                                No evaluation records yet. Run or save a test case.
+                                {t("No evaluation records yet. Run or save a test case.")}
                               </TableCell>
                             </TableRow>
                           ) : (
@@ -2473,32 +2544,34 @@ export function RiskPage() {
           <TabsContent value="output" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Output Preview & Feature Attribution</CardTitle>
+                <CardTitle>{t("Output Preview & Feature Attribution")}</CardTitle>
                 <CardDescription>
-                  SHAP-like attribution from formula weights, feature ranking, and explainability
-                  summary.
+                  {t(
+                    "SHAP-like attribution from formula weights, feature ranking, and explainability\n                  summary.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 {!evaluationResult ? (
                   <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                    Run an evaluation in Test Harness to preview output, risk level, and feature
-                    attribution.
+                    {t(
+                      "Run an evaluation in Test Harness to preview output, risk level, and feature\n                    attribution.",
+                    )}
                   </div>
                 ) : (
                   <>
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                       <MetricCard
-                        label="Final Risk Score"
+                        label={t("Final Risk Score")}
                         value={`${evaluationResult.finalRiskScore} / 100`}
-                        subtitle="Scored from published/draft formula"
+                        subtitle={t("Scored from published/draft formula")}
                         tone="default"
                         icon={<ShieldAlert className="h-4 w-4" />}
                       />
                       <MetricCard
-                        label="Risk Level"
+                        label={t("Risk Level")}
                         value={evaluationResult.riskLevel}
-                        subtitle="Threshold-based classification"
+                        subtitle={t("Threshold-based classification")}
                         tone={
                           evaluationResult.riskLevel === "Low Risk"
                             ? "success"
@@ -2511,14 +2584,14 @@ export function RiskPage() {
                         icon={<TriangleAlert className="h-4 w-4" />}
                       />
                       <MetricCard
-                        label="Model Version"
+                        label={t("Model Version")}
                         value={evaluationResult.modelVersion}
                         subtitle={activeModel.modelName || "No model selected"}
                         tone="default"
                         icon={<GitBranch className="h-4 w-4" />}
                       />
                       <MetricCard
-                        label="Evaluation Time"
+                        label={t("Evaluation Time")}
                         value={
                           evaluationResult.evaluationTimestamp.split(",")[0] ??
                           evaluationResult.evaluationTimestamp
@@ -2532,7 +2605,7 @@ export function RiskPage() {
                     <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
                       <Card className="border-border/70">
                         <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Output Summary</CardTitle>
+                          <CardTitle className="text-base">{t("Output Summary")}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
@@ -2545,17 +2618,19 @@ export function RiskPage() {
                             <Badge variant="secondary">Model {evaluationResult.modelVersion}</Badge>
                           </div>
                           <p className="text-sm">
-                            <span className="font-medium">Suggested Action:</span>{" "}
+                            <span className="font-medium">{t("Suggested Action:")}</span>{" "}
                             {evaluationResult.suggestedAction}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            <span className="font-medium text-foreground">Formula Used:</span>{" "}
+                            <span className="font-medium text-foreground">
+                              {t("Formula Used:")}
+                            </span>{" "}
                             <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
                               {evaluationResult.formulaUsed}
                             </code>
                           </p>
                           <div>
-                            <p className="mb-1 text-sm font-medium">Input Values Used</p>
+                            <p className="mb-1 text-sm font-medium">{t("Input Values Used")}</p>
                             <div className="grid gap-1 sm:grid-cols-2">
                               {Object.entries(evaluationResult.inputValuesUsed).map(
                                 ([key, value]) => (
@@ -2573,7 +2648,7 @@ export function RiskPage() {
                           {evaluationResult.warningMessages.length > 0 && (
                             <div className="rounded-md border border-warning/30 bg-warning/10 p-3">
                               <p className="text-sm font-medium text-warning-foreground">
-                                Warning Messages
+                                {t("Warning Messages")}
                               </p>
                               <ul className="mt-1 space-y-1 text-xs text-warning-foreground/90">
                                 {evaluationResult.warningMessages.map((message) => (
@@ -2587,7 +2662,7 @@ export function RiskPage() {
 
                       <Card className="border-border/70">
                         <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Why This Score?</CardTitle>
+                          <CardTitle className="text-base">{t("Why This Score?")}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
                           <p className="text-sm text-muted-foreground">
@@ -2595,7 +2670,7 @@ export function RiskPage() {
                           </p>
                           {compareResult && compareDelta !== null && (
                             <div className="rounded-md border border-border/70 p-3">
-                              <p className="text-sm font-medium">Version Comparison</p>
+                              <p className="text-sm font-medium">{t("Version Comparison")}</p>
                               <p className="text-xs text-muted-foreground">
                                 Current ({evaluationResult.modelVersion}) vs{" "}
                                 {compareResult.modelVersion}
@@ -2607,8 +2682,7 @@ export function RiskPage() {
                                   <ArrowDown className="h-4 w-4 text-success" />
                                 )}
                                 <span>
-                                  Score delta:{" "}
-                                  <span className="font-semibold">{compareDelta}</span>
+                                  Score delta: <span className="font-semibold">{compareDelta}</span>
                                 </span>
                               </div>
                             </div>
@@ -2619,16 +2693,17 @@ export function RiskPage() {
 
                     <Card className="border-border/70">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Feature Attribution</CardTitle>
+                        <CardTitle className="text-base">{t("Feature Attribution")}</CardTitle>
                         <CardDescription>
-                          Feature Name, Input Value, Weight, Contribution, Direction, and Impact
-                          Level.
+                          {t(
+                            "Feature Name, Input Value, Weight, Contribution, Direction, and Impact\n                          Level.",
+                          )}
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         {evaluationResult.attribution.length === 0 ? (
                           <p className="text-sm text-muted-foreground">
-                            No attribution available due to formula error.
+                            {t("No attribution available due to formula error.")}
                           </p>
                         ) : (
                           evaluationResult.attribution.map((row) => {
@@ -2637,10 +2712,14 @@ export function RiskPage() {
                                 Math.abs(item.contribution),
                               ),
                             );
-                            const width = maxAbs === 0 ? 0 : (Math.abs(row.contribution) / maxAbs) * 100;
+                            const width =
+                              maxAbs === 0 ? 0 : (Math.abs(row.contribution) / maxAbs) * 100;
 
                             return (
-                              <div key={row.featureName} className="rounded-md border border-border/70 p-3">
+                              <div
+                                key={row.featureName}
+                                className="rounded-md border border-border/70 p-3"
+                              >
                                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                   <div>
                                     <p className="text-sm font-semibold">{row.featureName}</p>
@@ -2662,7 +2741,10 @@ export function RiskPage() {
                                     >
                                       {row.direction}
                                     </Badge>
-                                    <Badge variant="outline" className={impactTone(row.impactLevel)}>
+                                    <Badge
+                                      variant="outline"
+                                      className={impactTone(row.impactLevel)}
+                                    >
                                       {row.impactLevel} Impact
                                     </Badge>
                                   </div>
@@ -2678,7 +2760,9 @@ export function RiskPage() {
                                 </div>
                                 <p className="mt-2 text-xs">
                                   Contribution:{" "}
-                                  <span className="font-semibold">{row.contribution.toFixed(2)}</span>
+                                  <span className="font-semibold">
+                                    {row.contribution.toFixed(2)}
+                                  </span>
                                 </p>
                               </div>
                             );
@@ -2695,15 +2779,18 @@ export function RiskPage() {
           <TabsContent value="versions" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Version History</CardTitle>
+                <CardTitle>{t("Version History")}</CardTitle>
                 <CardDescription>
-                  Every formula/config update creates a new version. Compare, restore, roll back,
-                  and duplicate as draft.
+                  {t(
+                    "Every formula/config update creates a new version. Compare, restore, roll back,\n                  and duplicate as draft.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <Badge variant="secondary">Current Model: {activeModel.modelName || "No model selected"}</Badge>
+                  <Badge variant="secondary">
+                    Current Model: {activeModel.modelName || "No model selected"}
+                  </Badge>
                   <Badge variant="outline">Current Version: {activeModel.version}</Badge>
                 </div>
 
@@ -2711,15 +2798,15 @@ export function RiskPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Version</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Formula Snapshot</TableHead>
-                        <TableHead>Modified By</TableHead>
-                        <TableHead>Modified Date</TableHead>
-                        <TableHead>Published By</TableHead>
-                        <TableHead>Published Date</TableHead>
-                        <TableHead>Change Notes</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead>{t("Version")}</TableHead>
+                        <TableHead>{t("Status")}</TableHead>
+                        <TableHead>{t("Formula Snapshot")}</TableHead>
+                        <TableHead>{t("Modified By")}</TableHead>
+                        <TableHead>{t("Modified Date")}</TableHead>
+                        <TableHead>{t("Published By")}</TableHead>
+                        <TableHead>{t("Published Date")}</TableHead>
+                        <TableHead>{t("Change Notes")}</TableHead>
+                        <TableHead>{t("Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2750,11 +2837,14 @@ export function RiskPage() {
                                 variant="outline"
                                 className="h-7"
                                 onClick={() => {
-                                  setEditorDraft((prev) => ({ ...prev, formula: row.formulaSnapshot }));
+                                  setEditorDraft((prev) => ({
+                                    ...prev,
+                                    formula: row.formulaSnapshot,
+                                  }));
                                   setActiveTab("editor");
                                 }}
                               >
-                                View Version
+                                {t("View Version")}
                               </Button>
                               <Button
                                 size="sm"
@@ -2765,7 +2855,7 @@ export function RiskPage() {
                                   setActiveTab("test");
                                 }}
                               >
-                                Compare Versions
+                                {t("Compare Versions")}
                               </Button>
                               <Button
                                 size="sm"
@@ -2777,7 +2867,7 @@ export function RiskPage() {
                                   void rollbackModel(activeModel);
                                 }}
                               >
-                                Restore / Roll Back
+                                {t("Restore / Roll Back")}
                               </Button>
                               <Button
                                 size="sm"
@@ -2789,7 +2879,7 @@ export function RiskPage() {
                                   void duplicateModel(activeModel);
                                 }}
                               >
-                                Duplicate as Draft
+                                {t("Duplicate as Draft")}
                               </Button>
                             </div>
                           </TableCell>
@@ -2806,65 +2896,69 @@ export function RiskPage() {
             <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
-                  <CardTitle>Governance Controls</CardTitle>
+                  <CardTitle>{t("Governance Controls")}</CardTitle>
                   <CardDescription>
-                    Lifecycle governance: approvals, publish/rollback, change notes, required
-                    reviewer, and effective date.
+                    {t(
+                      "Lifecycle governance: approvals, publish/rollback, change notes, required\n                    reviewer, and effective date.",
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <GovernanceStat
-                      label="Current Version"
+                      label={t("Current Version")}
                       value={activeModel.governance.currentVersion || "-"}
                     />
                     <GovernanceStat
-                      label="Draft Version"
+                      label={t("Draft Version")}
                       value={activeModel.governance.draftVersion || "-"}
                     />
                     <GovernanceStat
-                      label="Published Version"
+                      label={t("Published Version")}
                       value={activeModel.governance.publishedVersion || "-"}
                     />
-                    <GovernanceStat label="Created By" value={activeModel.governance.createdBy || "-"} />
                     <GovernanceStat
-                      label="Modified By"
+                      label={t("Created By")}
+                      value={activeModel.governance.createdBy || "-"}
+                    />
+                    <GovernanceStat
+                      label={t("Modified By")}
                       value={activeModel.governance.modifiedBy || "-"}
                     />
                     <GovernanceStat
-                      label="Approved By"
+                      label={t("Approved By")}
                       value={activeModel.governance.approvedBy || "-"}
                     />
                     <GovernanceStat
-                      label="Published By"
+                      label={t("Published By")}
                       value={activeModel.governance.publishedBy || "-"}
                     />
                     <GovernanceStat
-                      label="Last Modified"
+                      label={t("Last Modified")}
                       value={activeModel.governance.lastModified || "-"}
                     />
                     <GovernanceStat
-                      label="Last Published"
+                      label={t("Last Published")}
                       value={activeModel.governance.lastPublished || "-"}
                     />
                     <GovernanceStat
-                      label="Change Reason"
+                      label={t("Change Reason")}
                       value={activeModel.governance.changeReason || "-"}
                     />
                     <GovernanceStat
-                      label="Approval Status"
+                      label={t("Approval Status")}
                       value={activeModel.governance.approvalStatus}
                     />
                     <GovernanceStat
-                      label="Rollback Reason"
+                      label={t("Rollback Reason")}
                       value={activeModel.governance.rollbackReason || "-"}
                     />
                     <GovernanceStat
-                      label="Required Reviewer"
+                      label={t("Required Reviewer")}
                       value={activeModel.governance.requiredReviewer || "-"}
                     />
                     <GovernanceStat
-                      label="Effective Date"
+                      label={t("Effective Date")}
                       value={activeModel.governance.effectiveDate || "-"}
                     />
                   </div>
@@ -2879,7 +2973,7 @@ export function RiskPage() {
                         void publishModel(activeModel);
                       }}
                     >
-                      <Send className="h-4 w-4" /> Publish Model
+                      <Send className="h-4 w-4" /> {t("Publish Model")}
                     </Button>
                     <Button
                       variant="outline"
@@ -2890,7 +2984,7 @@ export function RiskPage() {
                         void rollbackModel(activeModel);
                       }}
                     >
-                      <RotateCcw className="h-4 w-4" /> Roll Back Version
+                      <RotateCcw className="h-4 w-4" /> {t("Roll Back Version")}
                     </Button>
                     <Button
                       variant="outline"
@@ -2901,7 +2995,7 @@ export function RiskPage() {
                         void archiveModel(activeModel);
                       }}
                     >
-                      <Archive className="h-4 w-4" /> Archive Model
+                      <Archive className="h-4 w-4" /> {t("Archive Model")}
                     </Button>
                     <Button
                       variant="outline"
@@ -2912,7 +3006,7 @@ export function RiskPage() {
                         void duplicateModel(activeModel);
                       }}
                     >
-                      <Copy className="h-4 w-4" /> Duplicate Model
+                      <Copy className="h-4 w-4" /> {t("Duplicate Model")}
                     </Button>
                   </div>
                 </CardContent>
@@ -2920,8 +3014,10 @@ export function RiskPage() {
 
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
-                  <CardTitle>Permission Matrix</CardTitle>
-                  <CardDescription>Role-based model access and control policy.</CardDescription>
+                  <CardTitle>{t("Permission Matrix")}</CardTitle>
+                  <CardDescription>
+                    {t("Role-based model access and control policy.")}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {ROLE_PERMISSION_MATRIX.map((row) => (
@@ -2958,10 +3054,11 @@ export function RiskPage() {
           <TabsContent value="audit" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Audit Log</CardTitle>
+                <CardTitle>{t("Audit Log")}</CardTitle>
                 <CardDescription>
-                  Immutable activity feed across model lifecycle events: create, edit, test,
-                  publish, rollback, archive, and permissions.
+                  {t(
+                    "Immutable activity feed across model lifecycle events: create, edit, test,\n                  publish, rollback, archive, and permissions.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -2969,15 +3066,15 @@ export function RiskPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date / Time</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Model Name</TableHead>
-                        <TableHead>Version</TableHead>
-                        <TableHead>Old Value</TableHead>
-                        <TableHead>New Value</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead>IP Address / Device</TableHead>
+                        <TableHead>{t("Date / Time")}</TableHead>
+                        <TableHead>{t("User")}</TableHead>
+                        <TableHead>{t("Action")}</TableHead>
+                        <TableHead>{t("Model Name")}</TableHead>
+                        <TableHead>{t("Version")}</TableHead>
+                        <TableHead>{t("Old Value")}</TableHead>
+                        <TableHead>{t("New Value")}</TableHead>
+                        <TableHead>{t("Notes")}</TableHead>
+                        <TableHead>{t("IP Address / Device")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -3010,10 +3107,11 @@ export function RiskPage() {
           <TabsContent value="usage" className="mt-0 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Risk Score Usage Across Platform</CardTitle>
+                <CardTitle>{t("Risk Score Usage Across Platform")}</CardTitle>
                 <CardDescription>
-                  Published models are available in core workflows and surface consistent risk
-                  cards with drivers and recommended actions.
+                  {t(
+                    "Published models are available in core workflows and surface consistent risk\n                  cards with drivers and recommended actions.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -3023,14 +3121,14 @@ export function RiskPage() {
                       <CardContent className="space-y-2 p-4">
                         <p className="text-sm font-semibold">{target}</p>
                         <div className="rounded-md border border-border/70 bg-muted/40 p-2 text-xs">
-                          <p className="font-medium">Risk Score Card</p>
+                          <p className="font-medium">{t("Risk Score Card")}</p>
                           <ul className="mt-1 space-y-1 text-muted-foreground">
-                            <li>- Risk Score</li>
-                            <li>- Risk Level</li>
-                            <li>- Main Risk Drivers</li>
-                            <li>- Recommended Action</li>
-                            <li>- Model Version</li>
-                            <li>- Last Evaluated</li>
+                            <li>{t("- Risk Score")}</li>
+                            <li>{t("- Risk Level")}</li>
+                            <li>{t("- Main Risk Drivers")}</li>
+                            <li>{t("- Recommended Action")}</li>
+                            <li>{t("- Model Version")}</li>
+                            <li>{t("- Last Evaluated")}</li>
                           </ul>
                         </div>
                       </CardContent>
@@ -3040,7 +3138,7 @@ export function RiskPage() {
 
                 <Card className="border-border/70 bg-muted/20">
                   <CardContent className="p-4">
-                    <p className="text-sm font-semibold">Acceptance Criteria Coverage</p>
+                    <p className="text-sm font-semibold">{t("Acceptance Criteria Coverage")}</p>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2 text-xs">
                       <CriteriaItem text="Model updates are versioned on every formula/config save." />
                       <CriteriaItem text="Published models are locked from direct mutation (save creates new draft version)." />

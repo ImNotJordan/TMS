@@ -17,6 +17,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { LocaleProvider } from "@/lib/i18n/locale-context";
 import { RoutePageSkeleton } from "@/components/page-skeleton";
 import { AuthGate as SessionGate } from "@/components/auth/RouteLoader";
 import { GlobalScrollbar } from "@/components/global-scrollbar";
@@ -25,22 +26,24 @@ import { ModuleAccessGate } from "@/components/module-access-gate";
 import { CompanyRequired } from "@/components/tenant/company-required";
 import { useCompanyGate } from "@/lib/tenant/use-company-gate";
 import { DriverStatusNotificationsWatcher } from "@/components/driver-status-notifications-watcher";
+import { CLIENT_APP_URL, DRIVER_APP_URL } from "@/lib/external-links";
+import { t } from "@/lib/i18n/t";
 
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">{t("Page not found")}</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          {t("The page you're looking for doesn't exist or has been moved.")}
         </p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            {t("Go home")}
           </Link>
         </div>
       </div>
@@ -56,10 +59,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+          {t("This page didn't load")}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          {t("Something went wrong on our end. You can try refreshing or head back home.")}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -69,13 +72,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Try again
+            {t("Try again")}
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Go home
+            {t("Go home")}
           </a>
         </div>
       </div>
@@ -144,7 +147,12 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <GlobalScrollbar />
       <AuthProvider>
-        <AuthGate />
+        {/* Inside AuthProvider: the workspace settings read needs Identity Pool
+            credentials, which only exist once a session does. Outside the routed
+            children, so one read serves every page. */}
+        <LocaleProvider>
+          <AuthGate />
+        </LocaleProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
@@ -173,20 +181,21 @@ function AuthGate() {
     }
   }, [status, isPublicRoute, isLoginRoute, isLandingRoute, navigate]);
 
-  // Soft gate: dedicated driver accounts should use the driver app.
+  // Soft gate: dedicated driver and client accounts belong on their own apps.
   useEffect(() => {
     if (status !== "authenticated" || !user) return;
-    if (user.audience !== "driver") return;
-    const driverUrl = import.meta.env.VITE_DRIVER_APP_URL as string | undefined;
+    const dest =
+      user.audience === "driver"
+        ? DRIVER_APP_URL
+        : user.audience === "client"
+          ? CLIENT_APP_URL
+          : null;
+    if (!dest) return;
     void (async () => {
       await signOut();
-      if (driverUrl) {
-        window.location.assign(driverUrl);
-        return;
-      }
-      void navigate({ to: "/login", replace: true });
+      window.location.assign(dest);
     })();
-  }, [status, user, signOut, navigate]);
+  }, [status, user, signOut]);
 
   // The escape hatch on the stalled loader. /login is a public route, so
   // landing there is what clears the resolving state — the branch below returns
@@ -222,11 +231,15 @@ function AuthGate() {
     );
   }
 
-  if (user?.audience === "driver") {
+  if (user?.audience === "driver" || user?.audience === "client") {
     return (
       <SessionGate
         status="resolving"
-        message="Redirecting to driver app"
+        message={
+          user.audience === "client"
+            ? "Redirecting to customer portal"
+            : "Redirecting to driver app"
+        }
         onRetry={() => void refresh()}
         onSignIn={goToLogin}
       />

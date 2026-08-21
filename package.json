@@ -16,6 +16,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "dev:driver": "npm run dev -w driver-portal",
+    "dev:client": "npm run dev -w client-portal",
     "check:tenant": "node scripts/check-tenant-guard.mjs",
     "verify": "tsc --noEmit && vitest run && node scripts/check-tenant-guard.mjs"
   },

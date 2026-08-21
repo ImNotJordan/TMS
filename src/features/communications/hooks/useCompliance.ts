@@ -44,9 +44,7 @@ export function useCompliance() {
         addedAt: new Date().toISOString(),
       };
       const affected = data.conversations.filter(
-        (c) =>
-          (next.contactId && c.contactId === next.contactId) ||
-          c.contactId === next.address,
+        (c) => (next.contactId && c.contactId === next.contactId) || c.contactId === next.address,
       ).length;
       let payload = {
         ...data,

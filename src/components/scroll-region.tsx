@@ -2,11 +2,7 @@ import * as React from "react";
 import { useRouterState } from "@tanstack/react-router";
 
 import { usePageLoadBusy } from "@/components/page-load-gate";
-import {
-  getRegionScrollY,
-  routeScrollKey,
-  saveRegionScrollY,
-} from "@/lib/route-scroll-store";
+import { getRegionScrollY, routeScrollKey, saveRegionScrollY } from "@/lib/route-scroll-store";
 import { cn } from "@/lib/utils";
 
 type ScrollRegionProps = React.HTMLAttributes<HTMLDivElement> & {

@@ -446,6 +446,25 @@ export function buildDraftLinesFromLoad(load: LoadRecord): InvoiceLineItem[] {
     if (amount != null) push(id, label, amount, "accessorial", field);
   }
 
+  // The manually-entered tax figure, if someone recorded one.
+  //
+  // Derived rather than hand-added on the invoice, so entering it once on the
+  // load is enough — and so `sourceField` records where it came from. A zero is
+  // deliberately *not* skipped here the way accessorials are: "we checked and it
+  // is zero" is a meaningful statement on a freight invoice, and the usual answer
+  // for US interstate. `push` drops zeros, hence the separate branch.
+  const manualTax = parseMoneyStrict(load.taxManualAmount);
+  if (manualTax != null) {
+    lines.push({
+      id: "tax",
+      kind: "tax",
+      label: "Tax",
+      amount: moneyRound(manualTax),
+      source: "derived",
+      sourceField: "taxManualAmount",
+    });
+  }
+
   return lines;
 }
 

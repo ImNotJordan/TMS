@@ -2,11 +2,7 @@ import * as React from "react";
 import { useRouterState } from "@tanstack/react-router";
 
 import { usePageLoadBusy } from "@/components/page-load-gate";
-import {
-  getWindowScrollY,
-  routeScrollKey,
-  saveWindowScrollY,
-} from "@/lib/route-scroll-store";
+import { getWindowScrollY, routeScrollKey, saveWindowScrollY } from "@/lib/route-scroll-store";
 
 /**
  * App-wide window scroll memory.

@@ -35,7 +35,9 @@ export function useChannelAvailability() {
       {
         channel: "email",
         available: emailConnected,
-        reason: emailConnected ? undefined : "SendGrid Email is disconnected.",
+        reason: emailConnected
+          ? undefined
+          : "SendGrid Email is disabled in Settings → Integrations.",
         fixPath: "/settings?category=integrations#integration-sendgrid_email",
         integrationId: "sendgrid_email",
         lastSyncAt: sendgrid.data?.lastSyncAt ?? null,
@@ -45,7 +47,7 @@ export function useChannelAvailability() {
       {
         channel: "sms",
         available: Boolean(smsConnected),
-        reason: smsConnected ? undefined : "Twilio SMS is disconnected.",
+        reason: smsConnected ? undefined : "Twilio SMS is disabled in Settings → Integrations.",
         fixPath: "/settings?category=integrations#integration-twilio_sms",
         integrationId: "twilio_sms",
         lastSyncAt: twilio.data?.lastSyncAt ?? null,
@@ -55,7 +57,7 @@ export function useChannelAvailability() {
       {
         channel: "voice",
         available: Boolean(voiceConnected),
-        reason: voiceConnected ? undefined : "Twilio voice is disconnected.",
+        reason: voiceConnected ? undefined : "Twilio voice is disabled in Settings → Integrations.",
         fixPath: "/settings?category=integrations#integration-twilio_sms",
         integrationId: "twilio_sms",
         lastSyncAt: twilio.data?.lastSyncAt ?? null,
@@ -78,9 +80,7 @@ export function useChannelAvailability() {
     return map;
   }, [channels]);
 
-  const anyExternalConnected = channels.some(
-    (c) => c.channel !== "chat" && c.available,
-  );
+  const anyExternalConnected = channels.some((c) => c.channel !== "chat" && c.available);
   const allExternalDisconnected = !anyExternalConnected;
 
   return {

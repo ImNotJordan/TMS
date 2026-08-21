@@ -45,6 +45,7 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { usePageReady } from "@/components/page-load-gate";
 import { CreateTruckDialog } from "@/components/truckboard/create-truck-dialog";
+import { DatSuggestionsCard } from "@/components/truckboard/dat-suggestions-card";
 import {
   formatTruckDraftDestination,
   formatTruckDraftOrigin,
@@ -56,6 +57,7 @@ import {
 import { deleteTruck, listAllTrucksCached, type TruckRecord } from "@/lib/trucks-store";
 import { useOperationalList } from "@/hooks/use-operational-list";
 import { invalidateOperationalCounts } from "@/lib/sidebar-counts";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/truckboard")({
   head: () => ({
@@ -140,9 +142,7 @@ function formatDestination(t: TruckRecord) {
     return formatPlace(t.preferredDestinationCity, t.preferredDestinationState);
   }
   if (t.preferredDestinationRegion) {
-    return t.preferredDestinationRegion
-      .replace(/-/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+    return t.preferredDestinationRegion.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
   if (t.preferredStates && t.preferredStates.length > 0) {
     return t.preferredStates.slice(0, 3).join(", ") + (t.preferredStates.length > 3 ? "…" : "");
@@ -152,7 +152,7 @@ function formatDestination(t: TruckRecord) {
 
 function formatEquipment(t: TruckRecord) {
   const eq = labelOrRaw(EQUIPMENT_LABELS, t.equipmentType);
-  const len = t.trailerType ? TRAILER_LENGTH_LABELS[t.trailerType] ?? "" : "";
+  const len = t.trailerType ? (TRAILER_LENGTH_LABELS[t.trailerType] ?? "") : "";
   return len ? `${eq} · ${len}` : eq;
 }
 
@@ -282,11 +282,33 @@ function Page() {
     });
   }, [trucks, query]);
 
+  const datLane = React.useMemo(() => {
+    const list = trucks ?? [];
+    const counts = new Map<string, { city?: string; state?: string; n: number }>();
+    for (const truck of list) {
+      const key = `${truck.currentCity ?? ""}|${truck.currentState ?? ""}`.toLowerCase();
+      if (!key.replace("|", "").trim()) continue;
+      const prev = counts.get(key);
+      counts.set(key, {
+        city: truck.currentCity,
+        state: truck.currentState,
+        n: (prev?.n ?? 0) + 1,
+      });
+    }
+    const top = [...counts.values()].sort((a, b) => b.n - a.n)[0];
+    const sample = list[0];
+    return {
+      originCity: top?.city ?? sample?.currentCity,
+      originState: top?.state ?? sample?.currentState,
+      destinationCity: sample?.preferredDestinationCity,
+      destinationState: sample?.preferredDestinationState,
+      equipmentType: sample?.equipmentType,
+    };
+  }, [trucks]);
+
   const stats = React.useMemo(() => {
     const list = trucks ?? [];
-    const available = list.filter(
-      (t) => t.postingStatus === "active" || t.availableNow,
-    ).length;
+    const available = list.filter((t) => t.postingStatus === "active" || t.availableNow).length;
     const matched = list.filter((t) => t.postingStatus === "matched").length;
     const booked = list.filter((t) => t.postingStatus === "booked").length;
     return [
@@ -345,8 +367,8 @@ function Page() {
     setError(null);
     try {
       await deleteTruck(truckToDelete.truckBoardId);
-      setTrucks((prev) =>
-        prev?.filter((row) => row.truckBoardId !== truckToDelete.truckBoardId) ?? null,
+      setTrucks(
+        (prev) => prev?.filter((row) => row.truckBoardId !== truckToDelete.truckBoardId) ?? null,
       );
       invalidateOperationalCounts(queryClient);
       setTruckToDelete(null);
@@ -364,15 +386,15 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="TruckBoard"
-        description="Available trucks, capacity, and matching for open loads."
+        title={t("TruckBoard")}
+        description={t("Available trucks, capacity, and matching for open loads.")}
         actions={
           <>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Filter className="h-4 w-4" /> Filters
+              <Filter className="h-4 w-4" /> {t("Filters")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" /> Export
+              <Download className="h-4 w-4" /> {t("Export")}
             </Button>
             <Button
               variant="outline"
@@ -397,7 +419,7 @@ function Page() {
               {showDrafts ? (
                 <>
                   <Truck className="h-4 w-4" />
-                  TruckBoard
+                  {t("TruckBoard")}
                 </>
               ) : (
                 <>
@@ -416,7 +438,7 @@ function Page() {
               className="gap-1.5 bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
               onClick={openNewTruck}
             >
-              <Plus className="h-4 w-4" /> Post Truck
+              <Plus className="h-4 w-4" /> {t("Post Truck")}
             </Button>
             <CreateTruckDialog
               open={createOpen}
@@ -470,6 +492,8 @@ function Page() {
           })}
         </div>
 
+        <DatSuggestionsCard className="mt-6" lane={datLane} />
+
         <Card className="mt-6 border-border/70 shadow-sm">
           <CardContent className="px-0 pb-0 pt-0">
             <div className="flex flex-col gap-3 border-b border-border/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -477,20 +501,20 @@ function Page() {
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="pl-8"
-                  placeholder="Search trucks, carriers, MC#, lanes..."
+                  placeholder={t("Search trucks, carriers, MC#, lanes...")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5">
-                  <Zap className="h-4 w-4" /> Available now
+                  <Zap className="h-4 w-4" /> {t("Available now")}
                 </Button>
                 <Button size="sm" variant="outline" className="gap-1.5">
-                  <Truck className="h-4 w-4" /> All equipment
+                  <Truck className="h-4 w-4" /> {t("All equipment")}
                 </Button>
                 <Button size="sm" variant="outline" className="gap-1.5">
-                  <ShieldCheck className="h-4 w-4" /> Verified only
+                  <ShieldCheck className="h-4 w-4" /> {t("Verified only")}
                 </Button>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {showDrafts
@@ -500,7 +524,7 @@ function Page() {
                       : `${filtered.length} of ${trucks?.length ?? 0} truck${trucks?.length === 1 ? "" : "s"}`}
                 </span>
                 <Button variant="ghost" size="sm" className="gap-1 text-primary">
-                  View all <ArrowUpRight className="h-4 w-4" />
+                  {t("View all")} <ArrowUpRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -509,7 +533,7 @@ function Page() {
               <div className="flex items-start gap-3 border-b border-destructive/30 bg-destructive/8 px-6 py-3 text-sm text-destructive">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div className="flex-1">
-                  <div className="font-semibold">Couldn't load from DynamoDB</div>
+                  <div className="font-semibold">{t("Couldn't load from DynamoDB")}</div>
                   <div className="mt-0.5 text-xs text-destructive/90">{error}</div>
                 </div>
                 <Button
@@ -518,7 +542,7 @@ function Page() {
                   onClick={() => void refreshTrucks()}
                   className="border-destructive/30 text-destructive hover:bg-destructive/10"
                 >
-                  Retry
+                  {t("Retry")}
                 </Button>
               </div>
             )}
@@ -529,13 +553,13 @@ function Page() {
                   <>
                     <TableHeader>
                       <TableRow className="border-border/70">
-                        <TableHead className="pl-6">Truck</TableHead>
-                        <TableHead>Carrier</TableHead>
-                        <TableHead>Origin</TableHead>
-                        <TableHead>Destination</TableHead>
-                        <TableHead>Step</TableHead>
-                        <TableHead>Last saved</TableHead>
-                        <TableHead className="pr-6 text-right">Actions</TableHead>
+                        <TableHead className="pl-6">{t("Truck")}</TableHead>
+                        <TableHead>{t("Carrier")}</TableHead>
+                        <TableHead>{t("Origin")}</TableHead>
+                        <TableHead>{t("Destination")}</TableHead>
+                        <TableHead>{t("Step")}</TableHead>
+                        <TableHead>{t("Last saved")}</TableHead>
+                        <TableHead className="pr-6 text-right">{t("Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -546,10 +570,13 @@ function Page() {
                               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
                                 <FilePen className="h-5 w-5" />
                               </span>
-                              <div className="font-medium text-foreground">No saved drafts</div>
+                              <div className="font-medium text-foreground">
+                                {t("No saved drafts")}
+                              </div>
                               <div className="text-xs">
-                                Start posting a truck and close the wizard — your progress is saved
-                                here automatically.
+                                {t(
+                                  "Start posting a truck and close the wizard — your progress is saved\r\n                                here automatically.",
+                                )}
                               </div>
                             </div>
                           </TableCell>
@@ -599,168 +626,171 @@ function Page() {
                   </>
                 ) : (
                   <>
-                <TableHeader>
-                  <TableRow className="border-border/70">
-                    <TableHead className="pl-6">Status</TableHead>
-                    <TableHead>Available</TableHead>
-                    <TableHead>Origin</TableHead>
-                    <TableHead>Preferred Destination</TableHead>
-                    <TableHead>Equipment</TableHead>
-                    <TableHead>Carrier</TableHead>
-                    <TableHead>MC / DOT</TableHead>
-                    <TableHead>Driver / Dispatcher</TableHead>
-                    <TableHead className="text-right">Rate Pref.</TableHead>
-                    <TableHead>Deadhead</TableHead>
-                    <TableHead>Compliance</TableHead>
-                    <TableHead>Last Updated</TableHead>
-                    <TableHead className="pr-6 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading && (!trucks || trucks.length === 0) ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={`skel-${i}`} className="border-border/60">
-                        {Array.from({ length: 13 }).map((__, j) => (
-                          <TableCell
-                            key={j}
-                            className={j === 0 ? "pl-6" : j === 12 ? "pr-6 text-right" : ""}
-                          >
-                            <span className="inline-block h-4 w-full max-w-[100px] animate-pulse rounded bg-muted" />
-                          </TableCell>
-                        ))}
+                    <TableHeader>
+                      <TableRow className="border-border/70">
+                        <TableHead className="pl-6">{t("Status")}</TableHead>
+                        <TableHead>{t("Available")}</TableHead>
+                        <TableHead>{t("Origin")}</TableHead>
+                        <TableHead>{t("Preferred Destination")}</TableHead>
+                        <TableHead>{t("Equipment")}</TableHead>
+                        <TableHead>{t("Carrier")}</TableHead>
+                        <TableHead>{t("MC / DOT")}</TableHead>
+                        <TableHead>{t("Driver / Dispatcher")}</TableHead>
+                        <TableHead className="text-right">{t("Rate Pref.")}</TableHead>
+                        <TableHead>{t("Deadhead")}</TableHead>
+                        <TableHead>{t("Compliance")}</TableHead>
+                        <TableHead>{t("Last Updated")}</TableHead>
+                        <TableHead className="pr-6 text-right">{t("Actions")}</TableHead>
                       </TableRow>
-                    ))
-                  ) : filtered.length === 0 ? (
-                    <TableRow className="border-border/60">
-                      <TableCell colSpan={13} className="py-12">
-                        <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                            <Inbox className="h-5 w-5" />
-                          </span>
-                          <div className="font-medium text-foreground">
-                            {trucks && trucks.length > 0
-                              ? "No trucks match your search"
-                              : "No trucks posted yet"}
-                          </div>
-                          <div className="text-xs">
-                            {trucks && trucks.length > 0
-                              ? "Try a different keyword."
-                              : "Post a truck to see it here."}
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filtered.map((t) => {
-                      const status = t.postingStatus
-                        ? (STATUS_LABELS[t.postingStatus] ?? {
-                            label: t.postingStatus,
-                            tone: "default" as Tone,
-                          })
-                        : { label: "—", tone: "default" as Tone };
-                      const compliance = complianceForTruck(t);
-                      const ratePerMile = formatRatePerMile(t);
-                      return (
-                        <TableRow
-                          key={t.truckBoardId}
-                          role="link"
-                          tabIndex={0}
-                          className="cursor-pointer border-border/60 hover:bg-muted/35"
-                          onClick={() =>
-                            void navigate({
-                              to: "/truckboard/$truckBoardId",
-                              params: { truckBoardId: t.truckBoardId },
-                            })
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              void navigate({
-                                to: "/truckboard/$truckBoardId",
-                                params: { truckBoardId: t.truckBoardId },
-                              });
-                            }
-                          }}
-                        >
-                          <TableCell className="pl-6">
-                            <Badge variant="outline" className={toneBadge[status.tone]}>
-                              {status.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {formatAvailability(t)}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {formatPlace(t.currentCity, t.currentState)}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {formatDestination(t)}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {formatEquipment(t)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="font-medium text-foreground">
-                              <Link
-                                to="/truckboard/$truckBoardId"
-                                params={{ truckBoardId: t.truckBoardId }}
-                                className="text-primary underline-offset-4 hover:underline"
-                                onClick={(e) => e.stopPropagation()}
+                    </TableHeader>
+                    <TableBody>
+                      {loading && (!trucks || trucks.length === 0) ? (
+                        Array.from({ length: 5 }).map((_, i) => (
+                          <TableRow key={`skel-${i}`} className="border-border/60">
+                            {Array.from({ length: 13 }).map((__, j) => (
+                              <TableCell
+                                key={j}
+                                className={j === 0 ? "pl-6" : j === 12 ? "pr-6 text-right" : ""}
                               >
-                                {t.carrierName || t.truckBoardId}
-                              </Link>
-                            </div>
-                            <div className="text-[11px] text-muted-foreground">
-                              {t.truckBoardId}
-                            </div>
-                          </TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {formatAuthority(t)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-foreground">{initials(t.driverName)}</div>
-                            <div className="text-[11px] text-muted-foreground">
-                              {t.dispatcherName ? initials(t.dispatcherName) : "—"}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="font-semibold tabular-nums text-foreground">
-                              {formatRate(t)}
-                            </div>
-                            {ratePerMile && (
-                              <div className="text-[11px] tabular-nums text-muted-foreground">
-                                {ratePerMile}
+                                <span className="inline-block h-4 w-full max-w-[100px] animate-pulse rounded bg-muted" />
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      ) : filtered.length === 0 ? (
+                        <TableRow className="border-border/60">
+                          <TableCell colSpan={13} className="py-12">
+                            <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                                <Inbox className="h-5 w-5" />
+                              </span>
+                              <div className="font-medium text-foreground">
+                                {trucks && trucks.length > 0
+                                  ? "No trucks match your search"
+                                  : "No trucks posted yet"}
                               </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {t.willingDeadheadMiles ? `${t.willingDeadheadMiles} mi` : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={toneBadge[compliance.tone]}>
-                              {compliance.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {formatRelativeTime(t.updatedAt ?? t.createdAt)}
-                          </TableCell>
-                          <TableCell className="pr-6 text-right" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              aria-label={`Delete truck ${t.truckBoardId}`}
-                              onClick={() => setTruckToDelete(t)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                              <div className="text-xs">
+                                {trucks && trucks.length > 0
+                                  ? "Try a different keyword."
+                                  : "Post a truck to see it here."}
+                              </div>
+                            </div>
                           </TableCell>
                         </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
+                      ) : (
+                        filtered.map((t) => {
+                          const status = t.postingStatus
+                            ? (STATUS_LABELS[t.postingStatus] ?? {
+                                label: t.postingStatus,
+                                tone: "default" as Tone,
+                              })
+                            : { label: "—", tone: "default" as Tone };
+                          const compliance = complianceForTruck(t);
+                          const ratePerMile = formatRatePerMile(t);
+                          return (
+                            <TableRow
+                              key={t.truckBoardId}
+                              role="link"
+                              tabIndex={0}
+                              className="cursor-pointer border-border/60 hover:bg-muted/35"
+                              onClick={() =>
+                                void navigate({
+                                  to: "/truckboard/$truckBoardId",
+                                  params: { truckBoardId: t.truckBoardId },
+                                })
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  void navigate({
+                                    to: "/truckboard/$truckBoardId",
+                                    params: { truckBoardId: t.truckBoardId },
+                                  });
+                                }
+                              }}
+                            >
+                              <TableCell className="pl-6">
+                                <Badge variant="outline" className={toneBadge[status.tone]}>
+                                  {status.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="tabular-nums text-muted-foreground">
+                                {formatAvailability(t)}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {formatPlace(t.currentCity, t.currentState)}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {formatDestination(t)}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {formatEquipment(t)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="font-medium text-foreground">
+                                  <Link
+                                    to="/truckboard/$truckBoardId"
+                                    params={{ truckBoardId: t.truckBoardId }}
+                                    className="text-primary underline-offset-4 hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {t.carrierName || t.truckBoardId}
+                                  </Link>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground">
+                                  {t.truckBoardId}
+                                </div>
+                              </TableCell>
+                              <TableCell className="tabular-nums text-muted-foreground">
+                                {formatAuthority(t)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-foreground">{initials(t.driverName)}</div>
+                                <div className="text-[11px] text-muted-foreground">
+                                  {t.dispatcherName ? initials(t.dispatcherName) : "—"}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="font-semibold tabular-nums text-foreground">
+                                  {formatRate(t)}
+                                </div>
+                                {ratePerMile && (
+                                  <div className="text-[11px] tabular-nums text-muted-foreground">
+                                    {ratePerMile}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell className="tabular-nums text-muted-foreground">
+                                {t.willingDeadheadMiles ? `${t.willingDeadheadMiles} mi` : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={toneBadge[compliance.tone]}>
+                                  {compliance.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="tabular-nums text-muted-foreground">
+                                {formatRelativeTime(t.updatedAt ?? t.createdAt)}
+                              </TableCell>
+                              <TableCell
+                                className="pr-6 text-right"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  aria-label={`Delete truck ${t.truckBoardId}`}
+                                  onClick={() => setTruckToDelete(t)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
                   </>
                 )}
               </Table>
@@ -777,7 +807,7 @@ function Page() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete truck posting?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Delete truck posting?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {truckToDelete ? (
                 <>
@@ -790,7 +820,7 @@ function Page() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingTruck}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingTruck}>{t("Cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={deletingTruck}
@@ -799,7 +829,7 @@ function Page() {
               {deletingTruck ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting…
+                  {t("Deleting…")}
                 </>
               ) : (
                 "Delete posting"
@@ -817,7 +847,7 @@ function Page() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete draft?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Delete draft?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {draftToDelete ? (
                 <>
@@ -834,9 +864,9 @@ function Page() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
             <Button variant="destructive" onClick={confirmDeleteDraft}>
-              Delete draft
+              {t("Delete draft")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -13,6 +13,7 @@ describe("sanitizeSelfServiceSection", () => {
       dataAccessScope: "all",
       fieldPermissions: { rate: true },
       teams: "Night dispatch",
+      assignedCustomers: "Acme",
     });
 
     expect(data).toEqual({ teams: "Night dispatch" });
@@ -20,6 +21,7 @@ describe("sanitizeSelfServiceSection", () => {
       [
         "accessLevel",
         "adminAccess",
+        "assignedCustomers",
         "dataAccessScope",
         "fieldPermissions",
         "modulePermissions",

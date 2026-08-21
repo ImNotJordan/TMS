@@ -17,6 +17,7 @@ import { InvoiceDocument } from "@/components/accounting/invoice-document";
 import { Button } from "@/components/ui/button";
 import { getInvoiceById, type InvoiceRecord } from "@/lib/accounting-store";
 import { invoiceDocumentFilename } from "@/lib/invoice-document";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/invoices/$invoiceId/print")({
   head: () => ({ meta: [{ title: "Invoice" }] }),
@@ -86,10 +87,10 @@ function Page() {
       {/* print:hidden — the toolbar is for the screen; the sheet is the document. */}
       <div className="mx-auto mb-4 flex max-w-[8.5in] items-center justify-between px-2 print:hidden">
         <div className="text-sm text-muted-foreground">
-          Use your browser's <strong>Save as PDF</strong> to produce the file.
+          Use your browser's <strong>{t("Save as PDF")}</strong> to produce the file.
         </div>
         <Button size="sm" onClick={() => window.print()} className="gap-1.5">
-          <Printer className="h-4 w-4" /> Print / Save as PDF
+          <Printer className="h-4 w-4" /> {t("Print / Save as PDF")}
         </Button>
       </div>
 

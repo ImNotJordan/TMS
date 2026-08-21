@@ -21,6 +21,7 @@ import {
 } from "@/lib/tracking-workflow-store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { t } from "@/lib/i18n/t";
 
 const LONG_PRESS_MS = 500;
 
@@ -179,7 +180,7 @@ function MessageActionMenu({
       <button
         type="button"
         className="fixed inset-0 z-[200] cursor-default bg-background/30 backdrop-blur-[3px] animate-in fade-in-0 duration-150"
-        aria-label="Close message menu"
+        aria-label={t("Close message menu")}
         onClick={onClose}
       />
       <div
@@ -196,7 +197,7 @@ function MessageActionMenu({
       >
         <div className="border-b border-border/50 px-2.5 py-2">
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-            Message actions
+            {t("Message actions")}
           </p>
         </div>
         <div className="p-1">
@@ -218,8 +219,12 @@ function MessageActionMenu({
               )}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-destructive">Delete message</span>
-              <span className="block text-[11px] text-muted-foreground">Remove for everyone</span>
+              <span className="block text-sm font-semibold text-destructive">
+                {t("Delete message")}
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                {t("Remove for everyone")}
+              </span>
             </span>
           </button>
         </div>
@@ -432,10 +437,10 @@ function DocumentViewerDialog({
             className="gap-1.5"
             onClick={() => onOpenChange(false)}
           >
-            <X className="h-3.5 w-3.5" /> Close
+            <X className="h-3.5 w-3.5" /> {t("Close")}
           </Button>
           <Button type="button" size="sm" className="gap-1.5" onClick={download}>
-            <Download className="h-3.5 w-3.5" /> Download
+            <Download className="h-3.5 w-3.5" /> {t("Download")}
           </Button>
         </div>
       </DialogContent>
@@ -753,7 +758,7 @@ export function TrackingMessagesPanel({
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden p-3">
         {messages.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            No messages yet. Start the conversation below.
+            {t("No messages yet. Start the conversation below.")}
           </p>
         ) : (
           messages.map((message) => (
@@ -781,7 +786,7 @@ export function TrackingMessagesPanel({
                 void sendMessage();
               }
             }}
-            placeholder="Message driver…"
+            placeholder={t("Message driver…")}
             className="rounded-full border-border/70 bg-muted/30"
             disabled={sending}
           />
@@ -792,7 +797,7 @@ export function TrackingMessagesPanel({
             disabled={!messageText.trim() || sending}
           >
             <Send className="h-4 w-4" />
-            <span className="sr-only">Send</span>
+            <span className="sr-only">{t("Send")}</span>
           </Button>
         </div>
       </div>

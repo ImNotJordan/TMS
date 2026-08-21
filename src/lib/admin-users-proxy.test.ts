@@ -90,14 +90,11 @@ describe("routing", () => {
 
 describe("drivers are scoped to their employer", () => {
   it("returns only the drivers this company employs", async () => {
-    poolIs(
-      [{ sub: "d-ours" }, { sub: "d-theirs" }, { sub: "d-orphan" }],
-      {
-        "d-ours": { role: "driver", employerCompanyId: "acme" },
-        "d-theirs": { role: "driver", employerCompanyId: "globex" },
-        "d-orphan": { role: "driver" },
-      },
-    );
+    poolIs([{ sub: "d-ours" }, { sub: "d-theirs" }, { sub: "d-orphan" }], {
+      "d-ours": { role: "driver", employerCompanyId: "acme" },
+      "d-theirs": { role: "driver", employerCompanyId: "globex" },
+      "d-orphan": { role: "driver" },
+    });
 
     expect(await listedIds()).toEqual(["d-ours"]);
   });
@@ -252,11 +249,15 @@ describe("completeness", () => {
     });
     dynamoSend
       .mockResolvedValueOnce({
-        Responses: { UsersTable: [{ userId: "a", data: { role: "driver", employerCompanyId: "acme" } }] },
+        Responses: {
+          UsersTable: [{ userId: "a", data: { role: "driver", employerCompanyId: "acme" } }],
+        },
         UnprocessedKeys: { UsersTable: { Keys: [{ userId: "b", section: "permissions" }] } },
       })
       .mockResolvedValueOnce({
-        Responses: { UsersTable: [{ userId: "b", data: { role: "driver", employerCompanyId: "acme" } }] },
+        Responses: {
+          UsersTable: [{ userId: "b", data: { role: "driver", employerCompanyId: "acme" } }],
+        },
       });
 
     // Without the retry, "b" would arrive with no profile, be treated as a

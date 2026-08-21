@@ -5,3 +5,6 @@
  */
 export const DISPATCH_APP_URL =
   (import.meta.env.VITE_DISPATCH_APP_URL as string | undefined)?.trim() || "http://localhost:5173";
+
+export const CLIENT_APP_URL =
+  (import.meta.env.VITE_CLIENT_APP_URL as string | undefined)?.trim() || "http://localhost:5175";

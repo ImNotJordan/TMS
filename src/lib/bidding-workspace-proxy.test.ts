@@ -13,9 +13,8 @@ vi.mock("@/lib/server/server-dynamo", async () => {
   return { ...actual, getServerDataClient: () => ({ send: (...a: unknown[]) => send(...a) }) };
 });
 
-const { handleBiddingWorkspaceRequest, isBiddingWorkspaceRequest } = await import(
-  "@/lib/bidding-workspace-proxy"
-);
+const { handleBiddingWorkspaceRequest, isBiddingWorkspaceRequest } =
+  await import("@/lib/bidding-workspace-proxy");
 
 const ME = "my-own-sub";
 const COLLEAGUE = "a-colleague-sub";
@@ -65,8 +64,9 @@ describe("the workspace id comes from the token, never the request", () => {
   it("queries the caller's own sub", async () => {
     await handleBiddingWorkspaceRequest(req("GET", "/api/bidding-workspace"));
 
+    // One query per record type now, each bounded — see the hardening suite.
     expect(sentCommand("QueryCommand")?.input).toMatchObject({
-      KeyConditionExpression: "workspaceId = :w",
+      KeyConditionExpression: "workspaceId = :w AND begins_with(itemKey, :prefix)",
       ExpressionAttributeValues: { ":w": ME },
     });
   });
@@ -90,10 +90,17 @@ describe("the workspace id comes from the token, never the request", () => {
     expect(sentCommand("ScanCommand")).toBeUndefined();
   });
 
-  it("pages the query rather than truncating the workspace", async () => {
-    send
-      .mockResolvedValueOnce({ Items: [{ itemKey: "quote#1" }], LastEvaluatedKey: { k: 1 } })
-      .mockResolvedValueOnce({ Items: [{ itemKey: "quote#2" }] });
+  it("pages within a record type rather than returning only the first page", async () => {
+    // Quotes, searches and audit are queried concurrently, so key the mock on
+    // the prefix rather than on call order.
+    send.mockImplementation(async (command: { input: Record<string, unknown> }) => {
+      const values = command.input.ExpressionAttributeValues as Record<string, string>;
+      if (values?.[":prefix"] !== "quote#") return { Items: [] };
+      if (!command.input.ExclusiveStartKey) {
+        return { Items: [{ itemKey: "quote#1" }], LastEvaluatedKey: { k: 1 } };
+      }
+      return { Items: [{ itemKey: "quote#2" }] };
+    });
 
     const res = await handleBiddingWorkspaceRequest(req("GET", "/api/bidding-workspace"));
     await expect(res.json()).resolves.toMatchObject({

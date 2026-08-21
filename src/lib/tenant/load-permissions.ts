@@ -72,6 +72,7 @@ export const LOAD_POST_DELIVERY_FROZEN_FIELDS: ReadonlySet<string> = new Set([
   "palletCount",
   "pieceCount",
   "commodityDescription",
+  "inventoryLines",
   "freightClass",
   "pickupReference",
   "deliveryReference",
@@ -105,6 +106,51 @@ const LOAD_WRITERS: ReadonlySet<Role> = new Set<Role>([
 ]);
 
 /**
+ * The manually-entered tax figure.
+ *
+ * Economic — it lands on the invoice — but deliberately *not* in
+ * `LOAD_ECONOMIC_FIELDS`, for two reasons that pull in opposite directions from
+ * the rate fields:
+ *
+ * 1. **Who.** Rates are priced by brokers; tax is computed by whoever does the
+ *    books. `LOAD_PRICERS` excludes Accounting on purpose, and Accounting is
+ *    exactly who reads a VAT calculator and types the answer in. So this set has
+ *    its own writer list.
+ * 2. **When.** `LOAD_POST_DELIVERY_FROZEN_FIELDS` spreads
+ *    `LOAD_ECONOMIC_FIELDS`, and freezing tax after delivery would break the
+ *    normal workflow — tax is determined at invoicing, which happens after
+ *    delivery by definition. Including it there would have locked the field
+ *    exactly when it needs filling in.
+ *
+ * It is still audited with its values, because a changed tax figure is precisely
+ * the kind of edit someone asks about later. See `load-audit`.
+ */
+export const LOAD_TAX_FIELDS: ReadonlySet<string> = new Set([
+  "taxManualAmount",
+  "taxCurrency",
+  "taxManualSource",
+  "taxManualNote",
+  "taxLines",
+]);
+
+/**
+ * Roles that may enter a tax figure.
+ *
+ * `LOAD_PRICERS` plus Accounting. Narrower than `LOAD_WRITERS` — a dispatcher
+ * moving a truck has no business restating what the load owes — and wider than
+ * `LOAD_PRICERS`, which is the whole reason this is a third set rather than a
+ * reuse of either.
+ */
+const LOAD_TAX_SETTERS: ReadonlySet<Role> = new Set<Role>([
+  "Organization Owner",
+  "Admin",
+  "SuperAdmin",
+  "Operations Manager",
+  "Broker",
+  "Accounting",
+]);
+
+/**
  * Roles that may set what a load is worth.
  *
  * Deliberately excludes Dispatcher and Accounting — see the header. Narrower
@@ -128,7 +174,11 @@ const LOAD_DELETERS: ReadonlySet<Role> = new Set<Role>([
 export type LoadPermissionDenial = {
   ok: false;
   status: 403;
-  code: "role_cannot_write_load" | "role_cannot_price_load" | "role_cannot_delete_load";
+  code:
+    | "role_cannot_write_load"
+    | "role_cannot_price_load"
+    | "role_cannot_delete_load"
+    | "role_cannot_set_load_tax";
   message: string;
   /** Named so the log and the response agree on what was attempted. */
   fields?: string[];
@@ -146,6 +196,20 @@ export type LoadWriteCheck = { ok: true } | LoadPermissionDenial | LoadFreezeDen
 
 function roleLabel(role: Role | null): string {
   return role ?? "an unassigned role";
+}
+
+/** Refuse a tax edit from a role that may not make one. */
+function taxDenial(ctx: TenantContext, body: Record<string, unknown>): LoadPermissionDenial | null {
+  const taxed = Object.keys(body).filter((key) => LOAD_TAX_FIELDS.has(key));
+  if (taxed.length === 0) return null;
+  if (ctx.role && LOAD_TAX_SETTERS.has(ctx.role)) return null;
+  return {
+    ok: false,
+    status: 403,
+    code: "role_cannot_set_load_tax",
+    message: `${roleLabel(ctx.role)} cannot set the tax figure on a load: ${taxed.join(", ")}.`,
+    fields: taxed,
+  };
 }
 
 /** May this caller create a load? */
@@ -168,6 +232,8 @@ export function checkLoadCreate(ctx: TenantContext, body: Record<string, unknown
       fields: priced,
     };
   }
+  const taxRefusal = taxDenial(ctx, body);
+  if (taxRefusal) return taxRefusal;
   return { ok: true };
 }
 
@@ -205,6 +271,11 @@ export function checkLoadUpdate(
       fields: priced,
     };
   }
+
+  // Before the freeze check below, and deliberately not subject to it: tax is
+  // entered at invoicing, which is after delivery.
+  const taxRefusal = taxDenial(ctx, patch);
+  if (taxRefusal) return taxRefusal;
 
   // Role first, then state. A Marketing account editing a delivered load's rate
   // should hear that it cannot price loads at all, not that this particular load

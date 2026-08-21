@@ -10,6 +10,7 @@ interface ImportMetaEnv {
   readonly VITE_LOADS_TABLE_NAME?: string;
   readonly VITE_TRACKING_MESSAGES_TABLE_NAME?: string;
   readonly VITE_DISPATCH_APP_URL?: string;
+  readonly VITE_CLIENT_APP_URL?: string;
 }
 
 interface ImportMeta {

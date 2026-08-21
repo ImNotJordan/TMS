@@ -19,6 +19,7 @@ import { draftCampaignContentAsync } from "@/lib/content-studio";
 import { isWorkspaceAiEnabled } from "@/lib/integrations-config";
 import { toast } from "sonner";
 import { Card, FieldShell, GridSection, SectionTitle, generateCrmId } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
 const TYPE_OPTIONS: FancySelectOption[] = [
   { value: "email_sequence", label: "Email Sequence" },
@@ -44,7 +45,8 @@ export function CreateCampaignDialog({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
-  const setOpen = (next: boolean) => (isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next));
+  const setOpen = (next: boolean) =>
+    isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next);
 
   const [name, setName] = React.useState("");
   const [type, setType] = React.useState<CrmCampaignType>(defaultType ?? "email_sequence");
@@ -128,39 +130,56 @@ export function CreateCampaignDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="!max-w-2xl w-[94vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl">
-        <DialogTitle className="sr-only">Add Campaign</DialogTitle>
-        <DialogDescription className="sr-only">Create an email, landing page, social, or content studio campaign.</DialogDescription>
+        <DialogTitle className="sr-only">{t("Add Campaign")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("Create an email, landing page, social, or content studio campaign.")}
+        </DialogDescription>
         <div className="border-b border-border/70 px-6 py-4">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Add Campaign</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            {t("Add Campaign")}
+          </h2>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
           <Card>
-            <SectionTitle title="Campaign" icon={Megaphone} />
+            <SectionTitle title={t("Campaign")} icon={Megaphone} />
             <GridSection cols={2}>
-              <FieldShell label="Name" required error={hasError}>
+              <FieldShell label={t("Name")} required error={hasError}>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Q3 shipper outreach"
+                  placeholder={t("Q3 shipper outreach")}
                   className={cn(hasError && "border-destructive/60")}
                 />
               </FieldShell>
-              <FieldShell label="Type">
-                <FancySelect value={type} onChange={(v) => setType(v as CrmCampaignType)} options={TYPE_OPTIONS} searchable={false} />
+              <FieldShell label={t("Type")}>
+                <FancySelect
+                  value={type}
+                  onChange={(v) => setType(v as CrmCampaignType)}
+                  options={TYPE_OPTIONS}
+                  searchable={false}
+                />
               </FieldShell>
             </GridSection>
             <GridSection cols={2} className="mt-4">
-              <FieldShell label="Audience" hint="Segment or list">
-                <Input value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="Mid-market shippers, Southeast" />
+              <FieldShell label={t("Audience")} hint={t("Segment or list")}>
+                <Input
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  placeholder={t("Mid-market shippers, Southeast")}
+                />
               </FieldShell>
-              <FieldShell label="Scheduled for">
-                <Input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
+              <FieldShell label={t("Scheduled for")}>
+                <Input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                />
               </FieldShell>
             </GridSection>
             <div className="mt-4">
               <FieldShell
-                label="Content"
-                hint="Draft body, landing page copy, or post text"
+                label={t("Content")}
+                hint={t("Draft body, landing page copy, or post text")}
               >
                 <div className="space-y-2">
                   <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} />
@@ -199,10 +218,20 @@ export function CreateCampaignDialog({
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
-            <Button type="button" size="sm" disabled={submitting} onClick={handleSubmit} className="gap-1.5">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            <Button
+              type="button"
+              size="sm"
+              disabled={submitting}
+              onClick={handleSubmit}
+              className="gap-1.5"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
               Save Campaign
             </Button>
           </div>

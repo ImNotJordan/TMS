@@ -31,6 +31,7 @@ import {
   type CrmActivityType,
 } from "@/lib/crm-store";
 import { formatTimestamp } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
 const TYPE_ICON: Record<CrmActivityType, React.ComponentType<{ className?: string }>> = {
   call: Phone,
@@ -115,25 +116,39 @@ export function ActivityTimeline({
       <div className="rounded-lg border border-border/70 bg-card/60 p-3">
         <div className="flex gap-2">
           <div className="w-36 shrink-0">
-            <FancySelect value={type} onChange={setType} options={TYPE_OPTIONS} searchable={false} />
+            <FancySelect
+              value={type}
+              onChange={setType}
+              options={TYPE_OPTIONS}
+              searchable={false}
+            />
           </div>
           <Input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder="What happened?"
+            placeholder={t("What happened?")}
             className="flex-1"
           />
         </div>
         <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Details (optional)"
+          placeholder={t("Details (optional)")}
           rows={2}
           className="mt-2"
         />
         <div className="mt-2 flex justify-end">
-          <Button size="sm" className="gap-1.5" disabled={!subject.trim() || submitting} onClick={handleAdd}>
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlusCircle className="h-3.5 w-3.5" />}
+          <Button
+            size="sm"
+            className="gap-1.5"
+            disabled={!subject.trim() || submitting}
+            onClick={handleAdd}
+          >
+            {submitting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <PlusCircle className="h-3.5 w-3.5" />
+            )}
             Log activity
           </Button>
         </div>
@@ -160,7 +175,7 @@ export function ActivityTimeline({
         ) : !activities || activities.length === 0 ? (
           <div className="flex flex-col items-center gap-1 py-8 text-center text-xs text-muted-foreground">
             <CalendarClock className="h-5 w-5" />
-            No activity logged yet.
+            {t("No activity logged yet.")}
           </div>
         ) : (
           activities.map((a) => {
@@ -190,7 +205,7 @@ export function ActivityTimeline({
                       rel="noreferrer"
                       className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-primary underline-offset-2 hover:underline"
                     >
-                      <Radar className="h-3 w-3" /> View DAT search
+                      <Radar className="h-3 w-3" /> {t("View DAT search")}
                     </a>
                   )}
                   {a.guardrailReason && (

@@ -3,6 +3,7 @@ import { Check, ChevronsUpDown, Search, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { t } from "@/lib/i18n/t";
 
 export type FancySelectOption = {
   value: string;
@@ -137,7 +138,7 @@ export function FancySelect({
                 ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search..."
+                placeholder={t("Search...")}
                 className="h-7 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
               {query && (
@@ -146,7 +147,7 @@ export function FancySelect({
                   onClick={() => setQuery("")}
                   className="rounded px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
                 >
-                  Clear
+                  {t("Clear")}
                 </button>
               )}
             </div>
@@ -230,7 +231,7 @@ export function FancySelect({
           <span>
             {filtered.length} of {options.length} options
           </span>
-          <span className="font-medium">↑↓ Esc</span>
+          <span className="font-medium">{t("↑↓ Esc")}</span>
         </div>
       </PopoverContent>
     </Popover>

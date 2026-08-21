@@ -1,4 +1,5 @@
 import type { LoadRecord } from "@/lib/loads-store";
+import type { LoadInventoryLine } from "@/lib/load-inventory";
 
 export type LoadDraft = {
   // Step 1: basic
@@ -68,6 +69,12 @@ export type LoadDraft = {
   tonuFee: string;
   layoverFee: string;
   paymentTerms: string;
+
+  /* Manual tax entry. Strings like every other money field on the draft. */
+  taxManualAmount: string;
+  taxCurrency: string;
+  taxManualSource: string;
+  taxManualNote: string;
   // Step 5: carrier/driver
   assignedCarrier: string;
   assignedDriver: string;
@@ -80,6 +87,7 @@ export type LoadDraft = {
   insuranceVerified: boolean;
   authorityVerified: boolean;
   highValueFlag: boolean;
+  inventoryLines: LoadInventoryLine[];
 };
 
 export const INITIAL: LoadDraft = {
@@ -144,6 +152,10 @@ export const INITIAL: LoadDraft = {
   lumperFee: "",
   tonuFee: "",
   layoverFee: "",
+  taxManualAmount: "",
+  taxCurrency: "",
+  taxManualSource: "",
+  taxManualNote: "",
   paymentTerms: "",
   assignedCarrier: "",
   assignedDriver: "",
@@ -155,6 +167,7 @@ export const INITIAL: LoadDraft = {
   insuranceVerified: false,
   authorityVerified: false,
   highValueFlag: false,
+  inventoryLines: [],
 };
 
 /** Map DynamoDB record → wizard draft (safe defaults for missing fields). */
@@ -222,6 +235,10 @@ export function recordToLoadDraft(r: LoadRecord): LoadDraft {
     lumperFee: r.lumperFee ?? "",
     tonuFee: r.tonuFee ?? "",
     layoverFee: r.layoverFee ?? "",
+    taxManualAmount: r.taxManualAmount ?? "",
+    taxCurrency: r.taxCurrency ?? "",
+    taxManualSource: r.taxManualSource ?? "",
+    taxManualNote: r.taxManualNote ?? "",
     paymentTerms: r.paymentTerms ?? "",
     assignedCarrier: r.assignedCarrier ?? "",
     assignedDriver: r.assignedDriver ?? "",
@@ -233,6 +250,7 @@ export function recordToLoadDraft(r: LoadRecord): LoadDraft {
     insuranceVerified: Boolean(r.insuranceVerified),
     authorityVerified: Boolean(r.authorityVerified),
     highValueFlag: Boolean(r.highValueFlag),
+    inventoryLines: Array.isArray(r.inventoryLines) ? [...r.inventoryLines] : [],
   };
 }
 
@@ -260,11 +278,14 @@ export function computeLoadWizardStepErrors(draft: LoadDraft): Record<number, st
   if (!draft.deliveryDate) errs[2].push("deliveryDate");
   if (!draft.deliveryAppointmentTime && !(draft.deliveryWindowStart && draft.deliveryWindowEnd))
     errs[2].push("deliveryTime");
-  if (!draft.commodityDescription) errs[3].push("commodityDescription");
-  if (!draft.weight) errs[3].push("weight");
+  if (!draft.commodityDescription && draft.inventoryLines.length === 0) {
+    errs[3].push("commodityDescription");
+  }
+  if (!draft.weight && draft.inventoryLines.every((line) => !line.weightPerUnitLb)) {
+    errs[3].push("weight");
+  }
   if (!draft.customerRate) errs[4].push("customerRate");
   if (!draft.carrierRate) errs[4].push("carrierRate");
   if (!draft.assignedCarrier && !draft.assignedDriver) errs[5].push("assignment");
   return errs;
 }
-

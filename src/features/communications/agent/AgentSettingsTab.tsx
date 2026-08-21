@@ -17,11 +17,16 @@ import { cn } from "@/lib/utils";
 import { useAgentConfig } from "../hooks/useAgentConfig";
 import { useChannelAvailability } from "../hooks/useChannelAvailability";
 import type { AgentAction, AgentConfig, ChannelId, PersonaId } from "../types";
+import { t } from "@/lib/i18n/t";
 
 const PERSONAS: { id: PersonaId; title: string; blurb: string }[] = [
   { id: "dispatcher", title: "Dispatcher", blurb: "ETA updates, check-calls, and load status." },
   { id: "broker", title: "Broker", blurb: "Rate negotiation and carrier coverage." },
-  { id: "customer-service", title: "Customer service", blurb: "Exceptions, claims intake, and follow-ups." },
+  {
+    id: "customer-service",
+    title: "Customer service",
+    blurb: "Exceptions, claims intake, and follow-ups.",
+  },
   { id: "sales", title: "Sales", blurb: "Outbound quotes and relationship touchpoints." },
 ];
 
@@ -81,25 +86,29 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
       <div className="flex items-center justify-end gap-3">
         {editable ? (
           <Button type="button" onClick={() => void save(draft)}>
-            Save agent settings
+            {t("Save agent settings")}
           </Button>
         ) : (
-          <p className="text-sm text-muted-foreground">Agent settings are read-only for your role.</p>
+          <p className="text-sm text-muted-foreground">
+            {t("Agent settings are read-only for your role.")}
+          </p>
         )}
       </div>
 
       {!aiConnected ? (
         <Card className="border-border/70 shadow-sm">
           <CardContent className="pt-6 text-sm text-muted-foreground">
-            AI is disconnected. Connect it in Settings → Integrations to enable the agent.
+            {t("AI is disconnected. Connect it in Settings → Integrations to enable the agent.")}
           </CardContent>
         </Card>
       ) : null}
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Persona</CardTitle>
-          <CardDescription>Choose how the agent should sound and what it optimizes for.</CardDescription>
+          <CardTitle className="text-base">{t("Persona")}</CardTitle>
+          <CardDescription>
+            {t("Choose how the agent should sound and what it optimizes for.")}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {PERSONAS.map((persona) => {
@@ -127,12 +136,14 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Behavior</CardTitle>
-          <CardDescription>Enablement, tone, auto-send threshold, and channel scope.</CardDescription>
+          <CardTitle className="text-base">{t("Behavior")}</CardTitle>
+          <CardDescription>
+            {t("Enablement, tone, auto-send threshold, and channel scope.")}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="flex items-center justify-between rounded-md border border-border/70 px-3 py-2">
-            <Label htmlFor="agent-enabled">Agent enabled</Label>
+            <Label htmlFor="agent-enabled">{t("Agent enabled")}</Label>
             <Switch
               id="agent-enabled"
               checked={draft.enabled}
@@ -141,22 +152,20 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
             />
           </div>
           <div className="space-y-1">
-            <Label>Tone</Label>
+            <Label>{t("Tone")}</Label>
             <Select
               value={draft.tone}
               disabled={!editable}
-              onValueChange={(v) =>
-                setDraft((p) => ({ ...p, tone: v as AgentConfig["tone"] }))
-              }
+              onValueChange={(v) => setDraft((p) => ({ ...p, tone: v as AgentConfig["tone"] }))}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="formal">Formal</SelectItem>
-                <SelectItem value="neutral">Neutral</SelectItem>
-                <SelectItem value="friendly">Friendly</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="formal">{t("Formal")}</SelectItem>
+                <SelectItem value="neutral">{t("Neutral")}</SelectItem>
+                <SelectItem value="friendly">{t("Friendly")}</SelectItem>
+                <SelectItem value="urgent">{t("Urgent")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -180,11 +189,13 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
               className="w-full"
             />
             <p className="text-xs text-muted-foreground">
-              Replies below this confidence stay as drafts. Critical keyword hits always escalate.
+              {t(
+                "Replies below this confidence stay as drafts. Critical keyword hits always escalate.",
+              )}
             </p>
           </div>
           <div className="md:col-span-2">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Channel scope</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">{t("Channel scope")}</p>
             <div className="flex flex-wrap gap-2">
               {(["email", "sms", "voice", "chat"] as ChannelId[]).map((channel) => (
                 <Button
@@ -193,9 +204,7 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
                   size="sm"
                   variant={draft.channelScope.includes(channel) ? "secondary" : "outline"}
                   disabled={!editable}
-                  onClick={() =>
-                    toggleChannel(channel, !draft.channelScope.includes(channel))
-                  }
+                  onClick={() => toggleChannel(channel, !draft.channelScope.includes(channel))}
                 >
                   {channel}
                 </Button>
@@ -207,8 +216,10 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Allowed actions</CardTitle>
-          <CardDescription>Opt-in capabilities. Destructive actions need a second confirm.</CardDescription>
+          <CardTitle className="text-base">{t("Allowed actions")}</CardTitle>
+          <CardDescription>
+            {t("Opt-in capabilities. Destructive actions need a second confirm.")}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {ACTIONS.map((action) => {
@@ -223,7 +234,7 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
                         variant="outline"
                         className="border-destructive/25 bg-destructive/15 text-destructive"
                       >
-                        Destructive
+                        {t("Destructive")}
                       </Badge>
                     ) : null}
                   </div>
@@ -235,7 +246,9 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
                 </div>
                 {action.destructive ? (
                   <p className="px-1 text-xs text-muted-foreground">
-                    Enabling this lets the agent change live customer or load state without a human click.
+                    {t(
+                      "Enabling this lets the agent change live customer or load state without a human click.",
+                    )}
                   </p>
                 ) : null}
               </div>
@@ -246,7 +259,7 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
               Enable {confirmAction}? This can send or mutate without review.
               <div className="mt-2 flex gap-2">
                 <Button type="button" size="sm" onClick={confirmDestructive}>
-                  Enable
+                  {t("Enable")}
                 </Button>
                 <Button
                   type="button"
@@ -254,7 +267,7 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
                   variant="outline"
                   onClick={() => setConfirmAction(null)}
                 >
-                  Cancel
+                  {t("Cancel")}
                 </Button>
               </div>
             </div>
@@ -264,7 +277,7 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Translation</CardTitle>
+          <CardTitle className="text-base">{t("Translation")}</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">
           {(
@@ -292,7 +305,7 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
             </div>
           ))}
           <div className="space-y-1">
-            <Label>Agent reading language</Label>
+            <Label>{t("Agent reading language")}</Label>
             <Select
               value={draft.translation.targetLang}
               disabled={!editable}
@@ -307,9 +320,9 @@ export function AgentSettingsTab({ readOnly }: { readOnly?: boolean }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="es">Spanish</SelectItem>
-                <SelectItem value="fr">French</SelectItem>
+                <SelectItem value="en">{t("English")}</SelectItem>
+                <SelectItem value="es">{t("Spanish")}</SelectItem>
+                <SelectItem value="fr">{t("French")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

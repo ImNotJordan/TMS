@@ -28,12 +28,15 @@ import {
 import { ServerDataPrincipalMissingError } from "@/lib/server/server-dynamo";
 import { readServerEnv } from "@/lib/server-env";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
+import { refuseClientOnOpsApi } from "@/lib/tenant/client-scope";
 import {
   logTenantDenial,
   tenantErrorResponse,
   type TenantContext,
 } from "@/lib/tenant/server-tenant-context";
 import { checkLoadTransition, normalizeLoadStatus } from "@/lib/load-status";
+import { parseLoadInventoryLines } from "@/lib/load-inventory";
+import { syncLoadInventoryForTenant } from "@/lib/inventory-proxy";
 import { SERVER_OWNED_LOAD_FIELDS, buildLoadAuditEntry } from "@/lib/load-audit";
 import {
   checkLoadCreate,
@@ -75,6 +78,44 @@ function loadIdFromPath(url: URL): string | null {
 
 function jsonError(message: string, status: number, code?: string) {
   return Response.json({ error: message, code }, { status });
+}
+
+function sanitizeInventoryLines(body: Record<string, unknown>) {
+  if (!("inventoryLines" in body)) return;
+  body.inventoryLines = parseLoadInventoryLines(body.inventoryLines);
+}
+
+async function loadWriteResponse(
+  ctx: TenantContext,
+  load: LoadRecord,
+  status: number,
+  previous?: LoadRecord | null,
+): Promise<Response> {
+  try {
+    const sync = await syncLoadInventoryForTenant(ctx, load, { previous });
+    if (!sync.ok) {
+      return Response.json(
+        {
+          load,
+          inventoryError: { message: sync.message, code: sync.code },
+        },
+        { status },
+      );
+    }
+  } catch (err) {
+    console.error("[loads] inventory sync failed", err instanceof Error ? err.message : err);
+    return Response.json(
+      {
+        load,
+        inventoryError: {
+          message: "Load saved, but warehouse stock could not be updated.",
+          code: "inventory_sync_failed",
+        },
+      },
+      { status },
+    );
+  }
+  return Response.json({ load }, { status });
 }
 
 async function readBody(request: Request): Promise<Record<string, unknown> | Response> {
@@ -177,6 +218,10 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
     return tenantErrorResponse(err) ?? jsonError("Sign in required.", 401, "not_authenticated");
   }
 
+  if (ctx.role === "Client") {
+    return refuseClientOnOpsApi(ctx, LOADS_PATH)!;
+  }
+
   try {
     switch (request.method) {
       case "GET": {
@@ -211,6 +256,8 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
         const denied = denialResponse(ctx, checkLoadCreate(ctx, body), LOADS_PATH);
         if (denied) return denied;
 
+        sanitizeInventoryLines(body);
+
         const status = canonicalStatusFromBody(body);
         if (status && "error" in status) return status.error;
         // A new load starts at draft unless the caller names a reachable
@@ -227,7 +274,7 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
         }
 
         const created = await loads.create(ctx, body as never);
-        return Response.json({ load: created }, { status: 201 });
+        return await loadWriteResponse(ctx, created, 201);
       }
 
       case "PATCH": {
@@ -264,6 +311,8 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
         );
         if (denied) return denied;
 
+        sanitizeInventoryLines(body);
+
         const status = canonicalStatusFromBody(body);
         if (status && "error" in status) return status.error;
 
@@ -298,13 +347,28 @@ export async function handleLoadsApiRequest(request: Request): Promise<Response>
             "This load moved to a different status while you were editing it. Reload and try again.",
           append: auditEntry ? { loadAuditTrail: [auditEntry] } : undefined,
         });
-        return Response.json({ load: updated });
+        return await loadWriteResponse(ctx, updated, 200, current);
       }
 
       case "DELETE": {
         if (!loadId) return jsonError("Method not allowed.", 405);
         const denied = denialResponse(ctx, checkLoadDelete(ctx), `${LOADS_PATH}/:id`);
         if (denied) return denied;
+        const current = await loads.get(ctx, loadId);
+        if (!current) {
+          logTenantDenial(ctx, "load not found or not in company", `${LOADS_PATH}/:id`);
+          return jsonError("Load not found.", 404, "not_found");
+        }
+        try {
+          await syncLoadInventoryForTenant(ctx, { ...current, loadStatus: "cancelled" }, {
+            previous: current,
+          });
+        } catch (err) {
+          console.error(
+            "[loads] inventory release on delete failed",
+            err instanceof Error ? err.message : err,
+          );
+        }
         await loads.remove(ctx, loadId);
         return new Response(null, { status: 204 });
       }

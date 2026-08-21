@@ -19,6 +19,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoadsRouteImport } from './routes/loads'
 import { Route as LandingRouteImport } from './routes/landing'
+import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CrmRouteImport } from './routes/crm'
 import { Route as CommunicationsRouteImport } from './routes/communications'
@@ -82,6 +83,11 @@ const LoadsRoute = LoadsRouteImport.update({
 const LandingRoute = LandingRouteImport.update({
   id: '/landing',
   path: '/landing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryRoute = InventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -165,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
   '/dashboard': typeof DashboardRoute
+  '/inventory': typeof InventoryRoute
   '/landing': typeof LandingRoute
   '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
@@ -191,6 +198,7 @@ export interface FileRoutesByTo {
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
   '/dashboard': typeof DashboardRoute
+  '/inventory': typeof InventoryRoute
   '/landing': typeof LandingRoute
   '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
@@ -218,6 +226,7 @@ export interface FileRoutesById {
   '/communications': typeof CommunicationsRoute
   '/crm': typeof CrmRoute
   '/dashboard': typeof DashboardRoute
+  '/inventory': typeof InventoryRoute
   '/landing': typeof LandingRoute
   '/loads': typeof LoadsRouteWithChildren
   '/login': typeof LoginRoute
@@ -246,6 +255,7 @@ export interface FileRouteTypes {
     | '/communications'
     | '/crm'
     | '/dashboard'
+    | '/inventory'
     | '/landing'
     | '/loads'
     | '/login'
@@ -272,6 +282,7 @@ export interface FileRouteTypes {
     | '/communications'
     | '/crm'
     | '/dashboard'
+    | '/inventory'
     | '/landing'
     | '/loads'
     | '/login'
@@ -298,6 +309,7 @@ export interface FileRouteTypes {
     | '/communications'
     | '/crm'
     | '/dashboard'
+    | '/inventory'
     | '/landing'
     | '/loads'
     | '/login'
@@ -325,6 +337,7 @@ export interface RootRouteChildren {
   CommunicationsRoute: typeof CommunicationsRoute
   CrmRoute: typeof CrmRoute
   DashboardRoute: typeof DashboardRoute
+  InventoryRoute: typeof InventoryRoute
   LandingRoute: typeof LandingRoute
   LoadsRoute: typeof LoadsRouteWithChildren
   LoginRoute: typeof LoginRoute
@@ -408,6 +421,13 @@ declare module '@tanstack/react-router' {
       path: '/landing'
       fullPath: '/landing'
       preLoaderRoute: typeof LandingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory': {
+      id: '/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof InventoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -565,6 +585,7 @@ const rootRouteChildren: RootRouteChildren = {
   CommunicationsRoute: CommunicationsRoute,
   CrmRoute: CrmRoute,
   DashboardRoute: DashboardRoute,
+  InventoryRoute: InventoryRoute,
   LandingRoute: LandingRoute,
   LoadsRoute: LoadsRouteWithChildren,
   LoginRoute: LoginRoute,

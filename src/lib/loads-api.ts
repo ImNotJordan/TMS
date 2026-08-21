@@ -19,6 +19,7 @@
  * the backstop for anything that is not this client.
  */
 import { fetchAuthSession } from "aws-amplify/auth";
+import { toast } from "sonner";
 
 import type { LoadRecord } from "@/lib/loads-store";
 
@@ -67,6 +68,16 @@ function withoutServerOwnedFields<T extends Record<string, unknown>>(
 }
 
 type ApiFailure = { error?: string; code?: string };
+type LoadWriteBody = {
+  load?: LoadRecord;
+  inventoryError?: { message?: string; code?: string };
+};
+
+function noteInventoryError(body: LoadWriteBody | null) {
+  const message = body?.inventoryError?.message?.trim();
+  if (!message) return;
+  toast.warning(message);
+}
 
 /** `body` is a value to serialize here, not a `BodyInit` — hence the Omit. */
 async function request<T>(
@@ -121,11 +132,12 @@ export async function apiGetLoad(loadId: string): Promise<LoadRecord | null> {
 export async function apiCreateLoad(
   input: Omit<LoadRecord, "createdAt" | "updatedAt">,
 ): Promise<LoadRecord> {
-  const { body } = await request<{ load: LoadRecord }>(LOADS_ENDPOINT, {
+  const { body } = await request<LoadWriteBody>(LOADS_ENDPOINT, {
     method: "POST",
     body: withoutServerOwnedFields(input as unknown as Record<string, unknown>),
   });
   if (!body?.load) throw new LoadsApiError("Create returned no record.", 502);
+  noteInventoryError(body);
   return body.load;
 }
 
@@ -135,11 +147,12 @@ export async function apiUpdateLoad(
 ): Promise<LoadRecord> {
   const id = loadId?.trim();
   if (!id) throw new LoadsApiError("loadId is required.", 400);
-  const { body } = await request<{ load: LoadRecord }>(
+  const { body } = await request<LoadWriteBody>(
     `${LOADS_ENDPOINT}/${encodeURIComponent(id)}`,
     { method: "PATCH", body: withoutServerOwnedFields(patch as Record<string, unknown>) },
   );
   if (!body?.load) throw new LoadsApiError("Update returned no record.", 502);
+  noteInventoryError(body);
   return body.load;
 }
 

@@ -40,7 +40,28 @@ import {
   isCompanyAssignmentRequest,
 } from "./lib/admin-company-proxy";
 import { handleLoadsApiRequest, isLoadsApiRequest } from "./lib/loads-api-proxy";
+import { handleInventoryApiRequest, isInventoryApiRequest } from "./lib/inventory-proxy";
+import { handleTaxApiRequest, isTaxApiRequest } from "./lib/tax-proxy";
+import {
+  handleSettingsChinaTaxWriteRequest,
+  isSettingsChinaTaxWriteRequest,
+} from "./lib/settings-china-tax";
+import {
+  handleSettingsResendTestRequest,
+  handleSettingsResendWriteRequest,
+  isSettingsResendTestRequest,
+  isSettingsResendWriteRequest,
+} from "./lib/settings-resend";
+import {
+  handleDriverLocationDigestRequest,
+  isDriverLocationDigestRequest,
+  runDriverLocationDigests,
+} from "./lib/driver-location-digest";
 import { handleDriverLoadsRequest, isDriverLoadsRequest } from "./lib/driver-loads-proxy";
+import {
+  handleClientDashboardRequest,
+  isClientDashboardRequest,
+} from "./lib/client-dashboard-proxy";
 import { preflightResponse, withCors } from "./lib/api-cors";
 import { handleResourceApiRequest, isResourceApiRequest } from "./lib/api/resource-proxy";
 import {
@@ -51,6 +72,12 @@ import {
   handleBiddingWorkspaceRequest,
   isBiddingWorkspaceRequest,
 } from "./lib/bidding-workspace-proxy";
+import {
+  handleBiddingFieldOptionsRequest,
+  handleBiddingSearchRequest,
+  isBiddingFieldOptionsRequest,
+  isBiddingSearchRequest,
+} from "./lib/bidding-search-proxy";
 import { handleAdminUsersRequest, isAdminUsersRequest } from "./lib/admin-users-proxy";
 import { handleUserRoleRequest, isUserRoleRequest } from "./lib/admin-role-proxy";
 import { handleProfileRequest, isProfileRequest } from "./lib/profile-proxy";
@@ -146,6 +173,11 @@ export default {
       if (isDriverLoadsRequest(url)) {
         return withCors(request, await handleDriverLoadsRequest(request));
       }
+      // Same origin split as the driver portal: the client SPA is a different
+      // deploy, so this path is CORS-wrapped on purpose.
+      if (isClientDashboardRequest(url)) {
+        return withCors(request, await handleClientDashboardRequest(request));
+      }
       // Both apps talk to this one — the driver portal is cross-origin, hence
       // the CORS wrapper.
       if (isTrackingMessagesRequest(url)) {
@@ -154,11 +186,17 @@ export default {
       if (isBiddingWorkspaceRequest(url)) {
         return handleBiddingWorkspaceRequest(request);
       }
+      if (isBiddingSearchRequest(url, request.method)) {
+        return handleBiddingSearchRequest(request);
+      }
+      if (isBiddingFieldOptionsRequest(url, request.method)) {
+        return handleBiddingFieldOptionsRequest(request);
+      }
       if (isGeocodeSearchRequest(url, request.method)) {
-        return handleGeocodeSearchRequest(url, request);
+        return withCors(request, await handleGeocodeSearchRequest(url, request));
       }
       if (isGoogleDirectionsRequest(url, request.method)) {
-        return handleGoogleDirectionsRequest(url, request);
+        return withCors(request, await handleGoogleDirectionsRequest(url, request));
       }
       if (isProfileRequest(url, request.method)) {
         return handleProfileRequest(request);
@@ -181,6 +219,14 @@ export default {
       if (isLoadsApiRequest(url)) {
         return handleLoadsApiRequest(request);
       }
+      // Ahead of the registry: inventory quantities are ledger-owned, so it
+      // cannot use the registry's store-whatever-arrives contract.
+      if (isInventoryApiRequest(url)) {
+        return handleInventoryApiRequest(request);
+      }
+      if (isTaxApiRequest(url, request.method)) {
+        return handleTaxApiRequest(request);
+      }
       // Every other tenant-scoped table, driven by the resource registry.
       if (isResourceApiRequest(url)) {
         return withCors(request, await handleResourceApiRequest(request));
@@ -190,6 +236,18 @@ export default {
       }
       if (isSettingsAiWriteRequest(url, request.method)) {
         return handleSettingsAiWriteRequest(request);
+      }
+      if (isSettingsChinaTaxWriteRequest(url, request.method)) {
+        return handleSettingsChinaTaxWriteRequest(request);
+      }
+      if (isSettingsResendWriteRequest(url, request.method)) {
+        return handleSettingsResendWriteRequest(request);
+      }
+      if (isSettingsResendTestRequest(url, request.method)) {
+        return handleSettingsResendTestRequest(request);
+      }
+      if (isDriverLocationDigestRequest(url, request.method)) {
+        return handleDriverLocationDigestRequest(request);
       }
       if (isAiStatusRequest(url, request.method)) {
         return handleAiStatusRequest(request);
@@ -230,5 +288,16 @@ export default {
       console.error(error);
       return brandedErrorResponse();
     }
+  },
+  async scheduled(_event: unknown, env: unknown, ctx: { waitUntil: (p: Promise<unknown>) => void }) {
+    captureServerEnv(env);
+    ctx.waitUntil(
+      runDriverLocationDigests().catch((err) => {
+        console.error(
+          "[driver-location-digest] scheduled run failed",
+          err instanceof Error ? err.message : err,
+        );
+      }),
+    );
   },
 };

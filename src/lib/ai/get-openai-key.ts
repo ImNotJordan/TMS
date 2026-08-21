@@ -8,8 +8,8 @@ import {
   tryVerifiedIdClaims,
 } from "@/lib/ai/cognito-request-credentials";
 import { getAiDynamoClient, getWorkspaceSettingsTable } from "@/lib/ai/server-aws";
-import { OPENAI_SECRET_SECTION, SECRETS_SCOPE } from "@/lib/ai/settings-scopes";
-import { GLOBAL_SETTINGS_SCOPE } from "@/lib/workspace-settings-store";
+import { OPENAI_SECRET_SECTION, companySecretKey } from "@/lib/ai/settings-scopes";
+import { COMPANY_ID_CLAIM } from "@/lib/tenant/server-tenant-context";
 
 const ALLOWED_MODELS = new Set(["gpt-4o-mini", "gpt-4o"]);
 
@@ -27,23 +27,13 @@ export type OpenAiConfigMiss =
 
 export type OpenAiConfigResult = ({ status: "ok" } & ConnectedOpenAiConfig) | OpenAiConfigMiss;
 
-type IntegrationsRow = {
-  data?: {
-    ai?: {
-      enabled?: boolean;
-      apiKey?: string;
-      model?: string;
-    };
-  };
-};
-
 type ConfigCacheEntry = {
   result: OpenAiConfigResult;
   expiresAtMs: number;
 };
 
-/** Workspace integrations are global — one hot cache avoids GetItem stampede. */
-let integrationsCache: ConfigCacheEntry | null = null;
+/** Per-company hot cache. A single workspace cache was a cross-tenant leak. */
+const integrationsCache = new Map<string, ConfigCacheEntry>();
 
 function normalizeModel(raw: string | undefined): string {
   const model = (raw ?? "").trim() || DEFAULT_AI_MODEL;
@@ -86,35 +76,22 @@ async function getRow(
 }
 
 /**
- * Load the workspace OpenAI key.
+ * Load this company's OpenAI key.
  *
- * Reads the server-only `secrets` partition first. Falls back to the legacy
- * browser-readable `global/integrations` row so AI keeps working on
- * installations that have not migrated yet — with a warning, because that row
- * is readable by every signed-in browser and the key in it should be treated as
- * disclosed. Migrate by re-saving the key in Settings → Integrations.
+ * Reads only `<companyId>#openai` under `secrets`. The unscoped `openai` row
+ * and the browser-readable `global/integrations` row are leftover data — using
+ * either as a fallback would give every tenant the first key that was ever
+ * saved.
  */
-async function loadIntegrationsFromDynamo(request: Request): Promise<OpenAiConfigResult> {
-  const secret = await getRow(request, SECRETS_SCOPE, OPENAI_SECRET_SECTION);
-  let apiKey = typeof secret?.apiKey === "string" ? secret.apiKey.trim() : "";
-  let model = typeof secret?.model === "string" ? secret.model : undefined;
-  let enabledFlag = secret?.enabled;
-
-  if (!apiKey) {
-    const legacy = (await getRow(request, GLOBAL_SETTINGS_SCOPE, "integrations")) as {
-      ai?: { apiKey?: unknown; model?: unknown; enabled?: unknown };
-    } | null;
-    const legacyKey = typeof legacy?.ai?.apiKey === "string" ? legacy.ai.apiKey.trim() : "";
-    if (legacyKey) {
-      console.warn(
-        "[ai] using OpenAI key from the legacy browser-readable settings row — " +
-          "re-save it in Settings → Integrations to move it server-side, and rotate it",
-      );
-      apiKey = legacyKey;
-      model = typeof legacy?.ai?.model === "string" ? legacy.ai.model : model;
-      enabledFlag = legacy?.ai?.enabled;
-    }
-  }
+async function loadIntegrationsFromDynamo(
+  request: Request,
+  companyId: string,
+): Promise<OpenAiConfigResult> {
+  const secretKey = companySecretKey(companyId, OPENAI_SECRET_SECTION);
+  const secret = await getRow(request, secretKey.scope, secretKey.section);
+  const apiKey = typeof secret?.apiKey === "string" ? secret.apiKey.trim() : "";
+  const model = typeof secret?.model === "string" ? secret.model : undefined;
+  const enabledFlag = secret?.enabled;
 
   // `enabled` defaults to true when a key is present — an admin who saved a key
   // meant to turn it on.
@@ -162,18 +139,28 @@ export async function getConnectedOpenAiConfig(
     }
   }
 
+  const rawCompany = claims[COMPANY_ID_CLAIM];
+  const companyId = typeof rawCompany === "string" ? rawCompany.trim() : "";
+  if (!companyId) {
+    return {
+      status: "not_connected",
+      message: "Connect your OpenAI key in Settings → Integrations to use Logistics AI.",
+    };
+  }
+
   const now = Date.now();
-  if (!options?.bypassCache && integrationsCache && integrationsCache.expiresAtMs > now) {
-    return integrationsCache.result;
+  const cached = integrationsCache.get(companyId);
+  if (!options?.bypassCache && cached && cached.expiresAtMs > now) {
+    return cached.result;
   }
 
   try {
-    const result = await loadIntegrationsFromDynamo(request);
+    const result = await loadIntegrationsFromDynamo(request, companyId);
     if (result.status === "ok" || result.status === "not_connected") {
-      integrationsCache = {
+      integrationsCache.set(companyId, {
         result,
         expiresAtMs: now + ASSISTANT_CONFIG_CACHE_TTL_MS,
-      };
+      });
     }
     return result;
   } catch (err) {
@@ -191,8 +178,12 @@ export async function getConnectedOpenAiConfig(
   }
 }
 
-export function invalidateOpenAiConfigCache() {
-  integrationsCache = null;
+export function invalidateOpenAiConfigCache(companyId?: string) {
+  if (companyId?.trim()) {
+    integrationsCache.delete(companyId.trim());
+    return;
+  }
+  integrationsCache.clear();
 }
 
 /** Public status only — never includes the API key. */

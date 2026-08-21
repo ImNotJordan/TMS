@@ -113,7 +113,11 @@ async function listPool(): Promise<AdminDirectoryUser[]> {
 
   do {
     const out = await client.send(
-      new ListUsersCommand({ UserPoolId: userPoolId, PaginationToken: paginationToken, Limit: PAGE_LIMIT }),
+      new ListUsersCommand({
+        UserPoolId: userPoolId,
+        PaginationToken: paginationToken,
+        Limit: PAGE_LIMIT,
+      }),
     );
     for (const user of out.Users ?? []) {
       const entry = baseFromCognito(user);

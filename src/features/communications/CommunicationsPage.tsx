@@ -22,12 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -45,13 +40,8 @@ import { ContextPanel, ThreadHeader, VoiceCallPanel } from "./inbox/ContextPanel
 import { MessageThread } from "./inbox/MessageThread";
 import { appendAuditEvent } from "./lib/communications-store";
 import { KeywordRulesTab } from "./rules/KeywordRulesTab";
-import type {
-  ChannelId,
-  Conversation,
-  GuardResult,
-  MessageLink,
-  TranslationRecord,
-} from "./types";
+import type { ChannelId, Conversation, GuardResult, MessageLink, TranslationRecord } from "./types";
+import { t } from "@/lib/i18n/t";
 
 function resolveLink(conversation: Conversation | null): MessageLink | null {
   if (!conversation) return null;
@@ -89,7 +79,9 @@ function Metric({
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {label}
           </div>
-          <span className={cn("flex h-7 w-7 items-center justify-center rounded-md", toneStat[tone])}>
+          <span
+            className={cn("flex h-7 w-7 items-center justify-center rounded-md", toneStat[tone])}
+          >
             <Icon className="h-3.5 w-3.5" />
           </span>
         </div>
@@ -101,8 +93,13 @@ function Metric({
 
 export function CommunicationsPage() {
   const access = useCommsAccess();
-  const { channels, byChannel, allExternalDisconnected, aiConnected, isLoading: channelsLoading } =
-    useChannelAvailability();
+  const {
+    channels,
+    byChannel,
+    allExternalDisconnected,
+    aiConnected,
+    isLoading: channelsLoading,
+  } = useChannelAvailability();
   const [tab, setTab] = React.useState("inbox");
   const [channelFilter, setChannelFilter] = React.useState<ConversationFilter>("all");
   const [search, setSearch] = React.useState("");
@@ -180,9 +177,7 @@ export function CommunicationsPage() {
     : undefined;
   const dnc = conversation
     ? data.dncEntries.find(
-        (e) =>
-          e.contactId === conversation.contactId ||
-          e.address === conversation.contactId,
+        (e) => e.contactId === conversation.contactId || e.address === conversation.contactId,
       )
     : undefined;
 
@@ -193,10 +188,7 @@ export function CommunicationsPage() {
     setAckConsent(false);
   };
 
-  const handleSend = async (opts: {
-    translateTo?: string;
-    translation?: TranslationRecord;
-  }) => {
+  const handleSend = async (opts: { translateTo?: string; translation?: TranslationRecord }) => {
     if (!conversation) return;
     const link = resolveLink(conversation);
     if (!link) {
@@ -220,11 +212,7 @@ export function CommunicationsPage() {
       toAddress: conversation.contactId,
       contactId: conversation.contactId,
       acknowledgeUnknownConsent: ackConsent,
-      translation:
-        translation ??
-        (opts.translateTo
-          ? undefined
-          : undefined),
+      translation: translation ?? (opts.translateTo ? undefined : undefined),
       isAiGenerated: isAiDraft,
     });
 
@@ -293,14 +281,18 @@ export function CommunicationsPage() {
         body: JSON.stringify({
           persona: data.agentConfig.persona,
           tone: data.agentConfig.tone,
-          threadSummary: messages.map((m) => m.body).join("\n").slice(0, 4000),
+          threadSummary: messages
+            .map((m) => m.body)
+            .join("\n")
+            .slice(0, 4000),
           latestInbound: latestInbound?.body ?? "",
           channel: conversation.primaryChannel,
         }),
       });
-      const payload = (await response.json().catch(() => null)) as
-        | { draft?: string; error?: string }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        draft?: string;
+        error?: string;
+      } | null;
       if (!response.ok) {
         throw new Error(payload?.error ?? "Could not draft a reply.");
       }
@@ -322,155 +314,161 @@ export function CommunicationsPage() {
     }[] = [{ id: "inbox", label: "Inbox", icon: Inbox }];
     if (access.canViewAgent) items.push({ id: "agent", label: "AI Agent", icon: Bot });
     if (access.canEditRules) items.push({ id: "rules", label: "Keyword Rules", icon: Settings2 });
-    if (access.canViewCompliance) items.push({ id: "compliance", label: "Compliance", icon: Scale });
+    if (access.canViewCompliance)
+      items.push({ id: "compliance", label: "Compliance", icon: Scale });
     return items;
   }, [access]);
 
-  const threadPane = !selectedId || !conversation ? (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-        <MessageSquare className="h-5 w-5" />
-      </span>
-      <div className="space-y-1">
-        <p className="text-sm font-semibold text-foreground">Select a conversation</p>
-        <p className="max-w-xs text-sm text-muted-foreground">
-          Choose a thread from the list, or start a new conversation to message a contact or load.
-        </p>
-      </div>
-      <Button type="button" size="sm" className="gap-1.5" onClick={() => setComposeOpen(true)}>
-        <Plus className="h-4 w-4" />
-        New conversation
-      </Button>
-    </div>
-  ) : (
-    <>
-      <div className="shrink-0 border-b border-border/70 px-4 py-3 sm:px-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 lg:hidden">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="-ml-2 h-8 gap-1.5 px-2 text-muted-foreground"
-                onClick={() => setMobileShowThread(false)}
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back to inbox
-              </Button>
-            </div>
-            <ThreadHeader conversation={conversation} />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 xl:hidden"
-            onClick={() => setContextOpen(true)}
-          >
-            Context
-          </Button>
+  const threadPane =
+    !selectedId || !conversation ? (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+          <MessageSquare className="h-5 w-5" />
+        </span>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-foreground">{t("Select a conversation")}</p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            {t(
+              "Choose a thread from the list, or start a new conversation to message a contact or load.",
+            )}
+          </p>
         </div>
+        <Button type="button" size="sm" className="gap-1.5" onClick={() => setComposeOpen(true)}>
+          <Plus className="h-4 w-4" />
+          {t("New conversation")}
+        </Button>
       </div>
-      <ScrollRegion
-        id="comms-thread"
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5"
-      >
-        <MessageThread
-          messages={messages}
-          isLoading={isLoading}
-          onRetry={(message) => {
-            void retry(message, conversation.contactId);
-          }}
-        />
-      </ScrollRegion>
-      <div className="shrink-0 border-t border-border/70 bg-card/80 px-4 py-3 sm:px-5">
-        {composerChannel === "voice" ? (
-          <div className="mb-3">
-            <VoiceCallPanel
-              available={Boolean(byChannel.get("voice")?.available)}
-              reason={byChannel.get("voice")?.reason}
-              onCall={() => toast.message("Call session started (click-to-call).")}
-            />
+    ) : (
+      <>
+        <div className="shrink-0 border-b border-border/70 px-4 py-3 sm:px-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 lg:hidden">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-2 h-8 gap-1.5 px-2 text-muted-foreground"
+                  onClick={() => setMobileShowThread(false)}
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  {t("Back to inbox")}
+                </Button>
+              </div>
+              <ThreadHeader conversation={conversation} />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 xl:hidden"
+              onClick={() => setContextOpen(true)}
+            >
+              {t("Context")}
+            </Button>
           </div>
-        ) : null}
-        <Composer
-          channel={composerChannel}
-          onChannelChange={setComposerChannel}
-          body={composerBody}
-          onBodyChange={(v) => {
-            setComposerBody(v);
-            setIsAiDraft(false);
-          }}
-          link={resolveLink(conversation)}
-          guardNotice={guardNotice}
-          onAcknowledgeConsent={() => {
-            setAckConsent(true);
-            setGuardNotice(null);
-            void handleSend({});
-          }}
-          onRecordConsent={() => {
-            void (async () => {
-              let next = {
-                ...data,
-                consentRecords: [
-                  {
-                    id: `consent-${crypto.randomUUID()}`,
-                    contactId: conversation.contactId,
-                    channel: composerChannel,
-                    state: "granted" as const,
-                    basis: "explicit-optin" as const,
-                    capturedAt: new Date().toISOString(),
-                    capturedBy: access.userId ?? "ops",
-                  },
-                  ...data.consentRecords,
-                ],
-              };
-              next = appendAuditEvent(next, {
-                actorId: access.userId ?? "ops",
-                action: "consent.recorded",
-                targetType: "consent",
-                targetId: conversation.contactId,
-                metadata: { channel: composerChannel },
-              });
-              await persist(next);
+        </div>
+        <ScrollRegion
+          id="comms-thread"
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5"
+        >
+          <MessageThread
+            messages={messages}
+            isLoading={isLoading}
+            onRetry={(message) => {
+              void retry(message, conversation.contactId);
+            }}
+          />
+        </ScrollRegion>
+        <div className="shrink-0 border-t border-border/70 bg-card/80 px-4 py-3 sm:px-5">
+          {composerChannel === "voice" ? (
+            <div className="mb-3">
+              <VoiceCallPanel
+                available={Boolean(byChannel.get("voice")?.available)}
+                reason={byChannel.get("voice")?.reason}
+                onCall={() => toast.message("Call session started (click-to-call).")}
+              />
+            </div>
+          ) : null}
+          <Composer
+            channel={composerChannel}
+            onChannelChange={setComposerChannel}
+            body={composerBody}
+            onBodyChange={(v) => {
+              setComposerBody(v);
+              setIsAiDraft(false);
+            }}
+            link={resolveLink(conversation)}
+            guardNotice={guardNotice}
+            onAcknowledgeConsent={() => {
+              setAckConsent(true);
               setGuardNotice(null);
-              toast.success("Consent recorded.");
-            })();
-          }}
-          onSend={handleSend}
-          sending={pending}
-          isAiDraft={isAiDraft}
-        />
-      </div>
-    </>
-  );
+              void handleSend({});
+            }}
+            onRecordConsent={() => {
+              void (async () => {
+                let next = {
+                  ...data,
+                  consentRecords: [
+                    {
+                      id: `consent-${crypto.randomUUID()}`,
+                      contactId: conversation.contactId,
+                      channel: composerChannel,
+                      state: "granted" as const,
+                      basis: "explicit-optin" as const,
+                      capturedAt: new Date().toISOString(),
+                      capturedBy: access.userId ?? "ops",
+                    },
+                    ...data.consentRecords,
+                  ],
+                };
+                next = appendAuditEvent(next, {
+                  actorId: access.userId ?? "ops",
+                  action: "consent.recorded",
+                  targetType: "consent",
+                  targetId: conversation.contactId,
+                  metadata: { channel: composerChannel },
+                });
+                await persist(next);
+                setGuardNotice(null);
+                toast.success("Consent recorded.");
+              })();
+            }}
+            onSend={handleSend}
+            sending={pending}
+            isAiDraft={isAiDraft}
+          />
+        </div>
+      </>
+    );
 
   return (
     <div>
       <PageHeader
-        title="Communications"
-        description="Omnichannel inbox for email, SMS, voice, and chat — with AI agent, keyword rules, and compliance."
+        title={t("Communications")}
+        description={t(
+          "Omnichannel inbox for email, SMS, voice, and chat — with AI agent, keyword rules, and compliance.",
+        )}
         actions={
           <Button size="sm" className="gap-1.5" onClick={() => setComposeOpen(true)}>
             <Plus className="h-4 w-4" />
-            New conversation
+            {t("New conversation")}
           </Button>
         }
       />
 
       <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric label="Open Threads" value={String(metrics.open)} tone="info" icon={Inbox} />
-          <Metric label="Unread" value={String(metrics.unread)} tone="warning" icon={Mail} />
+          <Metric label={t("Open Threads")} value={String(metrics.open)} tone="info" icon={Inbox} />
+          <Metric label={t("Unread")} value={String(metrics.unread)} tone="warning" icon={Mail} />
           <Metric
-            label="AI Handled"
+            label={t("AI Handled")}
             value={String(metrics.aiHandled)}
             tone="success"
             icon={Sparkles}
           />
           <Metric
-            label="Critical Flags"
+            label={t("Critical Flags")}
             value={String(metrics.critical)}
             tone={metrics.critical > 0 ? "destructive" : "default"}
             icon={AlertTriangle}
@@ -504,14 +502,14 @@ export function CommunicationsPage() {
             {allExternalDisconnected ? (
               <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
                 <div>
-                  <p className="font-semibold">External channels disconnected</p>
+                  <p className="font-semibold">{t("External channels disconnected")}</p>
                   <p className="mt-0.5 text-xs opacity-90">
-                    Email, SMS, and voice need provider connections. Chat still works.
+                    {t("Email, SMS, and voice need provider connections. Chat still works.")}
                   </p>
                 </div>
                 <Button variant="outline" size="sm" asChild className="shrink-0 border-warning/30">
                   <Link to="/settings" search={{ category: "integrations" } as never}>
-                    Open Integrations
+                    {t("Open Integrations")}
                   </Link>
                 </Button>
               </div>
@@ -527,7 +525,9 @@ export function CommunicationsPage() {
               >
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-foreground">Conversations</div>
+                    <div className="text-sm font-semibold text-foreground">
+                      {t("Conversations")}
+                    </div>
                     <Badge variant="outline">{conversations.length}</Badge>
                   </div>
                   <ConversationFilters
@@ -561,19 +561,14 @@ export function CommunicationsPage() {
                   !mobileShowThread || !selectedId ? "hidden xl:flex" : "flex",
                 )}
               >
-                <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-                  {threadPane}
-                </CardContent>
+                <CardContent className="flex min-h-0 flex-1 flex-col p-0">{threadPane}</CardContent>
               </Card>
 
               {/* Context */}
               <Card className="hidden min-h-0 border-border/70 shadow-sm xl:flex xl:flex-col">
                 <CardContent className="flex min-h-0 flex-1 flex-col p-4">
-                  <div className="mb-3 text-sm font-semibold text-foreground">Context</div>
-                  <ScrollRegion
-                    id="comms-context"
-                    className="min-h-0 flex-1 overflow-y-auto"
-                  >
+                  <div className="mb-3 text-sm font-semibold text-foreground">{t("Context")}</div>
+                  <ScrollRegion id="comms-context" className="min-h-0 flex-1 overflow-y-auto">
                     <ContextPanel
                       conversation={conversation}
                       messages={messages}
@@ -613,7 +608,7 @@ export function CommunicationsPage() {
       <Sheet open={contextOpen} onOpenChange={setContextOpen}>
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Context</SheetTitle>
+            <SheetTitle>{t("Context")}</SheetTitle>
           </SheetHeader>
           <div className="mt-4">
             <ContextPanel
@@ -633,39 +628,43 @@ export function CommunicationsPage() {
       <Sheet open={composeOpen} onOpenChange={setComposeOpen}>
         <SheetContent>
           <SheetHeader>
-            <SheetTitle>New conversation</SheetTitle>
+            <SheetTitle>{t("New conversation")}</SheetTitle>
           </SheetHeader>
           <div className="mt-4 space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="comms-new-subject">Subject</Label>
+              <Label htmlFor="comms-new-subject">{t("Subject")}</Label>
               <Input
                 id="comms-new-subject"
                 value={newSubject}
                 onChange={(e) => setNewSubject(e.target.value)}
-                placeholder="e.g. Pickup window confirmation"
+                placeholder={t("e.g. Pickup window confirmation")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="comms-new-contact">Contact id</Label>
+              <Label htmlFor="comms-new-contact">{t("Contact id")}</Label>
               <Input
                 id="comms-new-contact"
                 value={newContactId}
                 onChange={(e) => setNewContactId(e.target.value)}
-                placeholder="Contact or phone / email address"
+                placeholder={t("Contact or phone / email address")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="comms-new-load">Load id (optional)</Label>
+              <Label htmlFor="comms-new-load">{t("Load id (optional)")}</Label>
               <Input
                 id="comms-new-load"
                 value={newLoadId}
                 onChange={(e) => setNewLoadId(e.target.value)}
-                placeholder="Link to a load"
+                placeholder={t("Link to a load")}
               />
             </div>
-            <Button type="button" className="w-full gap-1.5" onClick={() => void createConversation()}>
+            <Button
+              type="button"
+              className="w-full gap-1.5"
+              onClick={() => void createConversation()}
+            >
               <Plus className="h-4 w-4" />
-              Start conversation
+              {t("Start conversation")}
             </Button>
           </div>
         </SheetContent>

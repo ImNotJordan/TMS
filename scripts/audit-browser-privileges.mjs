@@ -32,7 +32,10 @@ function parseEnvFile(path) {
       if (!t || t.startsWith("#")) continue;
       const eq = t.indexOf("=");
       if (eq === -1) continue;
-      out[t.slice(0, eq).trim()] = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      out[t.slice(0, eq).trim()] = t
+        .slice(eq + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "");
     }
     return out;
   } catch {
@@ -149,7 +152,11 @@ try {
       UserAttributes: [{ Name: "custom:__audit_probe_nonexistent", Value: "1" }],
     }),
   );
-  record("CRITICAL", "AdminUpdateUserAttributes is permitted from the browser", "unexpectedly accepted");
+  record(
+    "CRITICAL",
+    "AdminUpdateUserAttributes is permitted from the browser",
+    "unexpectedly accepted",
+  );
 } catch (err) {
   if (err.name === "AccessDeniedException") {
     record("OK", "AdminUpdateUserAttributes is DENIED from the browser", "");

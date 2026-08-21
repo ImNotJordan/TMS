@@ -5,6 +5,7 @@ import { Lock, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRbac } from "@/hooks/use-rbac";
 import { moduleForPathname } from "@/lib/rbac";
+import { t } from "@/lib/i18n/t";
 
 /**
  * Blocks deep-links to modules the user cannot view.
@@ -37,7 +38,7 @@ export function ModuleAccessGate({ children }: { children: React.ReactNode }) {
             <ShieldOff className="h-6 w-6" />
           </div>
           <h1 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
-            Access restricted
+            {t("Access restricted")}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Your role
@@ -47,17 +48,17 @@ export function ModuleAccessGate({ children }: { children: React.ReactNode }) {
                 (<span className="font-medium text-foreground">{String(permissions.role)}</span>)
               </>
             ) : null}{" "}
-            does not include <span className="font-medium text-foreground">{moduleName}</span>.
-            Ask an admin to update Role &amp; Access / Module Permissions.
+            does not include <span className="font-medium text-foreground">{moduleName}</span>. Ask
+            an admin to update Role &amp; Access / Module Permissions.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Button asChild size="sm">
-              <Link to={safeHome}>Go to available workspace</Link>
+              <Link to={safeHome}>{t("Go to available workspace")}</Link>
             </Button>
             <Button asChild size="sm" variant="outline">
               <Link to="/profile">
                 <Lock className="h-3.5 w-3.5" />
-                Profile
+                {t("Profile")}
               </Link>
             </Button>
           </div>

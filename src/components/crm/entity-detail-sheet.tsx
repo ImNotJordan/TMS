@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import type { CrmActivityEntityType } from "@/lib/crm-store";
 import { ActivityTimeline } from "./activity-timeline";
+import { t } from "@/lib/i18n/t";
 
 export function EntityDetailSheet({
   open,
@@ -47,7 +48,7 @@ export function EntityDetailSheet({
           </div>
 
           <div className="mt-6">
-            <h3 className="mb-3 text-sm font-semibold text-foreground">Activity timeline</h3>
+            <h3 className="mb-3 text-sm font-semibold text-foreground">{t("Activity timeline")}</h3>
             <ActivityTimeline entityType={entityType} entityId={entityId} />
           </div>
         </div>

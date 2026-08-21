@@ -2,6 +2,7 @@ import * as React from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 
 import { Loader2 } from "lucide-react";
+import { t } from "@/lib/i18n/t";
 
 type LatLng = { lat: number; lng: number };
 
@@ -242,10 +243,10 @@ export function TrackingGoogleMap({
 
   return (
     <div className="relative h-[min(420px,52vh)] w-full">
-      <div ref={containerRef} className="h-full w-full" aria-label="Tracking route map" />
+      <div ref={containerRef} className="h-full w-full" aria-label={t("Tracking route map")} />
       {mapError ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90 px-4 text-center">
-          <p className="text-sm font-medium text-destructive">Google Maps failed to load</p>
+          <p className="text-sm font-medium text-destructive">{t("Google Maps failed to load")}</p>
           <p className="text-xs text-muted-foreground">{mapError}</p>
         </div>
       ) : null}

@@ -29,6 +29,7 @@ export const ROLES = [
   "Broker",
   "Dispatcher",
   "Driver",
+  "Client",
   "Accounting",
   "Sales",
   "Marketing",
@@ -66,6 +67,7 @@ export const MODULES = [
   "Quotes",
   "Loads",
   "TruckBoard",
+  "Inventory",
   "Analytics",
   "Carriers / Brokers",
   "Tracking",
@@ -101,6 +103,8 @@ export const FIELD_PERMISSIONS = [
   "Can Edit Carrier Compliance",
   "Can Access Risk Models",
   "Can Manage Integrations",
+  "Can View Inventory Valuation",
+  "Can Post Inventory Adjustments",
 ] as const;
 export type FieldPermission = (typeof FIELD_PERMISSIONS)[number];
 
@@ -149,6 +153,7 @@ export const ROLE_STORAGE_KEYS = {
   Broker: "broker",
   Dispatcher: "dispatch",
   Driver: "driver",
+  Client: "client",
   Accounting: "accounting",
   Sales: "sales",
   Marketing: "marketing",
@@ -177,6 +182,9 @@ export function roleToStorageKey(role: string): string {
   if (normalized === "admin" || normalized.endsWith("_admin")) return ROLE_STORAGE_KEYS.Admin;
   if (normalized.includes("dispatch")) return ROLE_STORAGE_KEYS.Dispatcher;
   if (normalized.includes("driver")) return ROLE_STORAGE_KEYS.Driver;
+  if (normalized.includes("client") || normalized.includes("customer")) {
+    return ROLE_STORAGE_KEYS.Client;
+  }
   if (normalized.includes("account")) return ROLE_STORAGE_KEYS.Accounting;
   if (normalized.includes("sales")) return ROLE_STORAGE_KEYS.Sales;
   if (normalized.includes("market")) return ROLE_STORAGE_KEYS.Marketing;
@@ -225,6 +233,9 @@ export function normalizeRole(value: string | undefined): Role {
     return "Dispatcher";
   }
   if (normalized === "driver" || normalized.includes("driver")) return "Driver";
+  if (normalized === "client" || normalized.includes("client") || normalized.includes("customer")) {
+    return "Client";
+  }
   if (normalized === "accounting" || normalized.includes("account")) return "Accounting";
   if (normalized === "sales" || normalized.includes("sales")) return "Sales";
   if (normalized === "marketing" || normalized.includes("market")) return "Marketing";

@@ -4,7 +4,7 @@ import type {
   LeverageLoad,
   SearchCriteria,
   SearchOptions,
-} from "./bidding-data";
+} from "./bidding-aggregate";
 
 const STORAGE_PREFIX = "titan-freight:bidding-page:";
 
@@ -15,7 +15,7 @@ export type BiddingSearchSessionCache = {
   results: HistoricalResultRow[];
   similarActiveLoads: LeverageLoad[];
   backhaulCandidates: BackhaulCandidate[];
-  loadsFingerprint: string;
+  loadsConsidered: number;
   cachedAt: string;
 };
 
@@ -90,6 +90,25 @@ export function clearBiddingPageCache(workspaceId: string): void {
   if (!canUseSessionStorage()) return;
   try {
     sessionStorage.removeItem(storageKey(workspaceId));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Drop every cached search, for every workspace in this tab.
+ *
+ * Called on sign-out. These entries hold lane pricing, buy rates and margins;
+ * `clearBiddingPageCache` needed a workspace id nobody had at sign-out time, so
+ * in practice nothing cleared them and they outlived the session.
+ */
+export function clearAllBiddingPageCaches(): void {
+  memoryByWorkspace.clear();
+  if (!canUseSessionStorage()) return;
+  try {
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith(STORAGE_PREFIX)) sessionStorage.removeItem(key);
+    }
   } catch {
     // ignore
   }

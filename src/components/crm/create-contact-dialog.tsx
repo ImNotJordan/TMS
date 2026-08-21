@@ -16,6 +16,7 @@ import { FancySelect, type FancySelectOption } from "@/components/loads/fancy-se
 import { useAuth } from "@/lib/auth";
 import { createCrmContact, type CrmAccountRecord } from "@/lib/crm-store";
 import { Card, FieldShell, GridSection, SectionTitle, generateCrmId } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
 export function CreateContactDialog({
   trigger,
@@ -36,7 +37,8 @@ export function CreateContactDialog({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
-  const setOpen = (next: boolean) => (isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next));
+  const setOpen = (next: boolean) =>
+    isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next);
 
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
@@ -68,7 +70,10 @@ export function CreateContactDialog({
     }
   }, [open, reset]);
 
-  const accountOptions: FancySelectOption[] = accounts.map((a) => ({ value: a.accountId, label: a.name }));
+  const accountOptions: FancySelectOption[] = accounts.map((a) => ({
+    value: a.accountId,
+    label: a.name,
+  }));
 
   const hasError = touched && (!firstName.trim() || !lastName.trim());
 
@@ -102,23 +107,27 @@ export function CreateContactDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="!max-w-2xl w-[94vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl">
-        <DialogTitle className="sr-only">Add Contact</DialogTitle>
-        <DialogDescription className="sr-only">Create a contact linked to an account.</DialogDescription>
+        <DialogTitle className="sr-only">{t("Add Contact")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("Create a contact linked to an account.")}
+        </DialogDescription>
         <div className="border-b border-border/70 px-6 py-4">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Add Contact</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            {t("Add Contact")}
+          </h2>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
           <Card>
-            <SectionTitle title="Contact" icon={User} />
+            <SectionTitle title={t("Contact")} icon={User} />
             <GridSection cols={2}>
-              <FieldShell label="First Name" required error={hasError && !firstName.trim()}>
+              <FieldShell label={t("First Name")} required error={hasError && !firstName.trim()}>
                 <Input
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   className={cn(hasError && !firstName.trim() && "border-destructive/60")}
                 />
               </FieldShell>
-              <FieldShell label="Last Name" required error={hasError && !lastName.trim()}>
+              <FieldShell label={t("Last Name")} required error={hasError && !lastName.trim()}>
                 <Input
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
@@ -127,29 +136,41 @@ export function CreateContactDialog({
               </FieldShell>
             </GridSection>
             <GridSection cols={2} className="mt-4">
-              <FieldShell label="Account" hint="Optional">
+              <FieldShell label={t("Account")} hint={t("Optional")}>
                 <FancySelect
                   value={accountId}
                   onChange={setAccountId}
                   options={accountOptions}
-                  placeholder="Link to an account"
-                  emptyMessage="No accounts yet"
+                  placeholder={t("Link to an account")}
+                  emptyMessage={t("No accounts yet")}
                 />
               </FieldShell>
-              <FieldShell label="Title">
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Logistics Manager" />
+              <FieldShell label={t("Title")}>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={t("Logistics Manager")}
+                />
               </FieldShell>
             </GridSection>
             <GridSection cols={2} className="mt-4">
-              <FieldShell label="Email">
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@acme.com" />
+              <FieldShell label={t("Email")}>
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="jane@acme.com"
+                />
               </FieldShell>
-              <FieldShell label="Phone">
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-0100" />
+              <FieldShell label={t("Phone")}>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="(555) 555-0100"
+                />
               </FieldShell>
             </GridSection>
             <div className="mt-4">
-              <FieldShell label="Notes">
+              <FieldShell label={t("Notes")}>
                 <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
               </FieldShell>
             </div>
@@ -166,10 +187,20 @@ export function CreateContactDialog({
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
-            <Button type="button" size="sm" disabled={submitting} onClick={handleSubmit} className="gap-1.5">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            <Button
+              type="button"
+              size="sm"
+              disabled={submitting}
+              onClick={handleSubmit}
+              className="gap-1.5"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
               Save Contact
             </Button>
           </div>

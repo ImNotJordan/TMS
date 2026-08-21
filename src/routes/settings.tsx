@@ -36,6 +36,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePageReady } from "@/components/page-load-gate";
+import { EmailListField } from "@/components/settings/email-list-field";
+import {
+  LanguageField,
+  LocalePreviewCard,
+  TimeZoneField,
+} from "@/components/settings/locale-fields";
+import { resolveLocale, resolveTimeZone } from "@/lib/i18n/locales";
+import { ConfigureResendDialog } from "@/components/integrations/configure-resend-dialog";
 import { FormCardSkeleton } from "@/components/page-skeleton";
 import {
   Select,
@@ -67,6 +75,7 @@ import {
 } from "@/features/integrations";
 import { useAppSettings } from "@/hooks/use-app-settings";
 import { useIntegrationsConfig } from "@/hooks/use-integrations-config";
+import { ensureAiConnectionStatus, readResendConnectionStatus } from "@/lib/integrations-config";
 import { fetchAdminAuditLogsCached } from "@/lib/admin-audit-store";
 import {
   ensureWorkspaceOpsSeeded,
@@ -80,6 +89,8 @@ import {
 import { isWorkspaceSettingsConfigured } from "@/lib/dynamodb";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { t } from "@/lib/i18n/t";
+import { RATE_CEILINGS, parseFuelRate, parsePercentRate } from "@/lib/tax/manual-rates";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -123,7 +134,12 @@ type SettingCategoryId =
 type SettingField = {
   key: string;
   label: string;
-  type: "text" | "select" | "toggle" | "textarea";
+  /**
+   * `timezone` and `locale` render dedicated controls rather than a bare select:
+   * a list of IANA ids tells you nothing about which one is 9am for the person
+   * you are calling. See components/settings/locale-fields.
+   */
+  type: "text" | "select" | "toggle" | "textarea" | "timezone" | "locale" | "email-list";
   placeholder?: string;
   required?: boolean;
   help?: string;
@@ -175,6 +191,25 @@ const DEFAULT_SETTINGS: Record<string, SettingValue> = {
   default_currency: "USD",
   default_date_format: "MM/DD/YYYY",
   default_time_format: "12-hour",
+
+  // Tax posture. Company-level facts, not per-load ones — see features/tax.
+  tax_cn_taxpayer_kind: "general",
+  tax_cn_service_kind: "transportation",
+  tax_cn_amounts_include_vat: true,
+  tax_cn_carrier_special_invoice: true,
+  tax_cn_surcharge_tier: "city",
+  tax_truck_mpg: "6.5",
+  tax_avalara_company_code: "DEFAULT",
+  tax_avalara_environment: "sandbox",
+  // Manual rates default to off and blank. A default rate would be a rate
+  // nobody looked up, presented as one somebody did.
+  tax_manual_rates_enabled: false,
+  tax_manual_us_transport_percent: "",
+  tax_manual_ifta_usd_per_gallon: "",
+  tax_manual_cn_vat_percent: "",
+  tax_manual_cn_surcharge_percent: "",
+  tax_manual_rate_source: "",
+  tax_manual_rate_as_of: "",
   default_distance_unit: "Miles",
   default_weight_unit: "LBS",
   default_temperature_unit: "Fahrenheit",
@@ -315,6 +350,9 @@ const DEFAULT_SETTINGS: Record<string, SettingValue> = {
   automation_rules_enabled: true,
   automation_default_audience: "Ops Managers",
   automation_schedule: "Always On",
+  driver_location_digest_enabled: false,
+  driver_location_digest_email: "",
+  driver_location_digest_cc: "",
 
   required_load_documents: "Rate Confirmation, Bill of Lading, POD",
   required_carrier_documents: "Insurance Certificate, W-9, Authority Letter",
@@ -386,15 +424,29 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
       {
         key: "default_time_zone",
         label: "Default Time Zone",
-        type: "select",
-        options: ["America/Chicago", "America/New_York", "America/Denver", "America/Los_Angeles"],
+        type: "timezone",
         required: true,
+      },
+      {
+        key: "default_language",
+        label: "Language",
+        type: "locale",
+        required: true,
+      },
+      {
+        key: "default_time_format",
+        label: "Time Format",
+        type: "select",
+        options: ["12-hour", "24-hour"],
+        help: "Applies wherever a time is shown.",
       },
       {
         key: "default_currency",
         label: "Default Currency",
         type: "select",
-        options: ["USD", "CAD", "MXN"],
+        // CNY joins the list alongside the language: a workspace that reports in
+        // Chinese and cannot express its own currency is half a feature.
+        options: ["USD", "CAD", "MXN", "CNY"],
         required: true,
       },
       {
@@ -420,6 +472,123 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
         label: "Default Landing Page After Login",
         type: "select",
         options: ["Dashboard", "Loads", "TruckBoard", "Tracking", "CRM & Sales"],
+      },
+    ],
+  },
+  {
+    id: "tax-estimation",
+    categoryId: "accounting",
+    title: "Tax Estimation",
+    description:
+      "Drives the per-load tax estimate. These are company-level facts, so they are set once here rather than on every load. The manual rates below fill the gaps the estimator will not guess at, and are applied to every load you build.",
+    scope: "Ops + Finance",
+    fields: [
+      {
+        key: "tax_cn_taxpayer_kind",
+        label: "China VAT Taxpayer Status",
+        type: "select",
+        options: ["general", "smallScale"],
+        help: "A small-scale taxpayer charges the 3% levy rate and can claim no input credit at all.",
+      },
+      {
+        key: "tax_cn_service_kind",
+        label: "China Service Classification",
+        type: "select",
+        options: ["transportation", "logisticsAuxiliary"],
+        help: "Carrier of record bills 9%; a freight forwarding agent bills 6%. Decided by the contract, not the activity.",
+      },
+      {
+        key: "tax_cn_amounts_include_vat",
+        label: "China Rates Are VAT-Inclusive",
+        type: "toggle",
+        help: "Chinese contracts are usually written tax-inclusive (含税). Getting this wrong misstates every figure by about 9%.",
+      },
+      {
+        key: "tax_cn_carrier_special_invoice",
+        label: "Carriers Issue Special VAT Invoices",
+        type: "toggle",
+        help: "Without a 增值税专用发票 there is no input credit, and a brokered load costs several times more in tax.",
+      },
+      {
+        key: "tax_cn_surcharge_tier",
+        label: "China Surcharge Tier",
+        type: "select",
+        options: ["city", "county", "other"],
+        help: "Urban construction tax is 7% in a city, 5% in a county, 1% elsewhere — set by where you are registered.",
+      },
+      {
+        key: "tax_truck_mpg",
+        label: "Fleet Average MPG",
+        type: "text",
+        help: "Turns lane miles into gallons for the US fuel tax estimate.",
+      },
+      // ---- Manual rates -------------------------------------------------
+      //
+      // The estimator refuses to invent a rate it cannot determine. These
+      // fields are how an operator who *has* looked one up gets it into every
+      // load, instead of retyping an amount on each. Rates, not amounts: an
+      // amount here would be the same tax on a $900 load and a $9,000 one.
+      {
+        key: "tax_manual_rates_enabled",
+        label: "Use Manual Tax Rates",
+        type: "toggle",
+        help: "Applies the rates below to every load. Turning this off leaves the numbers stored but unused.",
+      },
+      {
+        key: "tax_manual_us_transport_percent",
+        label: "US Transportation Tax Rate (%)",
+        type: "text",
+        placeholder: "8.25",
+        help: "Combined state and local rate for intrastate hauls. Enter a percent, so 8.25 for 8.25%. Only used where the estimator has no settled determination — it will not override a state that exempts freight, and never applies to interstate loads.",
+      },
+      {
+        key: "tax_manual_ifta_usd_per_gallon",
+        label: "IFTA Diesel Rate ($/gal)",
+        type: "text",
+        placeholder: "0.34",
+        help: "Replaces the national blended estimate. Published per-jurisdiction rates still win when available for the lane, and the load will say which was used.",
+      },
+      {
+        key: "tax_manual_cn_vat_percent",
+        label: "China VAT Rate Override (%)",
+        type: "text",
+        placeholder: "9",
+        help: "Replaces the statutory 9% / 6% / 3% pick for domestic Chinese movements. Leave blank to use the statute. Zero-rated cross-border movements are unaffected.",
+      },
+      {
+        key: "tax_manual_cn_surcharge_percent",
+        label: "China Surcharge Rate Override (%)",
+        type: "text",
+        placeholder: "12",
+        help: "Replaces the 12% / 10% / 6% tier total. Still levied on VAT payable, never on revenue.",
+      },
+      {
+        key: "tax_manual_rate_source",
+        label: "Manual Rate Source",
+        type: "text",
+        fullWidth: true,
+        placeholder: "Avalara rate lookup, 75201 — checked against state DOR table",
+        help: "Recorded next to every figure these rates produce. A rate with no source cannot be defended three months from now.",
+      },
+      {
+        key: "tax_manual_rate_as_of",
+        label: "Rates Verified As Of",
+        type: "text",
+        placeholder: "2026-08-20",
+        help: "YYYY-MM-DD. Shown with the rate so a stale figure is visible as stale.",
+      },
+      {
+        key: "tax_avalara_company_code",
+        label: "AvaTax Company Code",
+        type: "text",
+        help: "Non-secret. The account id and license key are entered under Integrations so they stay server-side.",
+      },
+      {
+        key: "tax_avalara_environment",
+        label: "AvaTax Environment",
+        type: "select",
+        options: ["sandbox", "production"],
+        help: "Sandbox until you have verified a real determination. Production touches a live filing account.",
       },
     ],
   },
@@ -834,12 +1003,40 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "automation-rules",
     categoryId: "automations",
     title: "Automation Rules",
-    description: "If-this-then-that workflow actions, schedules, and audiences.",
+    description:
+      "If-this-then-that workflow actions, schedules, and audiences. Resend reads the recipient emails on this page every time it sends — including the 12-hour driver location digest.",
     scope: "Ops + Finance",
     fields: [
       { key: "automation_rules_enabled", label: "Automation Rules Enabled", type: "toggle" },
-      { key: "automation_default_audience", label: "Default Audience", type: "text" },
+      {
+        key: "automation_default_audience",
+        label: "Default Audience",
+        type: "text",
+        help: "Role names for workflow rules (for example Ops Managers). Resend ignores this unless it contains real email addresses.",
+      },
       { key: "automation_schedule", label: "Schedule", type: "text" },
+      {
+        key: "driver_location_digest_enabled",
+        label: "Enable 12-hour driver location digest",
+        type: "toggle",
+        help: "When on, Resend emails the list below every 12 hours. The API key lives on Integrations.",
+      },
+      {
+        key: "driver_location_digest_email",
+        label: "Resend recipient emails",
+        type: "email-list",
+        fullWidth: true,
+        placeholder: "ops@yourcompany.com\ndispatch@yourcompany.com",
+        help: "Who Resend emails. Add or remove addresses here, then Save. Separate with commas or new lines.",
+      },
+      {
+        key: "driver_location_digest_cc",
+        label: "Additional Resend recipients",
+        type: "email-list",
+        fullWidth: true,
+        placeholder: "billing@yourcompany.com",
+        help: "Optional extras (managers, billing). Merged with the list above on every send.",
+      },
       {
         key: "automation_rule_examples",
         label: "Rule Definitions",
@@ -996,11 +1193,7 @@ function Page() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const category = params.get("category");
-    if (
-      category === "integrations" ||
-      category === "communications" ||
-      category === "general"
-    ) {
+    if (category === "integrations" || category === "communications" || category === "general") {
       setActiveCategory(category as SettingCategoryId);
     }
     const hash = window.location.hash.replace(/^#/, "");
@@ -1125,7 +1318,9 @@ function Page() {
       rule.id === id
         ? {
             ...rule,
-            status: (rule.status === "Active" ? "Paused" : "Active") as AutomationRuleRecord["status"],
+            status: (rule.status === "Active"
+              ? "Paused"
+              : "Active") as AutomationRuleRecord["status"],
             updatedAt: new Date().toISOString(),
           }
         : rule,
@@ -1144,7 +1339,9 @@ function Page() {
       wh.id === id
         ? {
             ...wh,
-            status: (wh.status === "Active" ? "Disabled" : "Active") as WebhookEndpointRecord["status"],
+            status: (wh.status === "Active"
+              ? "Disabled"
+              : "Active") as WebhookEndpointRecord["status"],
             updatedAt: new Date().toISOString(),
           }
         : wh,
@@ -1215,17 +1412,14 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="Settings Control Center"
-        description="Configure company preferences, workflows, integrations, automations, notifications, security, billing, and system defaults."
+        title={t("Settings Control Center")}
+        description={t(
+          "Configure company preferences, workflows, integrations, automations, notifications, security, billing, and system defaults.",
+        )}
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={handleExportSettings}
-            >
-              <Download className="h-4 w-4" /> Export Settings
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportSettings}>
+              <Download className="h-4 w-4" /> {t("Export Settings")}
             </Button>
             <Button
               variant="outline"
@@ -1233,7 +1427,7 @@ function Page() {
               className="gap-1.5"
               onClick={() => importInputRef.current?.click()}
             >
-              <Upload className="h-4 w-4" /> Import Settings
+              <Upload className="h-4 w-4" /> {t("Import Settings")}
             </Button>
             <input
               ref={importInputRef}
@@ -1266,8 +1460,8 @@ function Page() {
       <div className="grid gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)] lg:px-8">
         <Card className="h-fit border-border/70 shadow-sm lg:sticky lg:top-4">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Settings Navigation</CardTitle>
-            <CardDescription>Enterprise configuration modules</CardDescription>
+            <CardTitle className="text-base">{t("Settings Navigation")}</CardTitle>
+            <CardDescription>{t("Enterprise configuration modules")}</CardDescription>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="bg-success/15 text-success border-success/25">
                 Environment: {String(values.environment_label)}
@@ -1310,7 +1504,7 @@ function Page() {
                   className="pl-9"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search settings by field, module, or control"
+                  placeholder={t("Search settings by field, module, or control")}
                 />
               </div>
               <Badge variant={dirty ? "destructive" : "secondary"} className="h-8 px-3 py-1.5">
@@ -1331,8 +1525,9 @@ function Page() {
           {!workspaceReady ? (
             <Card className="border-border/70 shadow-sm">
               <CardContent className="py-3 text-sm text-muted-foreground">
-                Sign in and set <code className="text-xs">VITE_WORKSPACE_SETTINGS_TABLE_NAME</code> in{" "}
-                <code className="text-xs">.env</code> to save settings to DynamoDB for all users.
+                Sign in and set <code className="text-xs">VITE_WORKSPACE_SETTINGS_TABLE_NAME</code>{" "}
+                in <code className="text-xs">{t(".env")}</code> to save settings to DynamoDB for all
+                users.
               </CardContent>
             </Card>
           ) : null}
@@ -1345,7 +1540,7 @@ function Page() {
           ) : visibleSections.length === 0 ? (
             <Card className="border-border/70 shadow-sm">
               <CardContent className="py-14 text-center text-sm text-muted-foreground">
-                No settings matched your search in this category.
+                {t("No settings matched your search in this category.")}
               </CardContent>
             </Card>
           ) : (
@@ -1377,8 +1572,26 @@ function Page() {
                       value={values[field.key]}
                       disabled={settingsLoading || !workspaceReady}
                       onChange={(nextValue) => updateValue(field.key, nextValue)}
+                      // A mistyped rate is dropped rather than defaulted, which
+                      // is safe but silent — so the reason has to be on screen.
+                      problem={manualRateProblem(field.key, values[field.key])}
+                      // The two locale controls preview each other: the zone
+                      // picker formats its clocks in the chosen language, and the
+                      // language picker dates its samples in the chosen zone.
+                      contextLocale={String(values.default_language ?? "")}
+                      contextTimeZone={String(values.default_time_zone ?? "")}
                     />
                   ))}
+
+                  {section.id === "general-defaults" ? (
+                    <LocalePreviewCard
+                      locale={String(values.default_language ?? "")}
+                      timeZone={String(values.default_time_zone ?? "")}
+                      hourCycle={String(values.default_time_format ?? "")}
+                      currency={String(values.default_currency ?? "")}
+                      dirty={dirty}
+                    />
+                  ) : null}
                 </CardContent>
               </Card>
             ))
@@ -1391,22 +1604,22 @@ function Page() {
           {activeCategory === "automations" && (
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Automation Rules Table</CardTitle>
+                <CardTitle className="text-base">{t("Automation Rules Table")}</CardTitle>
                 <CardDescription>
-                  Trigger, condition, action, audience, and execution snapshot.
+                  {t("Trigger, condition, action, audience, and execution snapshot.")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Rule Name</TableHead>
-                      <TableHead>Trigger</TableHead>
-                      <TableHead>Condition</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Audience</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Last Run</TableHead>
+                      <TableHead>{t("Rule Name")}</TableHead>
+                      <TableHead>{t("Trigger")}</TableHead>
+                      <TableHead>{t("Condition")}</TableHead>
+                      <TableHead>{t("Action")}</TableHead>
+                      <TableHead>{t("Audience")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
+                      <TableHead>{t("Last Run")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1418,31 +1631,35 @@ function Page() {
                       </TableRow>
                     ) : automationRules.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
-                          No automation rules in WorkspaceSettings yet.
+                        <TableCell
+                          colSpan={7}
+                          className="text-center text-sm text-muted-foreground"
+                        >
+                          {t("No automation rules in WorkspaceSettings yet.")}
                         </TableCell>
                       </TableRow>
                     ) : (
                       automationRules.map((rule) => (
-                      <TableRow key={rule.id}>
-                        <TableCell className="font-medium">{rule.name}</TableCell>
-                        <TableCell>{rule.trigger}</TableCell>
-                        <TableCell>{rule.condition}</TableCell>
-                        <TableCell>{rule.action}</TableCell>
-                        <TableCell>{rule.audience}</TableCell>
-                        <TableCell>
-                          <button type="button" onClick={() => void toggleAutomationStatus(rule.id)}>
-                            <Badge variant={rule.status === "Active" ? "secondary" : "outline"}>
-                              {rule.status}
-                            </Badge>
-                          </button>
-                        </TableCell>
-                        <TableCell>
-                          {rule.lastRunAt
-                            ? new Date(rule.lastRunAt).toLocaleString()
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
+                        <TableRow key={rule.id}>
+                          <TableCell className="font-medium">{rule.name}</TableCell>
+                          <TableCell>{rule.trigger}</TableCell>
+                          <TableCell>{rule.condition}</TableCell>
+                          <TableCell>{rule.action}</TableCell>
+                          <TableCell>{rule.audience}</TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              onClick={() => void toggleAutomationStatus(rule.id)}
+                            >
+                              <Badge variant={rule.status === "Active" ? "secondary" : "outline"}>
+                                {rule.status}
+                              </Badge>
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            {rule.lastRunAt ? new Date(rule.lastRunAt).toLocaleString() : "—"}
+                          </TableCell>
+                        </TableRow>
                       ))
                     )}
                   </TableBody>
@@ -1454,9 +1671,9 @@ function Page() {
           {activeCategory === "apiwebhooks" && (
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Webhook Endpoints</CardTitle>
+                <CardTitle className="text-base">{t("Webhook Endpoints")}</CardTitle>
                 <CardDescription>
-                  Endpoint health and event subscriptions with test-webhook controls.
+                  {t("Endpoint health and event subscriptions with test-webhook controls.")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -1464,10 +1681,10 @@ function Page() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Endpoint</TableHead>
-                        <TableHead>Events</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>{t("Endpoint")}</TableHead>
+                        <TableHead>{t("Events")}</TableHead>
+                        <TableHead>{t("Status")}</TableHead>
+                        <TableHead className="text-right">{t("Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1479,8 +1696,11 @@ function Page() {
                         </TableRow>
                       ) : webhookEndpoints.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
-                            No webhooks in WorkspaceSettings yet.
+                          <TableCell
+                            colSpan={4}
+                            className="text-center text-sm text-muted-foreground"
+                          >
+                            {t("No webhooks in WorkspaceSettings yet.")}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -1518,7 +1738,7 @@ function Page() {
                                   })
                                 }
                               >
-                                <Webhook className="h-3.5 w-3.5" /> Test Webhook
+                                <Webhook className="h-3.5 w-3.5" /> {t("Test Webhook")}
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -1528,12 +1748,12 @@ function Page() {
                   </Table>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm">Create API Key</Button>
+                  <Button size="sm">{t("Create API Key")}</Button>
                   <Button variant="outline" size="sm">
-                    Revoke API Key
+                    {t("Revoke API Key")}
                   </Button>
                   <Button variant="outline" size="sm">
-                    Open Developer Docs
+                    {t("Open Developer Docs")}
                   </Button>
                 </div>
               </CardContent>
@@ -1543,9 +1763,9 @@ function Page() {
           {activeCategory === "importexport" && (
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Data Import / Export Actions</CardTitle>
+                <CardTitle className="text-base">{t("Data Import / Export Actions")}</CardTitle>
                 <CardDescription>
-                  Bulk import and export operations plus backup controls for admins.
+                  {t("Bulk import and export operations plus backup controls for admins.")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -1570,7 +1790,7 @@ function Page() {
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Supported file types: CSV, XLSX, PDF, JSON.
+                  {t("Supported file types: CSV, XLSX, PDF, JSON.")}
                 </p>
               </CardContent>
             </Card>
@@ -1579,20 +1799,22 @@ function Page() {
           {activeCategory === "systemlogs" && (
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">System Change Log</CardTitle>
+                <CardTitle className="text-base">{t("System Change Log")}</CardTitle>
                 <CardDescription>
-                  Recent configuration changes, warning events, and module-level audit detail.
+                  {t(
+                    "Recent configuration changes, warning events, and module-level audit detail.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date / Time</TableHead>
-                      <TableHead>Actor</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Module</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>{t("Date / Time")}</TableHead>
+                      <TableHead>{t("Actor")}</TableHead>
+                      <TableHead>{t("Action")}</TableHead>
+                      <TableHead>{t("Module")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1604,8 +1826,11 @@ function Page() {
                       </TableRow>
                     ) : systemLogs.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                          No admin audit events yet. Changes in Admin will appear here.
+                        <TableCell
+                          colSpan={5}
+                          className="text-center text-sm text-muted-foreground"
+                        >
+                          {t("No admin audit events yet. Changes in Admin will appear here.")}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -1631,23 +1856,25 @@ function Page() {
 
           <Card className="border-border/70 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Cross-module links</CardTitle>
+              <CardTitle className="text-base">{t("Cross-module links")}</CardTitle>
               <CardDescription>
-                Settings drive Accounting invoice prefixes, Admin company profile, and integrations.
+                {t(
+                  "Settings drive Accounting invoice prefixes, Admin company profile, and integrations.",
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" asChild>
-                <Link to="/accounting">Accounting</Link>
+                <Link to="/accounting">{t("Accounting")}</Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link to="/admin">Admin</Link>
+                <Link to="/admin">{t("Admin")}</Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link to="/communications">Communications</Link>
+                <Link to="/communications">{t("Communications")}</Link>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <Link to="/tracking">Tracking</Link>
+                <Link to="/tracking">{t("Tracking")}</Link>
               </Button>
             </CardContent>
           </Card>
@@ -1668,10 +1895,13 @@ function IntegrationsConnectionPanel({
     testingId,
     test,
     canTest,
+    refetch,
   } = useIntegrations(settingsValues);
   const { config, save, loading, saving, error } = useIntegrationsConfig();
   const [googleMapsOpen, setGoogleMapsOpen] = React.useState(false);
   const [aiOpen, setAiOpen] = React.useState(false);
+  const [resendOpen, setResendOpen] = React.useState(false);
+  const resend = readResendConnectionStatus();
 
   const handleConfigure = (id: IntegrationId) => {
     if (id === "google_maps") {
@@ -1682,25 +1912,32 @@ function IntegrationsConnectionPanel({
       setAiOpen(true);
       return;
     }
+    if (id === "resend") {
+      setResendOpen(true);
+      return;
+    }
     toast.message(
       `Configure ${INTEGRATION_PROVIDERS.find((p) => p.id === id)?.label} using the fields above.`,
     );
+  };
+
+  const handleResendSaved = () => {
+    void ensureAiConnectionStatus({ force: true }).then(() => refetch());
   };
 
   return (
     <>
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Integration Connection Status</CardTitle>
+          <CardTitle className="text-base">{t("Integration Connection Status")}</CardTitle>
           <CardDescription>
-            Connection health, sync recency, and test controls. Google Maps powers facility
-            autocomplete on Loads and TruckBoard and geocoding on Tracking maps.
+            {t(
+              "Connection health, sync recency, and test controls. Google Maps powers facility autocomplete on Loads and TruckBoard. Resend sends the 12-hour driver location digest.",
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {error ? (
-            <p className="col-span-full text-sm text-destructive">{error}</p>
-          ) : null}
+          {error ? <p className="col-span-full text-sm text-destructive">{error}</p> : null}
           {loading || isLoading
             ? Array.from({ length: 6 }).map((_, i) => (
                 <div key={`skel-${i}`} className="rounded-md border border-border/70 p-3">
@@ -1757,7 +1994,7 @@ function IntegrationsConnectionPanel({
                       disabled={loading}
                       onClick={() => handleConfigure(toCanonicalIntegrationId(integration.id))}
                     >
-                      Configure
+                      {t("Configure")}
                     </Button>
                   </div>
                 </div>
@@ -1781,8 +2018,54 @@ function IntegrationsConnectionPanel({
         onSave={save}
         saving={saving}
       />
+
+      <ConfigureResendDialog
+        open={resendOpen}
+        onOpenChange={setResendOpen}
+        status={resend}
+        onSaved={handleResendSaved}
+      />
     </>
   );
+}
+
+/**
+ * Validation for the manual tax rate fields, run against the value being typed.
+ *
+ * Lives here rather than in the save path because the failure is silent
+ * otherwise: `resolveManualRates` drops a rate it cannot parse, which is the
+ * right behaviour — a dropped rate falls back to the built-in figure instead of
+ * applying a number nobody meant — but it leaves no trace on screen. This puts
+ * the reason under the field that caused it.
+ *
+ * Returns `undefined` for every other key, so the generic field renderer stays
+ * generic.
+ */
+function manualRateProblem(key: string, value: SettingValue | undefined): string | undefined {
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+
+  const ceiling = {
+    tax_manual_us_transport_percent: RATE_CEILINGS.usTransport,
+    tax_manual_cn_vat_percent: RATE_CEILINGS.chinaVat,
+    tax_manual_cn_surcharge_percent: RATE_CEILINGS.chinaSurcharge,
+  }[key];
+
+  if (ceiling !== undefined) {
+    const parsed = parsePercentRate(value, ceiling);
+    return parsed.ok ? undefined : parsed.message;
+  }
+  if (key === "tax_manual_ifta_usd_per_gallon") {
+    const parsed = parseFuelRate(value);
+    return parsed.ok ? undefined : parsed.message;
+  }
+  // A date with no parse rule is still worth checking: a rate whose as-of date
+  // is unreadable cannot be judged stale, which is the only reason it is stored.
+  if (key === "tax_manual_rate_as_of") {
+    return /^\d{4}-\d{2}-\d{2}$/.test(value.trim())
+      ? undefined
+      : "Use YYYY-MM-DD, for example 2026-08-20.";
+  }
+  return undefined;
 }
 
 function SettingFieldControl({
@@ -1790,14 +2073,69 @@ function SettingFieldControl({
   value,
   onChange,
   disabled = false,
+  contextLocale,
+  contextTimeZone,
+  problem,
 }: {
   field: SettingField;
   value: SettingValue | undefined;
   onChange: (value: SettingValue) => void;
   disabled?: boolean;
+  contextLocale?: string;
+  contextTimeZone?: string;
+  /** Why this value will not be used. Shown instead of the help text. */
+  problem?: string;
 }) {
   const normalizedStringValue = typeof value === "string" ? value : "";
   const normalizedBooleanValue = typeof value === "boolean" ? value : false;
+
+  // Returned before the shared <label> wrapper: both controls own their own
+  // label so they can hang a live clock and a "use detected" action off it.
+  if (field.type === "timezone") {
+    return (
+      <TimeZoneField
+        value={normalizedStringValue}
+        onChange={onChange}
+        locale={resolveLocale(contextLocale)}
+        label={field.label + (field.required ? " *" : "")}
+        help={
+          field.help ??
+          "Every timestamp in the app is shown in this zone. Stored times are unchanged."
+        }
+        disabled={disabled}
+      />
+    );
+  }
+
+  if (field.type === "locale") {
+    return (
+      <LanguageField
+        value={normalizedStringValue}
+        onChange={onChange}
+        timeZone={resolveTimeZone(contextTimeZone)}
+        label={field.label + (field.required ? " *" : "")}
+        help={
+          field.help ??
+          "Sets the interface language and how dates, numbers and currency are written."
+        }
+        disabled={disabled}
+      />
+    );
+  }
+
+  if (field.type === "email-list") {
+    return (
+      <EmailListField
+        value={normalizedStringValue}
+        onChange={onChange}
+        label={field.label + (field.required ? " *" : "")}
+        help={field.help}
+        placeholder={field.placeholder}
+        disabled={disabled}
+        className={field.fullWidth ? "md:col-span-2 xl:col-span-3" : undefined}
+      />
+    );
+  }
 
   return (
     <label className={cn("space-y-1", field.fullWidth ? "md:col-span-2 xl:col-span-3" : undefined)}>
@@ -1812,6 +2150,7 @@ function SettingFieldControl({
           onChange={(event) => onChange(event.target.value)}
           placeholder={field.placeholder}
           disabled={disabled}
+          aria-invalid={Boolean(problem)}
         />
       )}
 
@@ -1832,7 +2171,7 @@ function SettingFieldControl({
           disabled={disabled}
         >
           <SelectTrigger disabled={disabled}>
-            <SelectValue placeholder="Select option" />
+            <SelectValue placeholder={t("Select option")} />
           </SelectTrigger>
           <SelectContent>
             {(field.options ?? []).map((option) => (
@@ -1846,7 +2185,7 @@ function SettingFieldControl({
 
       {field.type === "toggle" && (
         <div className="flex items-center justify-between rounded-md border border-border/70 px-3 py-2">
-          <span className="text-sm text-foreground">Enabled</span>
+          <span className="text-sm text-foreground">{t("Enabled")}</span>
           <Switch
             checked={normalizedBooleanValue}
             onCheckedChange={(checked) => onChange(checked)}
@@ -1855,7 +2194,11 @@ function SettingFieldControl({
         </div>
       )}
 
-      {field.help ? <p className="text-xs text-muted-foreground">{field.help}</p> : null}
+      {problem ? (
+        <p className="text-xs font-medium text-destructive">{problem}</p>
+      ) : field.help ? (
+        <p className="text-xs text-muted-foreground">{field.help}</p>
+      ) : null}
     </label>
   );
 }

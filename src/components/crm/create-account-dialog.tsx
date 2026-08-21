@@ -16,6 +16,7 @@ import { FancySelect, type FancySelectOption } from "@/components/loads/fancy-se
 import { useAuth } from "@/lib/auth";
 import { createCrmAccount, type CrmAccountStatus, type CrmAccountType } from "@/lib/crm-store";
 import { Card, FieldShell, GridSection, SectionTitle, generateCrmId } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
 const TYPE_OPTIONS: FancySelectOption[] = [
   { value: "Shipper", label: "Shipper" },
@@ -45,7 +46,8 @@ export function CreateAccountDialog({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
-  const setOpen = (next: boolean) => (isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next));
+  const setOpen = (next: boolean) =>
+    isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next);
 
   const [name, setName] = React.useState("");
   const [accountType, setAccountType] = React.useState<CrmAccountType>("Shipper");
@@ -124,24 +126,28 @@ export function CreateAccountDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="!max-w-2xl w-[94vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl">
-        <DialogTitle className="sr-only">Add Account</DialogTitle>
-        <DialogDescription className="sr-only">Create a lead/account company record.</DialogDescription>
+        <DialogTitle className="sr-only">{t("Add Account")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("Create a lead/account company record.")}
+        </DialogDescription>
         <div className="border-b border-border/70 px-6 py-4">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Add Account</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">
+            {t("Add Account")}
+          </h2>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
           <Card>
-            <SectionTitle title="Company" icon={Building2} />
+            <SectionTitle title={t("Company")} icon={Building2} />
             <GridSection cols={2}>
-              <FieldShell label="Account Name" required error={hasError}>
+              <FieldShell label={t("Account Name")} required error={hasError}>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Acme Distribution Co."
+                  placeholder={t("Acme Distribution Co.")}
                   className={cn(hasError && "border-destructive/60")}
                 />
               </FieldShell>
-              <FieldShell label="Type">
+              <FieldShell label={t("Type")}>
                 <FancySelect
                   value={accountType}
                   onChange={(v) => setAccountType(v as CrmAccountType)}
@@ -151,7 +157,7 @@ export function CreateAccountDialog({
               </FieldShell>
             </GridSection>
             <GridSection cols={3} className="mt-4">
-              <FieldShell label="Status">
+              <FieldShell label={t("Status")}>
                 <FancySelect
                   value={status}
                   onChange={(v) => setStatus(v as CrmAccountStatus)}
@@ -159,40 +165,60 @@ export function CreateAccountDialog({
                   searchable={false}
                 />
               </FieldShell>
-              <FieldShell label="Industry">
-                <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Retail" />
+              <FieldShell label={t("Industry")}>
+                <Input
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  placeholder={t("Retail")}
+                />
               </FieldShell>
-              <FieldShell label="Website">
-                <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://" />
+              <FieldShell label={t("Website")}>
+                <Input
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                  placeholder="https://"
+                />
               </FieldShell>
             </GridSection>
             <GridSection cols={4} className="mt-4">
-              <FieldShell label="Phone">
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-0100" />
+              <FieldShell label={t("Phone")}>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="(555) 555-0100"
+                />
               </FieldShell>
-              <FieldShell label="Email">
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ops@acme.com" />
+              <FieldShell label={t("Email")}>
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="ops@acme.com"
+                />
               </FieldShell>
-              <FieldShell label="City">
-                <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Dallas" />
+              <FieldShell label={t("City")}>
+                <Input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder={t("Dallas")}
+                />
               </FieldShell>
-              <FieldShell label="State">
+              <FieldShell label={t("State")}>
                 <Input value={state} onChange={(e) => setState(e.target.value)} placeholder="TX" />
               </FieldShell>
             </GridSection>
             {(accountType === "Carrier" || accountType === "Broker") && (
               <div className="mt-4">
-                <FieldShell label="Carrier ID (optional)">
+                <FieldShell label={t("Carrier ID (optional)")}>
                   <Input
                     value={carrierId}
                     onChange={(e) => setCarrierId(e.target.value)}
-                    placeholder="Links to /carriers/$carrierId"
+                    placeholder={t("Links to /carriers/$carrierId")}
                   />
                 </FieldShell>
               </div>
             )}
             <div className="mt-4">
-              <FieldShell label="Notes">
+              <FieldShell label={t("Notes")}>
                 <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
               </FieldShell>
             </div>
@@ -209,10 +235,20 @@ export function CreateAccountDialog({
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
-            <Button type="button" size="sm" disabled={submitting} onClick={handleSubmit} className="gap-1.5">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            <Button
+              type="button"
+              size="sm"
+              disabled={submitting}
+              onClick={handleSubmit}
+              className="gap-1.5"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
               Save Account
             </Button>
           </div>

@@ -1,4 +1,5 @@
 import { getWorkspaceSetting, putWorkspaceSetting } from "@/lib/workspace-settings-store";
+import { peekCompanyContext } from "@/lib/tenant/company-context";
 
 export type AppSettingValue = string | boolean;
 export type AppSettingsData = Record<string, AppSettingValue>;
@@ -8,13 +9,20 @@ export const APP_SETTINGS_CHANGED = "titan:app-settings-changed";
 
 /** In-memory cache so domain stores can read prefixes without an extra round-trip mid-request. */
 let cachedAppSettings: AppSettingsData | null = null;
+let cachedForCompany: string | null = null;
 
 export function peekAppSettingsCache(): AppSettingsData | null {
   return cachedAppSettings;
 }
 
-export function setAppSettingsCache(settings: AppSettingsData) {
+export function setAppSettingsCache(settings: AppSettingsData, companyId?: string) {
   cachedAppSettings = settings;
+  cachedForCompany = companyId?.trim() || cachedForCompany;
+}
+
+export function clearAppSettingsCache() {
+  cachedAppSettings = null;
+  cachedForCompany = null;
 }
 
 export function getAppSettingString(
@@ -61,19 +69,23 @@ export function mergeAppSettings(defaults: AppSettingsData, partial: unknown): A
 
 export async function loadAppSettingsFromDynamo(defaults: AppSettingsData) {
   const { data, updatedAt } = await getWorkspaceSetting<AppSettingsData>("appSettings");
+  const companyId = peekCompanyContext()?.companyId;
+  // Union with whatever is already cached so a Settings subset load (Integrations)
+  // cannot drop keys another page already hydrated (tax, invoice prefixes, DAT).
+  const whitelist = { ...(cachedAppSettings ?? {}), ...defaults };
   if (data) {
-    const settings = mergeAppSettings(defaults, data);
-    setAppSettingsCache(settings);
+    const settings = mergeAppSettings(whitelist, data);
+    setAppSettingsCache(settings, companyId);
     return { settings, updatedAt };
   }
-  const settings = { ...defaults };
-  setAppSettingsCache(settings);
+  const settings = mergeAppSettings(whitelist, {});
+  setAppSettingsCache(settings, companyId);
   return { settings, updatedAt: null as string | null };
 }
 
 export async function saveAppSettingsToDynamo(settings: AppSettingsData) {
   await putWorkspaceSetting("appSettings", settings);
-  setAppSettingsCache(settings);
+  setAppSettingsCache(settings, peekCompanyContext()?.companyId);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(APP_SETTINGS_CHANGED));
   }
@@ -81,20 +93,25 @@ export async function saveAppSettingsToDynamo(settings: AppSettingsData) {
 
 /** Lightweight read for domain modules (Accounting, Loads). */
 export async function ensureAppSettingsCache(defaults?: AppSettingsData) {
-  if (cachedAppSettings) return cachedAppSettings;
-  const base = defaults ?? {
+  const companyId = peekCompanyContext()?.companyId ?? null;
+  const incoming = defaults ?? {
     invoice_number_prefix: "INV-",
     load_number_prefix: "LD-",
     require_pod_before_invoice: true,
     auto_generate_invoice_numbers: true,
   };
+  if (cachedAppSettings && cachedForCompany && cachedForCompany === companyId) {
+    const missing = Object.keys(incoming).some((key) => !(key in cachedAppSettings!));
+    if (!missing) return cachedAppSettings;
+  }
+  const whitelist = { ...(cachedAppSettings ?? {}), ...incoming };
   try {
     const { data } = await getWorkspaceSetting<AppSettingsData>("appSettings");
-    const settings = mergeAppSettings(base, data ?? {});
-    setAppSettingsCache(settings);
+    const settings = mergeAppSettings(whitelist, data ?? {});
+    setAppSettingsCache(settings, peekCompanyContext()?.companyId);
     return settings;
   } catch {
-    setAppSettingsCache(base);
-    return base;
+    setAppSettingsCache(whitelist, companyId ?? undefined);
+    return whitelist;
   }
 }

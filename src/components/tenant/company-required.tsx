@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { t } from "@/lib/i18n/t";
 
 /**
  * Shown to a signed-in user whose account carries no company.
@@ -49,12 +50,13 @@ export function CompanyRequired({
         </div>
 
         <h1 className="mt-4 text-lg font-semibold tracking-tight text-foreground">
-          Waiting for company access
+          {t("Waiting for company access")}
         </h1>
 
         <p className="mt-2 text-sm text-muted-foreground">
-          Your account is not assigned to a company yet. An administrator at your company needs to
-          assign it before you can see any data.
+          {t(
+            "Your account is not assigned to a company yet. An administrator at your company needs to\n          assign it before you can see any data.",
+          )}
         </p>
 
         {user?.email ? (
@@ -69,8 +71,9 @@ export function CompanyRequired({
             role="status"
             aria-live="polite"
           >
-            Still not assigned. If an administrator has just done it, they may need to confirm it
-            saved — the change reaches you on your next token refresh.
+            {t(
+              "Still not assigned. If an administrator has just done it, they may need to confirm it\n            saved — the change reaches you on your next token refresh.",
+            )}
           </p>
         ) : null}
 
@@ -81,7 +84,7 @@ export function CompanyRequired({
           </Button>
           <Button size="sm" variant="outline" onClick={() => void signOut()}>
             <LogOut className="h-3.5 w-3.5" />
-            Sign out
+            {t("Sign out")}
           </Button>
         </div>
 

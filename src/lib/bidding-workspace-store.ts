@@ -73,6 +73,12 @@ export type BiddingSavedSearchRecord = {
   createdBy: string;
 };
 
+/**
+ * An audit row. `itemKey`, `createdAt` and `user` are stamped by the server
+ * from the verified token — sending them is a 400, so they are absent from
+ * `appendBiddingAuditLog`'s input. `userDisplayName` is the caller's own label
+ * for the row and is explicitly not authoritative.
+ */
 export type BiddingAuditRecord = {
   workspaceId: string;
   itemKey: string;
@@ -80,6 +86,7 @@ export type BiddingAuditRecord = {
   createdAt: string;
   searchId: string;
   user: string;
+  userDisplayName?: string;
   origin: string;
   destination: string;
   equipment: string;
@@ -99,7 +106,6 @@ export type BiddingAuditRecord = {
 
 const QUOTE_PREFIX = "quote#";
 const SEARCH_PREFIX = "search#";
-const AUDIT_PREFIX = "audit#";
 
 const CACHE_PREFIX = "titan-freight:bidding-workspace:";
 
@@ -145,18 +151,30 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
+/** A write refused because the stored record moved on first. */
+export class BiddingWorkspaceConflictError extends Error {
+  readonly code = "stale_write";
+}
+
 async function failure(response: Response, op: string): Promise<Error> {
   if (response.status === 503) {
     markWorkspaceTableUnavailable();
   }
   let message = `Bidding workspace ${op} failed (HTTP ${response.status})`;
+  let code: string | undefined;
   try {
-    const body = (await response.json()) as { error?: string };
+    const body = (await response.json()) as { error?: string; code?: string };
     if (body?.error) message = body.error;
+    code = body?.code;
   } catch {
     /* non-JSON error body — the status line is enough */
   }
   console.error(`[BiddingWorkspace ${op}]`, message);
+  // A conflict is a normal outcome of two tabs, not a fault — the caller shows
+  // it as "reload and try again" rather than a generic failure.
+  if (response.status === 409 && code === "stale_write") {
+    return new BiddingWorkspaceConflictError(message);
+  }
   return new Error(message);
 }
 
@@ -198,12 +216,29 @@ function readSessionCache(workspaceId: string): WorkspaceCacheEntry | null {
   }
 }
 
+/**
+ * True once a cache write has been refused — in practice, sessionStorage's
+ * ~5MB quota. Swallowing this silently meant the page kept refetching the whole
+ * workspace on every navigation with nothing saying why.
+ */
+let sessionCacheRejected = false;
+
+export function isWorkspaceCachePersisted(): boolean {
+  return !sessionCacheRejected;
+}
+
 function writeSessionCache(workspaceId: string, entry: WorkspaceCacheEntry) {
   if (!canUseSessionStorage()) return;
   try {
     sessionStorage.setItem(cacheStorageKey(workspaceId), JSON.stringify(entry));
+    sessionCacheRejected = false;
   } catch {
-    // ignore quota errors
+    if (!sessionCacheRejected) {
+      sessionCacheRejected = true;
+      console.warn(
+        "[BiddingWorkspace] session cache is full; the workspace will be refetched on every navigation.",
+      );
+    }
   }
 }
 
@@ -359,10 +394,16 @@ async function putWorkspaceItem<T extends Record<string, unknown>>(
   item: T,
   mode: "create" | "update" | "put",
   op: string,
+  /** The `updatedAt` this edit was based on, for optimistic concurrency. */
+  expectedUpdatedAt?: string,
 ): Promise<T> {
   const response = await send(PATH, {
     method: "PUT",
-    body: JSON.stringify({ ...withoutServerOwnedFields(item), mode }),
+    body: JSON.stringify({
+      ...withoutServerOwnedFields(item),
+      mode,
+      ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+    }),
   });
   if (!response.ok) throw await failure(response, op);
   const body = (await response.json()) as { item?: T };
@@ -391,9 +432,24 @@ async function fetchWorkspaceSnapshotRemote(): Promise<BiddingWorkspaceSnapshot>
     if (!response.ok) throw await failure(response, "Sync");
     const body = (await response.json()) as {
       items?: Array<BidQuoteRecord | BiddingSavedSearchRecord | BiddingAuditRecord>;
+      truncated?: { quotes?: boolean; searches?: boolean; audit?: boolean };
+    };
+    // The read is bounded per record type now; remember what was cut so the
+    // page can say "showing the 50 most recent" instead of implying it has all.
+    lastTruncation = {
+      quotes: Boolean(body.truncated?.quotes),
+      searches: Boolean(body.truncated?.searches),
+      audit: Boolean(body.truncated?.audit),
     };
     return splitWorkspaceItems(body.items ?? []);
   });
+}
+
+let lastTruncation = { quotes: false, searches: false, audit: false };
+
+/** Which parts of the last sync hit their read ceiling. */
+export function getWorkspaceTruncation() {
+  return lastTruncation;
 }
 
 export async function fetchBiddingWorkspaceSnapshotCached(options: {
@@ -466,12 +522,14 @@ function searchItemKey(searchName: string) {
   return `${SEARCH_PREFIX}${searchName}`;
 }
 
-function auditItemKey(iso: string, searchId: string) {
-  return `${AUDIT_PREFIX}${iso}#${searchId}`;
-}
-
-export async function listBidQuotes(workspaceId: string): Promise<BidQuoteRecord[]> {
-  const snapshot = await fetchBiddingWorkspaceSnapshotCached({ workspaceId });
+export async function listBidQuotes(
+  workspaceId: string,
+  options?: { force?: boolean },
+): Promise<BidQuoteRecord[]> {
+  const snapshot = await fetchBiddingWorkspaceSnapshotCached({
+    workspaceId,
+    force: options?.force,
+  });
   return snapshot.quotes;
 }
 
@@ -568,7 +626,10 @@ export async function updateBidQuote(record: BidQuoteRecord): Promise<BidQuoteRe
   };
 
   return runWriteLimited(async () => {
-    const saved = await putWorkspaceItem(item, "update", "UpdateQuote");
+    // `record.updatedAt` is the value this edit was based on. If the stored row
+    // has moved on since, the write is refused with a 409 rather than silently
+    // overwriting whatever the other tab saved.
+    const saved = await putWorkspaceItem(item, "update", "UpdateQuote", record.updatedAt);
     upsertQuoteInCache(record.workspaceId, saved);
     return saved;
   });
@@ -634,47 +695,48 @@ export async function deleteBiddingSavedSearch(
   });
 }
 
+/**
+ * What a caller may say about an audit entry.
+ *
+ * Not `itemKey`, `createdAt` or `user`: the server stamps those from the token,
+ * and sending them is a 400. The trail records who did something and when as
+ * facts the browser cannot choose.
+ */
+export type BiddingAuditInput = Omit<
+  BiddingAuditRecord,
+  "workspaceId" | "itemKey" | "recordType" | "createdAt" | "user"
+>;
+
 export async function appendBiddingAuditLog(
   workspaceId: string,
-  entry: Omit<BiddingAuditRecord, "workspaceId" | "itemKey" | "recordType" | "createdAt"> & {
-    createdAt?: string;
-  },
+  entry: BiddingAuditInput,
 ): Promise<BiddingAuditRecord> {
-  const createdAt = entry.createdAt ?? new Date().toISOString();
-  const item: BiddingAuditRecord = {
+  // Used only if the write cannot happen — the stored row is whatever the
+  // server built, not this.
+  const provisional: BiddingAuditRecord = {
+    ...entry,
     workspaceId,
-    itemKey: auditItemKey(createdAt, entry.searchId),
+    itemKey: `audit#pending#${entry.searchId}`,
     recordType: "audit",
-    createdAt,
-    searchId: entry.searchId,
-    user: entry.user,
-    origin: entry.origin,
-    destination: entry.destination,
-    equipment: entry.equipment,
-    date: entry.date,
-    historicalAggregationTimestamp: entry.historicalAggregationTimestamp,
-    datRefreshTimestamp: entry.datRefreshTimestamp,
-    riskModelId: entry.riskModelId,
-    riskModelVersion: entry.riskModelVersion,
-    riskInputValues: entry.riskInputValues,
-    riskOutput: entry.riskOutput,
-    aiSuggestionTimestamp: entry.aiSuggestionTimestamp,
-    finalSelectedBid: entry.finalSelectedBid,
-    actionTaken: entry.actionTaken,
-    createdQuoteId: entry.createdQuoteId,
-    attachedRfpId: entry.attachedRfpId,
+    createdAt: new Date().toISOString(),
+    user: entry.userDisplayName ?? "",
   };
 
-  if (!isBiddingWorkspaceAvailable()) return item;
+  if (!isBiddingWorkspaceAvailable()) return provisional;
 
   return runWriteLimited(async () => {
     try {
-      const saved = await putWorkspaceItem(item, "put", "AppendAudit");
-      prependAuditInCache(workspaceId, saved);
-      return saved;
+      const saved = await putWorkspaceItem(
+        { ...entry, recordType: "audit" as const },
+        "put",
+        "AppendAudit",
+      );
+      const record = saved as unknown as BiddingAuditRecord;
+      prependAuditInCache(workspaceId, record);
+      return record;
     } catch (err) {
       // An audit entry must never break the action it records.
-      if (workspaceTableUnavailable) return item;
+      if (workspaceTableUnavailable) return provisional;
       throw err;
     }
   });

@@ -136,39 +136,54 @@ function mapCognitoUserToEntry(user: UserType): CognitoDirectoryEntry | null {
   };
 }
 
+function wrapCognitoAdminError(message: string, originalName?: string, cause?: unknown): Error {
+  const out = new Error(message, cause !== undefined ? { cause } : undefined);
+  // The credentials proxy classifies by `name`. Dropping Cognito's exception
+  // name turned UsernameExistsException and AccessDeniedException into a
+  // generic 502 ("Could not complete that request").
+  if (originalName) out.name = originalName;
+  return out;
+}
+
 export function describeCognitoAdminError(err: unknown, op: string): Error {
   if (err && typeof err === "object") {
     const e = err as { name?: string; message?: string };
     if (e.name === "UsernameExistsException" || e.name === "AliasExistsException") {
-      return new Error("A user with this email already exists in Cognito.");
+      return wrapCognitoAdminError("A user with this email already exists in Cognito.", e.name, err);
     }
     if (e.name === "InvalidPasswordException") {
-      return new Error(
+      return wrapCognitoAdminError(
         e.message ??
           "Temporary password does not meet the user pool password policy. Use at least 12 characters with upper, lower, number, and symbol.",
+        e.name,
+        err,
       );
     }
     if (e.name === "InvalidParameterException") {
       if ((e.message ?? "").toLowerCase().includes("username should be an email")) {
-        return new Error(
+        return wrapCognitoAdminError(
           "Username should be an email. This user pool signs in with email — reset now uses the account email attribute.",
+          e.name,
+          err,
         );
       }
-      return new Error(e.message ?? "Invalid user details for Cognito.");
+      return wrapCognitoAdminError(e.message ?? "Invalid user details for Cognito.", e.name, err);
     }
     if (
       e.name === "AccessDeniedException" ||
       e.name === "NotAuthorizedException" ||
       e.name === "UnauthorizedException"
     ) {
-      return new Error(
-        `Not authorized for Cognito ${op}. Add cognito-idp:${op}, AdminUpdateUserAttributes, and ListUsers to your Identity Pool authenticated IAM role.`,
+      return wrapCognitoAdminError(
+        `Not authorized for Cognito ${op}. Grant cognito-idp:${op} on this user pool to the titan-worker IAM user (titan-server-settings).`,
+        e.name,
+        err,
       );
     }
     const detail = [e.name, e.message].filter(Boolean).join(" · ");
-    if (detail) return new Error(`Cognito ${op} failed: ${detail}`);
+    if (detail) return wrapCognitoAdminError(`Cognito ${op} failed: ${detail}`, e.name, err);
   }
-  return new Error(`Cognito ${op} failed`);
+  return wrapCognitoAdminError(`Cognito ${op} failed`);
 }
 
 function generateTemporaryPassword(): string {
@@ -379,9 +394,10 @@ export type ResolvedCognitoUser = {
 export async function resolveCognitoUsername(
   ctx: CognitoAdminContext,
   input: {
-  userId?: string;
-  email?: string;
-}): Promise<ResolvedCognitoUser> {
+    userId?: string;
+    email?: string;
+  },
+): Promise<ResolvedCognitoUser> {
   const client = ctx.client;
   const email = input.email ? sanitizeCognitoFilterValue(input.email.toLowerCase()) : "";
   const userId = input.userId ? sanitizeCognitoFilterValue(input.userId) : "";
@@ -463,12 +479,13 @@ async function ensureEmailVerifiedForDelivery(
 export async function adminResetCognitoPassword(
   ctx: CognitoAdminContext,
   input: {
-  userId?: string;
-  email?: string;
-  /** When true (default), Cognito emails a reset code or invite. */
-  sendEmail?: boolean;
-  temporaryPassword?: string;
-}): Promise<AdminResetPasswordResult> {
+    userId?: string;
+    email?: string;
+    /** When true (default), Cognito emails a reset code or invite. */
+    sendEmail?: boolean;
+    temporaryPassword?: string;
+  },
+): Promise<AdminResetPasswordResult> {
   const resolved = await resolveCognitoUsername(ctx, {
     userId: input.userId,
     email: input.email,
@@ -623,13 +640,13 @@ export async function adminResetCognitoPassword(
 export async function adminResendCognitoInvite(
   ctx: CognitoAdminContext,
   input: {
-  userId?: string;
-  email?: string;
-  temporaryPassword?: string;
-}): Promise<AdminResetPasswordResult> {
+    userId?: string;
+    email?: string;
+    temporaryPassword?: string;
+  },
+): Promise<AdminResetPasswordResult> {
   return adminResetCognitoPassword(ctx, {
     ...input,
     sendEmail: true,
   });
 }
-

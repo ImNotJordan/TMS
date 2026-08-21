@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useKeywordRules } from "../hooks/useKeywordRules";
 import { keywordEngine, validateRegexTerm } from "../lib/keywordEngine";
 import type { ChannelId, KeywordRule } from "../types";
+import { t } from "@/lib/i18n/t";
 
 function emptyRule(): KeywordRule {
   return {
@@ -111,16 +112,23 @@ export function KeywordRulesTab() {
         <CardHeader className="pb-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle className="text-base">Keyword rules</CardTitle>
+              <CardTitle className="text-base">{t("Keyword rules")}</CardTitle>
               <CardDescription>
-                Flag detention, breakdowns, rate changes, and other high-signal phrases.
-                Presets load disabled so you can turn them on when ready.
+                {t(
+                  "Flag detention, breakdowns, rate changes, and other high-signal phrases.\n                Presets load disabled so you can turn them on when ready.",
+                )}
               </CardDescription>
             </div>
             {canEdit ? (
-              <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={openNew}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={openNew}
+              >
                 <Plus className="h-3.5 w-3.5" />
-                Add rule
+                {t("Add rule")}
               </Button>
             ) : null}
           </div>
@@ -128,17 +136,17 @@ export function KeywordRulesTab() {
         <CardContent>
           {rules.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No keyword rules yet. Add one to start flagging messages.
+              {t("No keyword rules yet. Add one to start flagging messages.")}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Terms</TableHead>
-                  <TableHead>Enabled</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("Label")}</TableHead>
+                  <TableHead>{t("Severity")}</TableHead>
+                  <TableHead>{t("Terms")}</TableHead>
+                  <TableHead>{t("Enabled")}</TableHead>
+                  <TableHead className="text-right">{t("Actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -168,7 +176,7 @@ export function KeywordRulesTab() {
                         disabled={!canEdit}
                         onClick={() => openEdit(rule)}
                       >
-                        Edit
+                        {t("Edit")}
                       </Button>
                       <Button
                         type="button"
@@ -177,7 +185,7 @@ export function KeywordRulesTab() {
                         disabled={!canEdit}
                         onClick={() => void removeRule(rule.id)}
                       >
-                        Remove
+                        {t("Remove")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -190,18 +198,20 @@ export function KeywordRulesTab() {
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Rule tester</CardTitle>
-          <CardDescription>Paste sample text to see which enabled rules fire.</CardDescription>
+          <CardTitle className="text-base">{t("Rule tester")}</CardTitle>
+          <CardDescription>
+            {t("Paste sample text to see which enabled rules fire.")}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Textarea
             value={testerText}
             onChange={(e) => setTesterText(e.target.value)}
             rows={4}
-            placeholder="Driver is waiting — detention starting soon."
+            placeholder={t("Driver is waiting — detention starting soon.")}
           />
           {hits.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No matches.</p>
+            <p className="text-sm text-muted-foreground">{t("No matches.")}</p>
           ) : (
             <ul className="space-y-1 text-sm">
               {hits.map((hit) => (
@@ -227,19 +237,19 @@ export function KeywordRulesTab() {
         <SheetContent className="overflow-y-auto sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{previous ? "Edit rule" : "New rule"}</SheetTitle>
-            <SheetDescription>Terms, match type, severity, and actions.</SheetDescription>
+            <SheetDescription>{t("Terms, match type, severity, and actions.")}</SheetDescription>
           </SheetHeader>
           {draft ? (
             <div className="mt-4 space-y-3">
               <div className="space-y-1">
-                <Label>Label</Label>
+                <Label>{t("Label")}</Label>
                 <Input
                   value={draft.label}
                   onChange={(e) => setDraft({ ...draft, label: e.target.value })}
                 />
               </div>
               <div className="space-y-1">
-                <Label>Terms</Label>
+                <Label>{t("Terms")}</Label>
                 <div className="flex gap-2">
                   <Input
                     value={termInput}
@@ -254,7 +264,7 @@ export function KeywordRulesTab() {
                         setTermInput("");
                       }
                     }}
-                    placeholder="Add term and press Enter"
+                    placeholder={t("Add term and press Enter")}
                   />
                 </div>
                 <div className="flex flex-wrap gap-1 pt-1">
@@ -276,7 +286,7 @@ export function KeywordRulesTab() {
                 </div>
               </div>
               <div className="space-y-1">
-                <Label>Match type</Label>
+                <Label>{t("Match type")}</Label>
                 <Select
                   value={draft.matchType}
                   onValueChange={(v) =>
@@ -287,14 +297,14 @@ export function KeywordRulesTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="contains">Contains</SelectItem>
-                    <SelectItem value="word">Whole word</SelectItem>
-                    <SelectItem value="regex">Regex</SelectItem>
+                    <SelectItem value="contains">{t("Contains")}</SelectItem>
+                    <SelectItem value="word">{t("Whole word")}</SelectItem>
+                    <SelectItem value="regex">{t("Regex")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Severity</Label>
+                <Label>{t("Severity")}</Label>
                 <Select
                   value={draft.severity}
                   onValueChange={(v) =>
@@ -305,14 +315,14 @@ export function KeywordRulesTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="info">Info</SelectItem>
-                    <SelectItem value="warning">Warning</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
+                    <SelectItem value="info">{t("Info")}</SelectItem>
+                    <SelectItem value="warning">{t("Warning")}</SelectItem>
+                    <SelectItem value="critical">{t("Critical")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Channels</Label>
+                <Label>{t("Channels")}</Label>
                 <div className="flex flex-wrap gap-2">
                   {(["email", "sms", "voice", "chat"] as ChannelId[]).map((channel) => (
                     <Button
@@ -335,14 +345,14 @@ export function KeywordRulesTab() {
                 </div>
               </div>
               <div className="flex items-center justify-between rounded-md border border-border/70 px-3 py-2">
-                <Label>Case sensitive</Label>
+                <Label>{t("Case sensitive")}</Label>
                 <Switch
                   checked={draft.caseSensitive}
                   onCheckedChange={(v) => setDraft({ ...draft, caseSensitive: v })}
                 />
               </div>
               <Button type="button" onClick={() => void save()}>
-                Save rule
+                {t("Save rule")}
               </Button>
             </div>
           ) : null}

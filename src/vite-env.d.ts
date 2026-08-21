@@ -27,6 +27,7 @@ interface ImportMetaEnv {
   readonly VITE_CRM_PROSPECTING_TABLE_NAME?: string | undefined;
 
   readonly VITE_DRIVER_APP_URL?: string | undefined;
+  readonly VITE_CLIENT_APP_URL?: string | undefined;
   readonly VITE_DISPATCH_APP_URL?: string | undefined;
 
   readonly [key: string]: string | undefined;

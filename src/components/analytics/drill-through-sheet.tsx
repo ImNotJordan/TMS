@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AnalyticsEvent } from "@/lib/analytics-events";
+import { t } from "@/lib/i18n/t";
 
 export function DrillThroughSheet({
   open,
@@ -50,15 +51,15 @@ export function DrillThroughSheet({
         <div className="min-h-0 flex-1 overflow-y-auto py-4">
           {events.length === 0 ? (
             <div className="flex h-40 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-              No contributing events in this period.
+              {t("No contributing events in this period.")}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Event</TableHead>
-                  <TableHead>When</TableHead>
-                  <TableHead className="text-right">Record</TableHead>
+                  <TableHead>{t("Event")}</TableHead>
+                  <TableHead>{t("When")}</TableHead>
+                  <TableHead className="text-right">{t("Record")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -85,7 +86,7 @@ export function DrillThroughSheet({
                         {primary ? (
                           <Button asChild size="sm" variant="ghost" className="h-8 gap-1 px-2">
                             <Link to={primary.href}>
-                              Open
+                              {t("Open")}
                               <ArrowUpRight className="h-3.5 w-3.5" />
                             </Link>
                           </Button>

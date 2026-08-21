@@ -59,16 +59,13 @@ export async function fetchLogisticsAiStatus(options?: {
   }
 
   try {
-    const response = await fetch(
-      options?.force ? "/api/ai/status?fresh=1" : "/api/ai/status",
-      {
+    const response = await fetch(options?.force ? "/api/ai/status?fresh=1" : "/api/ai/status", {
       method: "GET",
       headers: {
         Accept: "application/json",
         ...headers,
       },
-    },
-    );
+    });
     const payload = (await response.json().catch(() => ({}))) as LogisticsAiStatus & {
       error?: string;
       code?: LogisticsAiStatus["code"];

@@ -12,6 +12,9 @@ vi.mock("@/lib/server/server-dynamo", async () => {
   );
   return { ...actual, getServerDataClient: () => ({ send: (...a: unknown[]) => send(...a) }) };
 });
+vi.mock("@/lib/inventory-proxy", () => ({
+  syncLoadInventoryForTenant: vi.fn().mockResolvedValue({ ok: true }),
+}));
 
 const { handleLoadsApiRequest, isLoadsApiRequest } = await import("@/lib/loads-api-proxy");
 const { MissingTenantError } = await import("@/lib/tenant/server-tenant-context");
@@ -81,6 +84,14 @@ describe("authentication and tenancy", () => {
     const res = await handleLoadsApiRequest(req("GET", "/api/loads"));
     expect(res.status).toBe(403);
     await expect(res.json()).resolves.toMatchObject({ code: "COMPANY_ASSIGNMENT_REQUIRED" });
+  });
+
+  it("403s a Client — they have a company, but this is the ops board", async () => {
+    signedInAt(ACME, "Client");
+    const res = await handleLoadsApiRequest(req("GET", "/api/loads"));
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({ code: "client_audience" });
+    expect(send).not.toHaveBeenCalled();
   });
 });
 
@@ -379,6 +390,9 @@ describe("every allowed change leaves a record of itself", () => {
 describe("DELETE", () => {
   it("204s for a role allowed to delete", async () => {
     signedInAt(ACME, "Admin");
+    send
+      .mockResolvedValueOnce({ Item: { companyId: ACME, loadId: "L-1", loadStatus: "draft" } })
+      .mockResolvedValueOnce({});
     expect((await handleLoadsApiRequest(req("DELETE", "/api/loads/L-1"))).status).toBe(204);
   });
 
@@ -391,9 +405,7 @@ describe("DELETE", () => {
 
   it("404s when the scoped delete matches nothing", async () => {
     signedInAt(ACME, "Admin");
-    send.mockImplementationOnce(async () => {
-      throw Object.assign(new Error("c"), { name: "ConditionalCheckFailedException" });
-    });
+    send.mockResolvedValueOnce({});
     expect((await handleLoadsApiRequest(req("DELETE", "/api/loads/L-1"))).status).toBe(404);
   });
 });

@@ -25,8 +25,5 @@ export interface EmailTransport {
 
 export function shouldUseLiveSmsTransport(integration?: IntegrationState): boolean {
   if (!integration) return false;
-  return (
-    integration.status === "connected" &&
-    integration.capabilities.includes("sms.send")
-  );
+  return integration.status === "connected" && integration.capabilities.includes("sms.send");
 }

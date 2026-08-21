@@ -32,9 +32,8 @@ vi.mock("@/lib/cognito-admin-core", () => ({
   resolveCognitoUsername: (...a: unknown[]) => resolveCognitoUsername(...a),
 }));
 
-const { handleAdminCredentialsRequest, isAdminCredentialsRequest } = await import(
-  "@/lib/admin-credentials-proxy"
-);
+const { handleAdminCredentialsRequest, isAdminCredentialsRequest } =
+  await import("@/lib/admin-credentials-proxy");
 
 const ME = "admin-1";
 const TARGET = "user-9";
@@ -225,5 +224,19 @@ describe("creation", () => {
     );
 
     expect(res.status).toBe(409);
+  });
+
+  it("maps missing Cognito IAM grants to 503", async () => {
+    adminCreateCognitoUser.mockRejectedValueOnce(
+      Object.assign(new Error("Not authorized for Cognito AdminCreateUser."), {
+        name: "AccessDeniedException",
+      }),
+    );
+    const res = await handleAdminCredentialsRequest(
+      post({ action: "create", email: "a@b.test", firstName: "A", lastName: "B" }),
+    );
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({ code: "missing_cognito_permissions" });
   });
 });

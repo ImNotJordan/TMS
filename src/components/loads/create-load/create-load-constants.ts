@@ -356,7 +356,6 @@ export const STATE_OPTIONS: FancySelectOption[] = [
   "WY",
 ].map((s) => ({ value: s, label: s, description: `US state · ${s}` }));
 
-
 export const HANDLING_OPTIONS = [
   { id: "stackable", label: "Stackable", icon: Package },
   { id: "tarp", label: "Tarp Required", icon: Shield },

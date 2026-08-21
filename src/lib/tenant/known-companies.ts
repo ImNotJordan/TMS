@@ -27,7 +27,12 @@
 import { ListUsersCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { BatchGetCommand } from "@aws-sdk/lib-dynamodb";
 
-import { getAiDynamoClient, getProfileTable } from "@/lib/ai/server-aws";
+import {
+  getAiDynamoClient,
+  getProfileTable,
+  getServerIamDynamoClient,
+} from "@/lib/ai/server-aws";
+import { getServerDataClient } from "@/lib/server/server-dynamo";
 import { getServerCognitoClient, getServerUserPoolId } from "@/lib/ai/server-cognito";
 
 export type KnownCompany = {
@@ -45,7 +50,7 @@ const PAGE_LIMIT = 60;
 const BATCH_SIZE = 100;
 
 /** Every company referenced by any user, across all tenants. */
-export async function listKnownCompanies(request: Request): Promise<KnownCompany[]> {
+export async function listKnownCompanies(request?: Request): Promise<KnownCompany[]> {
   const cognito = getServerCognitoClient();
   const userPoolId = getServerUserPoolId();
 
@@ -53,7 +58,11 @@ export async function listKnownCompanies(request: Request): Promise<KnownCompany
   let paginationToken: string | undefined;
   do {
     const out = await cognito.send(
-      new ListUsersCommand({ UserPoolId: userPoolId, PaginationToken: paginationToken, Limit: PAGE_LIMIT }),
+      new ListUsersCommand({
+        UserPoolId: userPoolId,
+        PaginationToken: paginationToken,
+        Limit: PAGE_LIMIT,
+      }),
     );
     for (const user of out.Users ?? []) {
       const sub = user.Attributes?.find((a) => a.Name === "sub")?.Value;
@@ -64,7 +73,9 @@ export async function listKnownCompanies(request: Request): Promise<KnownCompany
 
   if (subs.length === 0) return [];
 
-  const client = await getAiDynamoClient(request);
+  const client = request
+    ? await getAiDynamoClient(request)
+    : (getServerIamDynamoClient() ?? getServerDataClient());
   const table = getProfileTable();
   const byId = new Map<string, KnownCompany>();
 

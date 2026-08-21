@@ -70,6 +70,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/rfps")({
   head: () => ({
@@ -421,9 +422,7 @@ function Page() {
     const activeRfps = rfpRows.filter((row) => row.status !== "Archived");
     const totalLanes = rfpRows.reduce((sum, row) => sum + (row.laneCount || 0), 0);
     const readyForQuotes = rfpRows
-      .filter((row) =>
-        ["Approved", "Quotes Created", "Exported", "Submitted"].includes(row.status),
-      )
+      .filter((row) => ["Approved", "Quotes Created", "Exported", "Submitted"].includes(row.status))
       .reduce((sum, row) => sum + (row.laneCount || 0), 0);
     const avgProgress =
       rfpRows.length > 0
@@ -633,8 +632,8 @@ function Page() {
   const importLogCard = (
     <Card className="border-border/70 shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Import Log</CardTitle>
-        <CardDescription>Parsing and normalization checkpoint trail.</CardDescription>
+        <CardTitle className="text-base">{t("Import Log")}</CardTitle>
+        <CardDescription>{t("Parsing and normalization checkpoint trail.")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-xs">
         {active ? (
@@ -654,7 +653,7 @@ function Page() {
             </div>
           ))
         ) : (
-          <p className="text-muted-foreground">No import activity yet.</p>
+          <p className="text-muted-foreground">{t("No import activity yet.")}</p>
         )}
       </CardContent>
     </Card>
@@ -663,14 +662,14 @@ function Page() {
   const validationCard = (
     <Card className="border-border/70 shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Validation Issues</CardTitle>
+        <CardTitle className="text-base">{t("Validation Issues")}</CardTitle>
         <CardDescription>
-          Invalid ZIPs, duplicates, missing fields, and outliers.
+          {t("Invalid ZIPs, duplicates, missing fields, and outliers.")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-xs">
         <p className="text-muted-foreground">
-          Validation issues will appear here after file upload and normalization.
+          {t("Validation issues will appear here after file upload and normalization.")}
         </p>
       </CardContent>
     </Card>
@@ -679,8 +678,8 @@ function Page() {
   const workflowStepsCard = (
     <Card className="border-border/70 shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Workflow Steps</CardTitle>
-        <CardDescription>1 to 9 end-to-end RFP pricing lifecycle.</CardDescription>
+        <CardTitle className="text-base">{t("Workflow Steps")}</CardTitle>
+        <CardDescription>{t("1 to 9 end-to-end RFP pricing lifecycle.")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-xs">
         {[
@@ -694,10 +693,7 @@ function Page() {
           "8. Bulk Create Quotes",
           "9. Export to Customer Format",
         ].map((step) => (
-          <div
-            key={step}
-            className="rounded-md border border-border/70 p-2 text-muted-foreground"
-          >
+          <div key={step} className="rounded-md border border-border/70 p-2 text-muted-foreground">
             {step}
           </div>
         ))}
@@ -708,23 +704,23 @@ function Page() {
   const auditCard = (
     <Card className="border-border/70 shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Audit History</CardTitle>
+        <CardTitle className="text-base">{t("Audit History")}</CardTitle>
         <CardDescription>
-          Date/time, user, action, RFP, lane, old/new values, and notes for reproducibility.
+          {t("Date/time, user, action, RFP, lane, old/new values, and notes for reproducibility.")}
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date / Time</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Action</TableHead>
-              <TableHead>RFP Name</TableHead>
-              <TableHead>Lane ID</TableHead>
-              <TableHead>Old Value</TableHead>
-              <TableHead>New Value</TableHead>
-              <TableHead>Notes</TableHead>
+              <TableHead>{t("Date / Time")}</TableHead>
+              <TableHead>{t("User")}</TableHead>
+              <TableHead>{t("Action")}</TableHead>
+              <TableHead>{t("RFP Name")}</TableHead>
+              <TableHead>{t("Lane ID")}</TableHead>
+              <TableHead>{t("Old Value")}</TableHead>
+              <TableHead>{t("New Value")}</TableHead>
+              <TableHead>{t("Notes")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -743,12 +739,14 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="RFPs"
-        description="Upload customer files, normalize lanes, apply AI matching, and convert priced lanes into quote-ready outputs."
+        title={t("RFPs")}
+        description={t(
+          "Upload customer files, normalize lanes, apply AI matching, and convert priced lanes into quote-ready outputs.",
+        )}
         actions={
           <>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Filter className="h-4 w-4" /> Baseline Filters
+              <Filter className="h-4 w-4" /> {t("Baseline Filters")}
             </Button>
             <Button
               variant="outline"
@@ -773,7 +771,7 @@ function Page() {
                 });
               }}
             >
-              <Bot className="h-4 w-4" /> Run AI Matching
+              <Bot className="h-4 w-4" /> {t("Run AI Matching")}
             </Button>
             <Button
               variant="outline"
@@ -782,10 +780,10 @@ function Page() {
               disabled={!active || rowBusyId === active?.rfpId}
               onClick={() => void convertActiveRfpToQuotes()}
             >
-              <FileOutput className="h-4 w-4" /> Bulk Create Quotes
+              <FileOutput className="h-4 w-4" /> {t("Bulk Create Quotes")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" /> Export
+              <Download className="h-4 w-4" /> {t("Export")}
             </Button>
             <Button
               variant="outline"
@@ -806,7 +804,7 @@ function Page() {
               className="gap-1.5 bg-gradient-to-r from-primary to-info"
               onClick={openCreateForm}
             >
-              <UploadCloud className="h-4 w-4" /> Upload RFP
+              <UploadCloud className="h-4 w-4" /> {t("Upload RFP")}
             </Button>
           </>
         }
@@ -819,36 +817,41 @@ function Page() {
           </Card>
         ) : null}
         {loadingRows ? null : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="Active RFPs"
-            value={`${rfpStats.activeRfps}`}
-            tone="info"
-            sub={
-              rfpRows.length > 0
-                ? `${rfpStats.avgProgress}% avg pricing`
-                : "Create an RFP to begin"
-            }
-          />
-          <StatCard
-            label="Imported Lanes"
-            value={rfpStats.totalLanes.toLocaleString()}
-            tone="success"
-            sub={rfpRows.length > 0 ? "Across all RFPs" : "No lanes imported"}
-          />
-          <StatCard
-            label="Ready For Quotes"
-            value={rfpStats.readyForQuotes.toLocaleString()}
-            tone="primary"
-            sub={rfpStats.readyForQuotes > 0 ? "Approved or exported" : "Awaiting approval"}
-          />
-          <StatCard label="Import SLA" value="—" tone="success" sub="Upload a file to measure" />
-        </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label={t("Active RFPs")}
+              value={`${rfpStats.activeRfps}`}
+              tone="info"
+              sub={
+                rfpRows.length > 0
+                  ? `${rfpStats.avgProgress}% avg pricing`
+                  : "Create an RFP to begin"
+              }
+            />
+            <StatCard
+              label={t("Imported Lanes")}
+              value={rfpStats.totalLanes.toLocaleString()}
+              tone="success"
+              sub={rfpRows.length > 0 ? "Across all RFPs" : "No lanes imported"}
+            />
+            <StatCard
+              label={t("Ready For Quotes")}
+              value={rfpStats.readyForQuotes.toLocaleString()}
+              tone="primary"
+              sub={rfpStats.readyForQuotes > 0 ? "Approved or exported" : "Awaiting approval"}
+            />
+            <StatCard
+              label={t("Import SLA")}
+              value="—"
+              tone="success"
+              sub="Upload a file to measure"
+            />
+          </div>
         )}
 
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Import Performance</CardTitle>
+            <CardTitle className="text-base">{t("Import Performance")}</CardTitle>
             <CardDescription>
               {active
                 ? `${active.rfpName} workflow: upload, parsing, normalization, mapping validation, pricing.`
@@ -872,18 +875,18 @@ function Page() {
         <Tabs value={view} onValueChange={(next) => setView(next as "workspace" | "list")}>
           <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted p-1 text-sm sm:max-w-md">
             <TabsTrigger value="workspace" className="py-2">
-              RFP Workspace
+              {t("RFP Workspace")}
             </TabsTrigger>
             <TabsTrigger value="list" className="py-2">
-              RFP List
+              {t("RFP List")}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="workspace" className="space-y-6">
             {!active ? (
               <WorkspaceEmptyCard
-                title="No RFP selected"
-                description="Create an RFP or open one from the list to use the workspace."
+                title={t("No RFP selected")}
+                description={t("Create an RFP or open one from the list to use the workspace.")}
               />
             ) : null}
             <div className="lg:hidden">
@@ -924,13 +927,14 @@ function Page() {
                     <CardContent className="p-4">
                       <div className="text-sm font-medium capitalize">{mobileTab} step</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        Touch-friendly cards, step actions, and collapsible details for mobile
-                        workflow.
+                        {t(
+                          "Touch-friendly cards, step actions, and collapsible details for mobile\r\n                        workflow.",
+                        )}
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <Button className="h-11 w-full">Primary Action</Button>
+                        <Button className="h-11 w-full">{t("Primary Action")}</Button>
                         <Button variant="outline" className="h-11 w-full">
-                          Secondary
+                          {t("Secondary")}
                         </Button>
                       </div>
                     </CardContent>
@@ -940,7 +944,11 @@ function Page() {
             </div>
 
             <div className="hidden lg:block">
-              <Tabs value={workspaceTab} onValueChange={setWorkspaceTab} className="w-full space-y-4">
+              <Tabs
+                value={workspaceTab}
+                onValueChange={setWorkspaceTab}
+                className="w-full space-y-4"
+              >
                 <div className="rounded-xl border border-border/70 bg-muted/20 p-1.5 shadow-sm">
                   <TabsList className="flex h-auto w-full gap-0.5 bg-transparent p-0">
                     {[
@@ -968,510 +976,541 @@ function Page() {
 
                 <TabsContent value="upload" className="mt-0">
                   <div className="grid items-start gap-6 lg:grid-cols-2">
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Upload Customer RFP</CardTitle>
-                    <CardDescription>Drag and drop XLSX, XLS, or CSV file.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 p-4 text-center">
-                      <UploadCloud className="mx-auto h-6 w-6 text-muted-foreground" />
-                      <div className="mt-2 text-sm font-medium">Drop file here</div>
-                      <div className="text-xs text-muted-foreground">Supported: XLSX, XLS, CSV</div>
-                      <Button size="sm" className="mt-3 w-full gap-1.5" disabled={!active}>
-                        <FileSpreadsheet className="h-4 w-4" /> Browse File
-                      </Button>
-                    </div>
-                    <Input
-                      placeholder="RFP name"
-                      value={active?.rfpName ?? ""}
-                      readOnly
-                      disabled={!active}
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input type="date" disabled={!active} />
-                      <Input type="date" disabled={!active} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        placeholder="Customer"
-                        value={active?.customer ?? ""}
-                        readOnly
-                        disabled={!active}
-                      />
-                      <Input
-                        placeholder="Approver"
-                        value={active?.approver ?? ""}
-                        readOnly
-                        disabled={!active}
-                      />
-                    </div>
-                    <Textarea
-                      rows={3}
-                      placeholder="Notes and pricing priorities (optional)"
-                      disabled={!active}
-                    />
-                    <div className="space-y-1 text-xs">
-                      {[
-                        "Detect missing required columns",
-                        "Detect invalid dates",
-                        "Detect duplicate lanes",
-                        "Detect missing origin/destination",
-                        "Detect unsupported equipment",
-                        "Detect invalid ZIP codes",
-                        "Detect incomplete frequency data",
-                        "Detect blank rates or notes",
-                      ].map((rule) => (
-                        <div
-                          key={rule}
-                          className="rounded-md border border-border/70 px-2.5 py-1.5 text-muted-foreground"
-                        >
-                          {rule}
+                    <Card className="border-border/70 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{t("Upload Customer RFP")}</CardTitle>
+                        <CardDescription>
+                          {t("Drag and drop XLSX, XLS, or CSV file.")}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 p-4 text-center">
+                          <UploadCloud className="mx-auto h-6 w-6 text-muted-foreground" />
+                          <div className="mt-2 text-sm font-medium">{t("Drop file here")}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {t("Supported: XLSX, XLS, CSV")}
+                          </div>
+                          <Button size="sm" className="mt-3 w-full gap-1.5" disabled={!active}>
+                            <FileSpreadsheet className="h-4 w-4" /> {t("Browse File")}
+                          </Button>
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                        <Input
+                          placeholder={t("RFP name")}
+                          value={active?.rfpName ?? ""}
+                          readOnly
+                          disabled={!active}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input type="date" disabled={!active} />
+                          <Input type="date" disabled={!active} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            placeholder={t("Customer")}
+                            value={active?.customer ?? ""}
+                            readOnly
+                            disabled={!active}
+                          />
+                          <Input
+                            placeholder={t("Approver")}
+                            value={active?.approver ?? ""}
+                            readOnly
+                            disabled={!active}
+                          />
+                        </div>
+                        <Textarea
+                          rows={3}
+                          placeholder={t("Notes and pricing priorities (optional)")}
+                          disabled={!active}
+                        />
+                        <div className="space-y-1 text-xs">
+                          {[
+                            "Detect missing required columns",
+                            "Detect invalid dates",
+                            "Detect duplicate lanes",
+                            "Detect missing origin/destination",
+                            "Detect unsupported equipment",
+                            "Detect invalid ZIP codes",
+                            "Detect incomplete frequency data",
+                            "Detect blank rates or notes",
+                          ].map((rule) => (
+                            <div
+                              key={rule}
+                              className="rounded-md border border-border/70 px-2.5 py-1.5 text-muted-foreground"
+                            >
+                              {rule}
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                <div className="space-y-6">
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Saved Customer Templates</CardTitle>
-                    <CardDescription>Mapping is saved per customer template.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Select disabled>
-                      <SelectTrigger>
-                        <SelectValue placeholder="No saved templates" />
-                      </SelectTrigger>
-                      <SelectContent />
-                    </Select>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button size="sm" className="gap-1.5">
-                        <Save className="h-4 w-4" /> Save
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        Duplicate
-                      </Button>
+                    <div className="space-y-6">
+                      <Card className="border-border/70 shadow-sm">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">
+                            {t("Saved Customer Templates")}
+                          </CardTitle>
+                          <CardDescription>
+                            {t("Mapping is saved per customer template.")}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <Select disabled>
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("No saved templates")} />
+                            </SelectTrigger>
+                            <SelectContent />
+                          </Select>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button size="sm" className="gap-1.5">
+                              <Save className="h-4 w-4" /> {t("Save")}
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              {t("Duplicate")}
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button size="sm" variant="outline">
+                              {t("Edit")}
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              {t("Delete")}
+                            </Button>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="border-success/40 bg-success/15 text-success"
+                          >
+                            {t("Acceptance: Mapping saved per customer template")}
+                          </Badge>
+                        </CardContent>
+                      </Card>
+                      {workflowStepsCard}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button size="sm" variant="outline">
-                        Edit
-                      </Button>
-                      <Button size="sm" variant="outline">
-                        Delete
-                      </Button>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="border-success/40 bg-success/15 text-success"
-                    >
-                      Acceptance: Mapping saved per customer template
-                    </Badge>
-                  </CardContent>
-                </Card>
-                {workflowStepsCard}
-                </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="mapping" className="mt-0 space-y-6">
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Column Mapper</CardTitle>
-                    <CardDescription>
-                      Auto suggestions, manual mapping, confidence score, validation, and templates.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <Button size="sm" variant="outline" className="gap-1.5">
-                        <Wand2 className="h-4 w-4" /> Auto-detect
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5">
-                        <Link2 className="h-4 w-4" /> Load Template
-                      </Button>
-                      <Button size="sm" className="gap-1.5">
-                        <Save className="h-4 w-4" /> Save Template
-                      </Button>
-                    </div>
-                    <div className="overflow-x-auto rounded-lg border border-border/70">
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">{t("Column Mapper")}</CardTitle>
+                      <CardDescription>
+                        {t(
+                          "Auto suggestions, manual mapping, confidence score, validation, and templates.",
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <Button size="sm" variant="outline" className="gap-1.5">
+                          <Wand2 className="h-4 w-4" /> {t("Auto-detect")}
+                        </Button>
+                        <Button size="sm" variant="outline" className="gap-1.5">
+                          <Link2 className="h-4 w-4" /> {t("Load Template")}
+                        </Button>
+                        <Button size="sm" className="gap-1.5">
+                          <Save className="h-4 w-4" /> {t("Save Template")}
+                        </Button>
+                      </div>
+                      <div className="overflow-x-auto rounded-lg border border-border/70">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>{t("Customer Column Name")}</TableHead>
+                              <TableHead>{t("System Field")}</TableHead>
+                              <TableHead>{t("Required / Optional")}</TableHead>
+                              <TableHead>{t("Sample Value")}</TableHead>
+                              <TableHead>{t("Confidence")}</TableHead>
+                              <TableHead>{t("Transform Rule")}</TableHead>
+                              <TableHead>{t("Validation")}</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            <EmptyTableRow
+                              colSpan={7}
+                              message="Upload and map a customer file to see column mappings."
+                            />
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">{t("Normalize Lane Data")}</CardTitle>
+                      <CardDescription>
+                        {t(
+                          "Standardize city/state names, ZIPs, equipment, dates, frequency, and\r\n                      deduplicate lanes.",
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto rounded-lg border border-border/70 p-0">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Customer Column Name</TableHead>
-                            <TableHead>System Field</TableHead>
-                            <TableHead>Required / Optional</TableHead>
-                            <TableHead>Sample Value</TableHead>
-                            <TableHead>Confidence</TableHead>
-                            <TableHead>Transform Rule</TableHead>
-                            <TableHead>Validation</TableHead>
+                            <TableHead>{t("Lane ID")}</TableHead>
+                            <TableHead>{t("Origin")}</TableHead>
+                            <TableHead>{t("Origin ZIP 5/3")}</TableHead>
+                            <TableHead>{t("Destination")}</TableHead>
+                            <TableHead>{t("Destination ZIP 5/3")}</TableHead>
+                            <TableHead>{t("Equipment")}</TableHead>
+                            <TableHead>{t("Frequency")}</TableHead>
+                            <TableHead>{t("Validation")}</TableHead>
+                            <TableHead>{t("Issues")}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           <EmptyTableRow
-                            colSpan={7}
-                            message="Upload and map a customer file to see column mappings."
+                            colSpan={9}
+                            message="Normalize lane data after upload to preview standardized lanes."
                           />
                         </TableBody>
                       </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Normalize Lane Data</CardTitle>
-                    <CardDescription>
-                      Standardize city/state names, ZIPs, equipment, dates, frequency, and
-                      deduplicate lanes.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="overflow-x-auto rounded-lg border border-border/70 p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Lane ID</TableHead>
-                          <TableHead>Origin</TableHead>
-                          <TableHead>Origin ZIP 5/3</TableHead>
-                          <TableHead>Destination</TableHead>
-                          <TableHead>Destination ZIP 5/3</TableHead>
-                          <TableHead>Equipment</TableHead>
-                          <TableHead>Frequency</TableHead>
-                          <TableHead>Validation</TableHead>
-                          <TableHead>Issues</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <EmptyTableRow
-                          colSpan={9}
-                          message="Normalize lane data after upload to preview standardized lanes."
-                        />
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
                 </TabsContent>
 
                 <TabsContent value="pricing" className="mt-0 space-y-6">
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Historical Baseline Filters</CardTitle>
-                    <CardDescription>
-                      Date range baseline and inclusion/exclusion controls for historical averages.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 sm:grid-cols-2">
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Historical date range" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="30">Last 30 Days</SelectItem>
-                        <SelectItem value="60">Last 60 Days</SelectItem>
-                        <SelectItem value="90">Last 90 Days</SelectItem>
-                        <SelectItem value="custom">Custom Date Range</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input placeholder="Minimum load count" />
-                    <Input placeholder="3-digit ZIP inclusion" />
-                    <Input placeholder="5-digit ZIP inclusion" />
-                    <Input placeholder="Adjacent markets" />
-                    <Input placeholder="Outlier exclusion" />
-                    <Input placeholder="Canceled load exclusion" />
-                    <Input placeholder="Low-confidence match exclusion" />
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Pricing Review Table</CardTitle>
-                    <CardDescription>
-                      Historical outputs (30/60/90), AI matching, backhaul score, network fit, risk,
-                      and approval.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="overflow-x-auto rounded-lg border border-border/70 p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Lane ID</TableHead>
-                          <TableHead>Origin</TableHead>
-                          <TableHead>Destination</TableHead>
-                          <TableHead>Hist Buy 30/60/90</TableHead>
-                          <TableHead>Hist Sell 30/60/90</TableHead>
-                          <TableHead>Suggested Buy</TableHead>
-                          <TableHead>Suggested Sell</TableHead>
-                          <TableHead>Margin $ / %</TableHead>
-                          <TableHead>Similarity</TableHead>
-                          <TableHead>Backhaul</TableHead>
-                          <TableHead>Network Fit</TableHead>
-                          <TableHead>Risk</TableHead>
-                          <TableHead>Approval</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pricingLanes.length === 0 ? (
-                          <EmptyTableRow
-                            colSpan={14}
-                            message="Run pricing on uploaded lanes to populate this table."
-                          />
-                        ) : (
-                          pricingLanes.map((row) => (
-                            <TableRow key={row.laneId}>
-                              <TableCell className="font-medium text-primary">{row.laneId}</TableCell>
-                              <TableCell>{row.origin}</TableCell>
-                              <TableCell>{row.destination}</TableCell>
-                              <TableCell className="text-xs">
-                                {money(row.histBuy30)} / {money(row.histBuy60)} /{" "}
-                                {money(row.histBuy90)}
-                              </TableCell>
-                              <TableCell className="text-xs">
-                                {money(row.histSell30)} / {money(row.histSell60)} /{" "}
-                                {money(row.histSell90)}
-                              </TableCell>
-                              <TableCell>{money(row.suggestedBuy)}</TableCell>
-                              <TableCell>{money(row.suggestedSell)}</TableCell>
-                              <TableCell>
-                                {money(row.marginUsd)} / {row.marginPct.toFixed(1)}%
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant="outline"
-                                  className="border-primary/30 bg-primary/10 text-primary"
-                                >
-                                  {row.similarity}%
-                                </Badge>
-                              </TableCell>
-                              <TableCell>{row.backhaul}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className={networkFitTone(row.networkFit)}>
-                                  {row.networkFit}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className={riskTone(row.riskScore)}>
-                                  {row.riskScore}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>{row.approvalStatus}</TableCell>
-                              <TableCell>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setLaneId(row.laneId)}
-                                >
-                                  View Details
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">
+                        {t("Historical Baseline Filters")}
+                      </CardTitle>
+                      <CardDescription>
+                        {t(
+                          "Date range baseline and inclusion/exclusion controls for historical averages.",
                         )}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 sm:grid-cols-2">
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("Historical date range")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="30">{t("Last 30 Days")}</SelectItem>
+                          <SelectItem value="60">{t("Last 60 Days")}</SelectItem>
+                          <SelectItem value="90">{t("Last 90 Days")}</SelectItem>
+                          <SelectItem value="custom">{t("Custom Date Range")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input placeholder={t("Minimum load count")} />
+                      <Input placeholder={t("3-digit ZIP inclusion")} />
+                      <Input placeholder={t("5-digit ZIP inclusion")} />
+                      <Input placeholder={t("Adjacent markets")} />
+                      <Input placeholder={t("Outlier exclusion")} />
+                      <Input placeholder={t("Canceled load exclusion")} />
+                      <Input placeholder={t("Low-confidence match exclusion")} />
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">{t("Pricing Review Table")}</CardTitle>
+                      <CardDescription>
+                        {t(
+                          "Historical outputs (30/60/90), AI matching, backhaul score, network fit, risk,\r\n                      and approval.",
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto rounded-lg border border-border/70 p-0">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>{t("Lane ID")}</TableHead>
+                            <TableHead>{t("Origin")}</TableHead>
+                            <TableHead>{t("Destination")}</TableHead>
+                            <TableHead>{t("Hist Buy 30/60/90")}</TableHead>
+                            <TableHead>{t("Hist Sell 30/60/90")}</TableHead>
+                            <TableHead>{t("Suggested Buy")}</TableHead>
+                            <TableHead>{t("Suggested Sell")}</TableHead>
+                            <TableHead>{t("Margin $ / %")}</TableHead>
+                            <TableHead>{t("Similarity")}</TableHead>
+                            <TableHead>{t("Backhaul")}</TableHead>
+                            <TableHead>{t("Network Fit")}</TableHead>
+                            <TableHead>{t("Risk")}</TableHead>
+                            <TableHead>{t("Approval")}</TableHead>
+                            <TableHead>{t("Actions")}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pricingLanes.length === 0 ? (
+                            <EmptyTableRow
+                              colSpan={14}
+                              message="Run pricing on uploaded lanes to populate this table."
+                            />
+                          ) : (
+                            pricingLanes.map((row) => (
+                              <TableRow key={row.laneId}>
+                                <TableCell className="font-medium text-primary">
+                                  {row.laneId}
+                                </TableCell>
+                                <TableCell>{row.origin}</TableCell>
+                                <TableCell>{row.destination}</TableCell>
+                                <TableCell className="text-xs">
+                                  {money(row.histBuy30)} / {money(row.histBuy60)} /{" "}
+                                  {money(row.histBuy90)}
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  {money(row.histSell30)} / {money(row.histSell60)} /{" "}
+                                  {money(row.histSell90)}
+                                </TableCell>
+                                <TableCell>{money(row.suggestedBuy)}</TableCell>
+                                <TableCell>{money(row.suggestedSell)}</TableCell>
+                                <TableCell>
+                                  {money(row.marginUsd)} / {row.marginPct.toFixed(1)}%
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="outline"
+                                    className="border-primary/30 bg-primary/10 text-primary"
+                                  >
+                                    {row.similarity}%
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{row.backhaul}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant="outline"
+                                    className={networkFitTone(row.networkFit)}
+                                  >
+                                    {row.networkFit}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={riskTone(row.riskScore)}>
+                                    {row.riskScore}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{row.approvalStatus}</TableCell>
+                                <TableCell>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setLaneId(row.laneId)}
+                                  >
+                                    {t("View Details")}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
                 </TabsContent>
 
                 <TabsContent value="matching" className="mt-0">
                   <div className="grid items-start gap-6 lg:grid-cols-2">
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">AI Matching</CardTitle>
-                    <CardDescription>
-                      Similarity by geography (3-digit/5-digit ZIP), equipment, day-of-week, dwell,
-                      seasonality, carrier availability.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {pricingLanes.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Run AI matching after pricing to see lane similarity breakdowns.
-                      </p>
-                    ) : (
-                      pricingLanes.map((row) => (
-                        <div key={row.laneId} className="rounded-lg border border-border/70 p-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold">{row.laneId}</span>
-                            <Badge
-                              variant="outline"
-                              className="border-primary/30 bg-primary/10 text-primary"
+                    <Card className="border-border/70 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{t("AI Matching")}</CardTitle>
+                        <CardDescription>
+                          {t(
+                            "Similarity by geography (3-digit/5-digit ZIP), equipment, day-of-week, dwell,\r\n                      seasonality, carrier availability.",
+                          )}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {pricingLanes.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            {t("Run AI matching after pricing to see lane similarity breakdowns.")}
+                          </p>
+                        ) : (
+                          pricingLanes.map((row) => (
+                            <div
+                              key={row.laneId}
+                              className="rounded-lg border border-border/70 p-3"
                             >
-                              {row.similarity}% Similarity
-                            </Badge>
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-1 text-xs text-muted-foreground">
-                            <span>Geography: {row.geographyMatch}</span>
-                            <span>Equipment: {row.equipmentMatch}</span>
-                            <span>Day-of-week: {row.dowMatch}</span>
-                            <span>Dwell: {row.dwellMatch}</span>
-                            <span>Seasonality: {row.seasonalityMatch}</span>
-                            <span>Carrier: {row.carrierMatch}</span>
-                            <span>Confidence: {row.confidence}</span>
-                            <span>Matched historical lanes: {row.matchedHistorical}</span>
-                          </div>
-                          <details className="mt-2 rounded-md border border-border/70 bg-muted/30 p-2">
-                            <summary className="cursor-pointer text-xs font-medium">
-                              Why this match?
-                            </summary>
-                            <div className="mt-1 text-xs text-muted-foreground">{row.why}</div>
-                          </details>
-                        </div>
-                      ))
-                    )}
-                    <Badge
-                      variant="outline"
-                      className="border-success/40 bg-success/15 text-success"
-                    >
-                      Acceptance: Similarity score consistent with test set
-                    </Badge>
-                  </CardContent>
-                </Card>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-semibold">{row.laneId}</span>
+                                <Badge
+                                  variant="outline"
+                                  className="border-primary/30 bg-primary/10 text-primary"
+                                >
+                                  {row.similarity}% Similarity
+                                </Badge>
+                              </div>
+                              <div className="mt-2 grid grid-cols-2 gap-1 text-xs text-muted-foreground">
+                                <span>Geography: {row.geographyMatch}</span>
+                                <span>Equipment: {row.equipmentMatch}</span>
+                                <span>Day-of-week: {row.dowMatch}</span>
+                                <span>Dwell: {row.dwellMatch}</span>
+                                <span>Seasonality: {row.seasonalityMatch}</span>
+                                <span>Carrier: {row.carrierMatch}</span>
+                                <span>Confidence: {row.confidence}</span>
+                                <span>Matched historical lanes: {row.matchedHistorical}</span>
+                              </div>
+                              <details className="mt-2 rounded-md border border-border/70 bg-muted/30 p-2">
+                                <summary className="cursor-pointer text-xs font-medium">
+                                  {t("Why this match?")}
+                                </summary>
+                                <div className="mt-1 text-xs text-muted-foreground">{row.why}</div>
+                              </details>
+                            </div>
+                          ))
+                        )}
+                        <Badge
+                          variant="outline"
+                          className="border-success/40 bg-success/15 text-success"
+                        >
+                          {t("Acceptance: Similarity score consistent with test set")}
+                        </Badge>
+                      </CardContent>
+                    </Card>
 
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Network Fit And Backhaul</CardTitle>
-                    <CardDescription>
-                      Backhaul score 0-100 with candidate loads and deadhead estimate.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-xs">
-                    {pricingLanes.length === 0 ? (
-                      <p className="text-muted-foreground">
-                        Network fit and backhaul scores appear after lane pricing runs.
-                      </p>
-                    ) : (
-                      pricingLanes.map((row) => (
-                        <div key={row.laneId} className="rounded-md border border-border/70 p-2.5">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{row.laneId}</span>
-                            <Badge variant="outline" className={networkFitTone(row.networkFit)}>
-                              {row.networkFit}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 text-muted-foreground">
-                            Backhaul {row.backhaul} | Candidate loads {row.matchedActive} | Deadhead{" "}
-                            {Math.max(0, 220 - row.backhaul)} mi
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
+                    <Card className="border-border/70 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{t("Network Fit And Backhaul")}</CardTitle>
+                        <CardDescription>
+                          {t("Backhaul score 0-100 with candidate loads and deadhead estimate.")}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-xs">
+                        {pricingLanes.length === 0 ? (
+                          <p className="text-muted-foreground">
+                            {t("Network fit and backhaul scores appear after lane pricing runs.")}
+                          </p>
+                        ) : (
+                          pricingLanes.map((row) => (
+                            <div
+                              key={row.laneId}
+                              className="rounded-md border border-border/70 p-2.5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">{row.laneId}</span>
+                                <Badge variant="outline" className={networkFitTone(row.networkFit)}>
+                                  {row.networkFit}
+                                </Badge>
+                              </div>
+                              <div className="mt-1 text-muted-foreground">
+                                Backhaul {row.backhaul} | Candidate loads {row.matchedActive} |
+                                Deadhead {Math.max(0, 220 - row.backhaul)} mi
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="approval" className="mt-0">
                   <div className="grid items-start gap-6 lg:grid-cols-3">
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Approval Workflow</CardTitle>
-                    <CardDescription>
-                      Approver assignment and approval gates before quote/export.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Input
-                      placeholder="Approver"
-                      value={active?.approver ?? ""}
-                      readOnly
-                      disabled={!active}
-                    />
-                    <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
-                      {active
-                        ? `Approver: ${active.approver || "Unassigned"} | Status: ${active.status} | Owner: ${active.owner} | Last modified: ${active.lastModified}`
-                        : "Select an RFP to configure approval workflow."}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button size="sm" className="gap-1.5">
-                        <ShieldCheck className="h-4 w-4" /> Send
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5">
-                        <CheckCircle2 className="h-4 w-4" /> Approve
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5">
-                        <AlertTriangle className="h-4 w-4" /> Reject
-                      </Button>
-                      <Button size="sm" variant="outline" className="gap-1.5">
-                        <Clock3 className="h-4 w-4" /> Request Changes
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                    <Card className="border-border/70 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{t("Approval Workflow")}</CardTitle>
+                        <CardDescription>
+                          {t("Approver assignment and approval gates before quote/export.")}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <Input
+                          placeholder={t("Approver")}
+                          value={active?.approver ?? ""}
+                          readOnly
+                          disabled={!active}
+                        />
+                        <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
+                          {active
+                            ? `Approver: ${active.approver || "Unassigned"} | Status: ${active.status} | Owner: ${active.owner} | Last modified: ${active.lastModified}`
+                            : "Select an RFP to configure approval workflow."}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button size="sm" className="gap-1.5">
+                            <ShieldCheck className="h-4 w-4" /> {t("Send")}
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1.5">
+                            <CheckCircle2 className="h-4 w-4" /> {t("Approve")}
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1.5">
+                            <AlertTriangle className="h-4 w-4" /> {t("Reject")}
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1.5">
+                            <Clock3 className="h-4 w-4" /> {t("Request Changes")}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Bulk Create Quotes</CardTitle>
-                    <CardDescription>
-                      Create quotes from approved or selected lanes.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-xs">
-                    {[
-                      "Create quotes for all approved lanes",
-                      "Create quotes for selected lanes",
-                      "Create quotes by network fit flag",
-                      "Create quotes by margin threshold",
-                      "Create quotes by customer region",
-                      "Exclude low-confidence lanes",
-                      "Exclude weak network fit lanes",
-                      "Require approval before quote creation",
-                    ].map((rule) => (
-                      <label
-                        key={rule}
-                        className="flex items-center justify-between rounded-md border border-border/70 p-2"
-                      >
-                        <span>{rule}</span>
-                        <input type="checkbox" defaultChecked className="h-4 w-4" />
-                      </label>
-                    ))}
-                    <Button
-                      className="mt-1 w-full gap-1.5"
-                      disabled={!active || rowBusyId === active?.rfpId}
-                      onClick={() => void convertActiveRfpToQuotes()}
-                    >
-                      <PlayCircle className="h-4 w-4" /> Bulk Create Quotes
-                    </Button>
-                  </CardContent>
-                </Card>
+                    <Card className="border-border/70 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{t("Bulk Create Quotes")}</CardTitle>
+                        <CardDescription>
+                          {t("Create quotes from approved or selected lanes.")}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-xs">
+                        {[
+                          "Create quotes for all approved lanes",
+                          "Create quotes for selected lanes",
+                          "Create quotes by network fit flag",
+                          "Create quotes by margin threshold",
+                          "Create quotes by customer region",
+                          "Exclude low-confidence lanes",
+                          "Exclude weak network fit lanes",
+                          "Require approval before quote creation",
+                        ].map((rule) => (
+                          <label
+                            key={rule}
+                            className="flex items-center justify-between rounded-md border border-border/70 p-2"
+                          >
+                            <span>{rule}</span>
+                            <input type="checkbox" defaultChecked className="h-4 w-4" />
+                          </label>
+                        ))}
+                        <Button
+                          className="mt-1 w-full gap-1.5"
+                          disabled={!active || rowBusyId === active?.rfpId}
+                          onClick={() => void convertActiveRfpToQuotes()}
+                        >
+                          <PlayCircle className="h-4 w-4" /> {t("Bulk Create Quotes")}
+                        </Button>
+                      </CardContent>
+                    </Card>
 
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">Export To Customer Format</CardTitle>
-                    <CardDescription>
-                      Preserve customer column order, required headers, customer reference IDs,
-                      optional formatting.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-xs">
-                    {[
-                      "Export to original customer template",
-                      "Export selected lanes",
-                      "Export all lanes",
-                      "Export only approved lanes",
-                      "Include notes",
-                      "Include rates only",
-                      "Include optional columns",
-                    ].map((rule) => (
-                      <label
-                        key={rule}
-                        className="flex items-center justify-between rounded-md border border-border/70 p-2"
-                      >
-                        <span>{rule}</span>
-                        <input type="checkbox" defaultChecked className="h-4 w-4" />
-                      </label>
-                    ))}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <Button className="gap-1.5">
-                        <Download className="h-4 w-4" /> XLSX
-                      </Button>
-                      <Button variant="outline" className="gap-1.5">
-                        <Download className="h-4 w-4" /> CSV
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                    <Card className="border-border/70 shadow-sm">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">
+                          {t("Export To Customer Format")}
+                        </CardTitle>
+                        <CardDescription>
+                          {t(
+                            "Preserve customer column order, required headers, customer reference IDs,\r\n                      optional formatting.",
+                          )}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-xs">
+                        {[
+                          "Export to original customer template",
+                          "Export selected lanes",
+                          "Export all lanes",
+                          "Export only approved lanes",
+                          "Include notes",
+                          "Include rates only",
+                          "Include optional columns",
+                        ].map((rule) => (
+                          <label
+                            key={rule}
+                            className="flex items-center justify-between rounded-md border border-border/70 p-2"
+                          >
+                            <span>{rule}</span>
+                            <input type="checkbox" defaultChecked className="h-4 w-4" />
+                          </label>
+                        ))}
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <Button className="gap-1.5">
+                            <Download className="h-4 w-4" /> XLSX
+                          </Button>
+                          <Button variant="outline" className="gap-1.5">
+                            <Download className="h-4 w-4" /> CSV
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </TabsContent>
 
@@ -1498,9 +1537,9 @@ function Page() {
           <TabsContent value="list" className="space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">RFP List View</CardTitle>
+                <CardTitle className="text-base">{t("RFP List View")}</CardTitle>
                 <CardDescription>
-                  All uploaded RFPs with status progression and action controls.
+                  {t("All uploaded RFPs with status progression and action controls.")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1511,7 +1550,7 @@ function Page() {
                       className="pl-8"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search RFP name, customer, owner, status..."
+                      placeholder={t("Search RFP name, customer, owner, status...")}
                     />
                     {typed && suggestions.length > 0 && (
                       <div className="absolute left-0 top-full z-20 mt-1 w-full rounded-lg border border-border bg-background p-1 shadow-md">
@@ -1529,10 +1568,10 @@ function Page() {
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Status" />
+                      <SelectValue placeholder={t("Status")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All statuses</SelectItem>
+                      <SelectItem value="all">{t("All statuses")}</SelectItem>
                       {STATUSES.map((status) => (
                         <SelectItem key={status} value={status}>
                           {status}
@@ -1542,10 +1581,10 @@ function Page() {
                   </Select>
                   <Select value={ownerFilter} onValueChange={setOwnerFilter}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Owner" />
+                      <SelectValue placeholder={t("Owner")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All owners</SelectItem>
+                      <SelectItem value="all">{t("All owners")}</SelectItem>
                       {Array.from(new Set(rfpRows.map((row) => row.owner))).map((owner) => (
                         <SelectItem key={owner} value={owner}>
                           {owner}
@@ -1559,18 +1598,18 @@ function Page() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>RFP Name</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>File Type</TableHead>
-                        <TableHead>Lane Count</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Pricing Progress</TableHead>
-                        <TableHead>Assigned Owner</TableHead>
-                        <TableHead>Approver</TableHead>
-                        <TableHead>Upload Date</TableHead>
-                        <TableHead>Last Modified</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead>{t("RFP Name")}</TableHead>
+                        <TableHead>{t("Customer")}</TableHead>
+                        <TableHead>{t("File Type")}</TableHead>
+                        <TableHead>{t("Lane Count")}</TableHead>
+                        <TableHead>{t("Status")}</TableHead>
+                        <TableHead>{t("Pricing Progress")}</TableHead>
+                        <TableHead>{t("Assigned Owner")}</TableHead>
+                        <TableHead>{t("Approver")}</TableHead>
+                        <TableHead>{t("Upload Date")}</TableHead>
+                        <TableHead>{t("Last Modified")}</TableHead>
+                        <TableHead>{t("Due Date")}</TableHead>
+                        <TableHead>{t("Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1590,7 +1629,7 @@ function Page() {
                             colSpan={12}
                             className="py-8 text-center text-sm text-muted-foreground"
                           >
-                            No RFPs found.
+                            {t("No RFPs found.")}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -1643,7 +1682,7 @@ function Page() {
                                       setView("workspace");
                                     }}
                                   >
-                                    View RFP
+                                    {t("View RFP")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1652,7 +1691,7 @@ function Page() {
                                     onClick={() => openEditForm(row)}
                                   >
                                     <PencilLine className="mr-1 h-3.5 w-3.5" />
-                                    Edit
+                                    {t("Edit")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1665,7 +1704,7 @@ function Page() {
                                       })
                                     }
                                   >
-                                    Run Pricing
+                                    {t("Run Pricing")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1675,7 +1714,7 @@ function Page() {
                                       void saveRowUpdate(row, { status: "Approval Pending" })
                                     }
                                   >
-                                    Assign Approver
+                                    {t("Assign Approver")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1688,7 +1727,7 @@ function Page() {
                                       })
                                     }
                                   >
-                                    Bulk Create Quotes
+                                    {t("Bulk Create Quotes")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1701,7 +1740,7 @@ function Page() {
                                       })
                                     }
                                   >
-                                    Export
+                                    {t("Export")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1709,7 +1748,7 @@ function Page() {
                                     disabled={busy}
                                     onClick={() => void saveRowUpdate(row, { status: "Archived" })}
                                   >
-                                    Archive
+                                    {t("Archive")}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1719,7 +1758,7 @@ function Page() {
                                     onClick={() => setDeleteTarget(row)}
                                   >
                                     <Trash2 className="mr-1 h-3.5 w-3.5" />
-                                    Delete
+                                    {t("Delete")}
                                   </Button>
                                 </div>
                               </TableCell>
@@ -1755,23 +1794,23 @@ function Page() {
           </DialogHeader>
           <div className="grid gap-3 py-1 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">RFP Name</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("RFP Name")}</label>
               <Input
                 value={form.rfpName}
                 onChange={(event) => setForm((prev) => ({ ...prev, rfpName: event.target.value }))}
-                placeholder="Q4 National Refresh"
+                placeholder={t("Q4 National Refresh")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Customer</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Customer")}</label>
               <Input
                 value={form.customer}
                 onChange={(event) => setForm((prev) => ({ ...prev, customer: event.target.value }))}
-                placeholder="Customer name"
+                placeholder={t("Customer name")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">File Type</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("File Type")}</label>
               <Select
                 value={form.fileType}
                 onValueChange={(value) =>
@@ -1789,7 +1828,7 @@ function Page() {
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Lane Count</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Lane Count")}</label>
               <Input
                 type="number"
                 value={form.laneCount}
@@ -1800,7 +1839,7 @@ function Page() {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">
-                Pricing Progress %
+                {t("Pricing Progress %")}
               </label>
               <Input
                 type="number"
@@ -1813,7 +1852,7 @@ function Page() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Status</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Status")}</label>
               <Select
                 value={form.status}
                 onValueChange={(value) =>
@@ -1833,39 +1872,39 @@ function Page() {
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Due Date</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Due Date")}</label>
               <Input
                 value={form.dueDate}
                 onChange={(event) => setForm((prev) => ({ ...prev, dueDate: event.target.value }))}
-                placeholder="May 30, 2026"
+                placeholder={t("May 30, 2026")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Owner</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Owner")}</label>
               <Input
                 value={form.owner}
                 onChange={(event) => setForm((prev) => ({ ...prev, owner: event.target.value }))}
-                placeholder="Owner"
+                placeholder={t("Owner")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Approver</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Approver")}</label>
               <Input
                 value={form.approver}
                 onChange={(event) => setForm((prev) => ({ ...prev, approver: event.target.value }))}
-                placeholder="Approver"
+                placeholder={t("Approver")}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" disabled={formBusy} onClick={() => setFormOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button disabled={formBusy} onClick={() => void submitForm()}>
               {formBusy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
+                  {t("Saving...")}
                 </>
               ) : formMode === "create" ? (
                 "Create RFP"
@@ -1880,7 +1919,7 @@ function Page() {
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete RFP?</DialogTitle>
+            <DialogTitle>{t("Delete RFP?")}</DialogTitle>
             <DialogDescription>
               {deleteTarget
                 ? `This will permanently remove ${deleteTarget.rfpName} from AWS DynamoDB.`
@@ -1889,13 +1928,13 @@ function Page() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button variant="destructive" disabled={deleteBusy} onClick={() => void handleDelete()}>
               {deleteBusy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
+                  {t("Deleting...")}
                 </>
               ) : (
                 "Delete"
@@ -1912,43 +1951,44 @@ function Page() {
               <SheetHeader>
                 <SheetTitle>Lane Detail - {lane.laneId}</SheetTitle>
                 <SheetDescription>
-                  Original row, normalized lane data, historical pricing, AI breakdown, network fit,
-                  backhaul, margin guidance, override history, and quote status.
+                  {t(
+                    "Original row, normalized lane data, historical pricing, AI breakdown, network fit,\r\n                  backhaul, margin guidance, override history, and quote status.",
+                  )}
                 </SheetDescription>
               </SheetHeader>
               <div className="mt-5 space-y-4">
-                <DetailCard title="Original Uploaded Row">
+                <DetailCard title={t("Original Uploaded Row")}>
                   O City: {lane.origin.split(",")[0]} | O ZIP: {lane.origin.match(/\((\d+)\)/)?.[1]}
                   00 | D City: {lane.destination.split(",")[0]} | D ZIP:{" "}
                   {lane.destination.match(/\((\d+)\)/)?.[1]}00 | Equip: {lane.equipment}
                 </DetailCard>
-                <DetailCard title="Historical Pricing">
+                <DetailCard title={t("Historical Pricing")}>
                   30/60/90 Buy: {money(lane.histBuy30)} / {money(lane.histBuy60)} /{" "}
                   {money(lane.histBuy90)} | 30/60/90 Sell: {money(lane.histSell30)} /{" "}
                   {money(lane.histSell60)} / {money(lane.histSell90)}
                 </DetailCard>
-                <DetailCard title="AI Matching Breakdown">
+                <DetailCard title={t("AI Matching Breakdown")}>
                   Similarity {lane.similarity}% | Geography {lane.geographyMatch} | Equipment{" "}
                   {lane.equipmentMatch} | DOW {lane.dowMatch} | Dwell {lane.dwellMatch} |
                   Seasonality {lane.seasonalityMatch} | Carrier {lane.carrierMatch} | Confidence{" "}
                   {lane.confidence}
                 </DetailCard>
-                <DetailCard title="Why This Match?">{lane.why}</DetailCard>
-                <DetailCard title="Network Fit And Backhaul">
+                <DetailCard title={t("Why This Match?")}>{lane.why}</DetailCard>
+                <DetailCard title={t("Network Fit And Backhaul")}>
                   Fit: {lane.networkFit} | Backhaul {lane.backhaul} | Candidate loads{" "}
                   {lane.matchedActive + 6} | Deadhead {Math.max(42, 220 - lane.backhaul)} mi
                 </DetailCard>
-                <DetailCard title="Margin Guidance And Override">
+                <DetailCard title={t("Margin Guidance And Override")}>
                   Suggested buy/sell {money(lane.suggestedBuy)} / {money(lane.suggestedSell)} |
                   Margin {money(lane.marginUsd)} ({lane.marginPct.toFixed(1)}%) | Quote status:{" "}
                   {lane.approvalStatus}
                 </DetailCard>
                 <div className="grid grid-cols-2 gap-2">
                   <Button className="gap-1.5">
-                    <FileCheck2 className="h-4 w-4" /> Create Quote
+                    <FileCheck2 className="h-4 w-4" /> {t("Create Quote")}
                   </Button>
                   <Button variant="outline" className="gap-1.5">
-                    <ChevronRight className="h-4 w-4" /> Next Lane
+                    <ChevronRight className="h-4 w-4" /> {t("Next Lane")}
                   </Button>
                 </div>
               </div>

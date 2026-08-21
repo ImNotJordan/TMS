@@ -1,14 +1,5 @@
 import * as React from "react";
-import {
-  AlertTriangle,
-  FileText,
-  Globe,
-  Loader2,
-  Mail,
-  Plus,
-  Send,
-  Sparkles,
-} from "lucide-react";
+import { AlertTriangle, FileText, Globe, Loader2, Mail, Plus, Send, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +11,12 @@ import {
   type CrmCampaignType,
 } from "@/lib/crm-store";
 import { Card, formatTimestamp } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
-const TYPE_META: Record<CrmCampaignType, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
+const TYPE_META: Record<
+  CrmCampaignType,
+  { label: string; icon: React.ComponentType<{ className?: string }> }
+> = {
   email_sequence: { label: "Email Sequence", icon: Mail },
   landing_page: { label: "Landing Page", icon: Globe },
   social: { label: "Social Scheduler", icon: Send },
@@ -56,10 +51,12 @@ export function CampaignsPanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          Email sequences, landing pages, social scheduling, and AI-drafted content live here.
+          {t(
+            "Email sequences, landing pages, social scheduling, and AI-drafted content live here.",
+          )}
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> New Campaign
+          <Plus className="h-4 w-4" /> {t("New Campaign")}
         </Button>
       </div>
 
@@ -86,7 +83,7 @@ export function CampaignsPanel() {
       ) : !campaigns || campaigns.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
           <FileText className="h-6 w-6" />
-          No campaigns yet.
+          {t("No campaigns yet.")}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -125,7 +122,11 @@ export function CampaignsPanel() {
         </div>
       )}
 
-      <CreateCampaignDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={() => void load()} />
+      <CreateCampaignDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => void load()}
+      />
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
 import { clearProfileSectionCache } from "@/hooks/use-profile-section";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/admin/users/$userId")({
   head: ({ params }) => ({
@@ -151,10 +152,10 @@ function AdminEditUserPage() {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
         <div className="rounded-xl border border-destructive/30 bg-destructive/8 p-6 text-sm text-destructive">
-          <div className="font-semibold">Could not load this user</div>
+          <div className="font-semibold">{t("Could not load this user")}</div>
           <p className="mt-2 text-xs opacity-90">{fetchError}</p>
           <Button className="mt-4" variant="outline" asChild>
-            <Link to="/admin">Back to admin</Link>
+            <Link to="/admin">{t("Back to admin")}</Link>
           </Button>
         </div>
       </div>
@@ -166,13 +167,13 @@ function AdminEditUserPage() {
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-20 text-center">
         <UserCircle2 className="h-12 w-12 text-muted-foreground" />
         <div>
-          <h1 className="text-lg font-semibold text-foreground">User not found</h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("User not found")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             No profile in UsersTable for <span className="font-mono">{userId}</span>.
           </p>
         </div>
         <Button variant="outline" asChild>
-          <Link to="/admin">Back to admin</Link>
+          <Link to="/admin">{t("Back to admin")}</Link>
         </Button>
       </div>
     );
@@ -184,7 +185,7 @@ function AdminEditUserPage() {
         <div className="sticky top-0 z-20 -mx-px mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-1 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex min-w-0 items-center gap-3">
             <Button variant="ghost" size="icon" className="shrink-0" asChild>
-              <Link to="/admin" aria-label="Back to admin">
+              <Link to="/admin" aria-label={t("Back to admin")}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
@@ -194,7 +195,7 @@ function AdminEditUserPage() {
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-lg font-semibold tracking-tight text-foreground">
-                  Edit user
+                  {t("Edit user")}
                 </h1>
                 <p className="truncate text-xs text-muted-foreground">
                   {displayName}
@@ -212,11 +213,11 @@ function AdminEditUserPage() {
                 onClick={handleDiscard}
                 className="text-muted-foreground"
               >
-                <X className="mr-1 h-4 w-4" /> Discard
+                <X className="mr-1 h-4 w-4" /> {t("Discard")}
               </Button>
             )}
             <Button type="button" variant="outline" size="sm" asChild>
-              <Link to="/admin">Close</Link>
+              <Link to="/admin">{t("Close")}</Link>
             </Button>
             <Button
               type="button"
@@ -229,11 +230,11 @@ function AdminEditUserPage() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Saving…
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("Saving…")}
                 </>
               ) : (
                 <>
-                  <Save className="mr-1 h-4 w-4" /> Save changes
+                  <Save className="mr-1 h-4 w-4" /> {t("Save changes")}
                 </>
               )}
             </Button>

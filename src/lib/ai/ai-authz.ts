@@ -8,6 +8,7 @@ import {
   getWorkspaceSettingsTable,
 } from "@/lib/ai/server-aws";
 import { strictRole } from "@/lib/tenant/strict-role";
+import { COMPANY_ID_CLAIM } from "@/lib/tenant/server-tenant-context";
 import type { Role } from "@/lib/admin-user-constants";
 
 /** Roles allowed to use Logistics AI / workspace AI at scale. */
@@ -31,11 +32,19 @@ type PermissionsData = {
   role?: string;
   /** Mirror of the Cognito `custom:sessionEpoch`, for cheap revocation checks. */
   sessionEpoch?: unknown;
+  /** Per-module access matrix the admin console writes. See `resolveRequestRole`. */
+  modulePermissions?: unknown;
+  [key: string]: unknown;
 };
 
 const roleCache = new Map<
   string,
-  { role: Role | null; sessionEpoch: number | null; expiresAt: number }
+  {
+    role: Role | null;
+    sessionEpoch: number | null;
+    permissions: PermissionsData | null;
+    expiresAt: number;
+  }
 >();
 /**
  * Also the revocation window: a bumped epoch takes effect within this long.
@@ -45,7 +54,24 @@ const roleCache = new Map<
 const ROLE_CACHE_TTL_MS = 60_000;
 
 export type ResolvedRequestRole =
-  | { ok: true; sub: string; role: Role | null; sessionEpoch: number | null }
+  | {
+      ok: true;
+      sub: string;
+      role: Role | null;
+      sessionEpoch: number | null;
+      /**
+       * The caller's whole stored `permissions` section, as written by the admin
+       * console. Carried alongside the role because it comes off the same item
+       * in the same read — a module gate that needed its own lookup would either
+       * double the Dynamo traffic on every request or grow a second cache with
+       * its own TTL to disagree with this one.
+       *
+       * Consumers should go through `checkModuleAccess` rather than reading the
+       * matrix directly, so the server evaluates it with exactly the rules the
+       * browser uses.
+       */
+      permissions: Record<string, unknown> | null;
+    }
   | { ok: false; code: "not_authenticated" | "forbidden"; message: string };
 
 function readStoredEpoch(value: unknown): number | null {
@@ -76,7 +102,13 @@ export async function resolveRequestRole(request: Request): Promise<ResolvedRequ
   const now = Date.now();
   const cached = roleCache.get(sub);
   if (cached && cached.expiresAt > now) {
-    return { ok: true, sub, role: cached.role, sessionEpoch: cached.sessionEpoch };
+    return {
+      ok: true,
+      sub,
+      role: cached.role,
+      sessionEpoch: cached.sessionEpoch,
+      permissions: cached.permissions,
+    };
   }
 
   try {
@@ -96,8 +128,14 @@ export async function resolveRequestRole(request: Request): Promise<ResolvedRequ
     // who may write a shared secret.
     const role = strictRole(out.Item?.data?.role);
     const sessionEpoch = readStoredEpoch(out.Item?.data?.sessionEpoch);
-    roleCache.set(sub, { role, sessionEpoch, expiresAt: now + ROLE_CACHE_TTL_MS });
-    return { ok: true, sub, role, sessionEpoch };
+    const permissions = out.Item?.data ?? null;
+    roleCache.set(sub, {
+      role,
+      sessionEpoch,
+      permissions,
+      expiresAt: now + ROLE_CACHE_TTL_MS,
+    });
+    return { ok: true, sub, role, sessionEpoch, permissions };
   } catch (err) {
     console.error(
       "[authz] role lookup failed; denying request",
@@ -190,14 +228,27 @@ export type UsageMeterResult =
   | { ok: true; requests: number; budget: number }
   | { ok: false; requests: number; budget: number; message: string };
 
-/** Soft daily org budget on shared OpenAI key (cross-instance via Dynamo). */
+/** Soft daily org budget on that company's OpenAI key (cross-instance via Dynamo). */
 export async function consumeDailyAiBudget(
   request: Request,
   estimatedTokens = 0,
 ): Promise<UsageMeterResult> {
   const budget = getAiDailyRequestBudget();
   const day = new Date().toISOString().slice(0, 10);
-  const section = `day:${day}`;
+  const claims = await tryVerifiedIdClaims(request);
+  const companyId =
+    typeof (claims as Record<string, unknown> | null)?.[COMPANY_ID_CLAIM] === "string"
+      ? String((claims as Record<string, unknown>)[COMPANY_ID_CLAIM]).trim()
+      : "";
+  if (!companyId) {
+    return {
+      ok: false,
+      requests: 0,
+      budget,
+      message: "This account is not assigned to a company.",
+    };
+  }
+  const section = `${companyId}#day:${day}`;
 
   try {
     const client = await getAiDynamoClient(request);

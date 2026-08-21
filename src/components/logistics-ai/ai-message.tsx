@@ -8,6 +8,7 @@ import { messageText } from "@/components/logistics-ai/ai-chat-utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 type AiMessageProps = {
   message: UIMessage;
@@ -36,7 +37,7 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
         size="icon"
         className="absolute right-1.5 top-1.5 z-10 h-7 w-7 cursor-pointer opacity-0 transition-opacity duration-150 group-hover:opacity-100"
         onClick={() => void onCopy()}
-        aria-label="Copy code"
+        aria-label={t("Copy code")}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </Button>
@@ -133,7 +134,9 @@ export function AiMessage({ message, isStreaming = false }: AiMessageProps) {
                 table({ children }) {
                   return (
                     <div className="my-2 max-w-full overflow-x-auto rounded-lg border border-border/60">
-                      <table className="w-full min-w-[240px] border-collapse text-xs">{children}</table>
+                      <table className="w-full min-w-[240px] border-collapse text-xs">
+                        {children}
+                      </table>
                     </div>
                   );
                 },
@@ -156,7 +159,7 @@ export function AiTypingIndicator() {
         <AvatarFallback className="rounded-lg text-[10px]">AI</AvatarFallback>
       </Avatar>
       <div className="rounded-2xl border border-border/70 bg-muted/30 px-3 py-2.5">
-        <div className="flex items-center gap-1" aria-label="Assistant is typing">
+        <div className="flex items-center gap-1" aria-label={t("Assistant is typing")}>
           {[0, 1, 2].map((i) => (
             <span
               key={i}
@@ -206,7 +209,7 @@ export function AiErrorBubble({
             className="h-7 cursor-pointer rounded-lg text-xs"
             onClick={onRetry}
           >
-            Retry
+            {t("Retry")}
           </Button>
         ) : null}
       </div>

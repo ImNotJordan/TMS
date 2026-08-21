@@ -13,9 +13,8 @@ vi.mock("@/lib/server/server-dynamo", async () => {
   return { ...actual, getServerDataClient: () => ({ send: (...a: unknown[]) => send(...a) }) };
 });
 
-const { handleTrackingMessagesRequest, isTrackingMessagesRequest } = await import(
-  "@/lib/tracking-messages-proxy"
-);
+const { handleTrackingMessagesRequest, isTrackingMessagesRequest } =
+  await import("@/lib/tracking-messages-proxy");
 
 const DRIVER = "a90949fe-f051-702f-fd14-65f688a4dcc3";
 const OWN_COMPANY = "acme";

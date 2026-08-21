@@ -12,6 +12,9 @@ vi.mock("@/lib/server/server-dynamo", async () => {
   );
   return { ...actual, getServerDataClient: () => ({ send: (...a: unknown[]) => send(...a) }) };
 });
+vi.mock("@/lib/inventory-proxy", () => ({
+  syncLoadInventoryForTenant: vi.fn().mockResolvedValue({ ok: true }),
+}));
 
 const { handleDriverLoadsRequest, isDriverLoadsRequest } = await import("@/lib/driver-loads-proxy");
 

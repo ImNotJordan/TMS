@@ -24,6 +24,7 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import {
+  AdminCreateUserCommand,
   AdminGetUserCommand,
   AdminListGroupsForUserCommand,
   CognitoIdentityProviderClient,
@@ -162,7 +163,11 @@ async function main() {
         ExpressionAttributeValues: { ":u": "__healthcheck__" },
       }),
     );
-    record("dynamodb:Query on the Profile table", true, "permitted — /api/profile, /api/admin/audit");
+    record(
+      "dynamodb:Query on the Profile table",
+      true,
+      "permitted — /api/profile, /api/admin/audit",
+    );
   } catch (err) {
     record("dynamodb:Query on the Profile table", false, describe(err));
   }
@@ -194,7 +199,11 @@ async function main() {
         },
       }),
     );
-    record("dynamodb:PutItem on the Profile table", true, "permitted — profile saves, audit entries");
+    record(
+      "dynamodb:PutItem on the Profile table",
+      true,
+      "permitted — profile saves, audit entries",
+    );
     try {
       await ddb.send(
         new DeleteCommand({
@@ -222,7 +231,11 @@ async function main() {
   } catch (err) {
     const name = err?.name;
     if (name === "UserNotFoundException") {
-      record("cognito-idp:AdminListGroupsForUser", true, "permitted (test user absent, as expected)");
+      record(
+        "cognito-idp:AdminListGroupsForUser",
+        true,
+        "permitted (test user absent, as expected)",
+      );
     } else {
       record("cognito-idp:AdminListGroupsForUser", false, describe(err));
     }
@@ -245,6 +258,37 @@ async function main() {
         record("cognito-idp:AdminGetUser", false, describe(err));
       }
     }
+
+    // 4b. User creation — /api/admin/user-credentials. A password that cannot
+    //     meet the pool policy is the probe: InvalidPassword means the call was
+    //     authorized; AccessDenied means the rendered policy predates these
+    //     actions (the admin UI then shows 502 on create).
+    try {
+      await idp.send(
+        new AdminCreateUserCommand({
+          UserPoolId: userPoolId,
+          Username: "__healthcheck__@titan.invalid",
+          TemporaryPassword: "x",
+          MessageAction: "SUPPRESS",
+        }),
+      );
+      record(
+        "cognito-idp:AdminCreateUser",
+        true,
+        "permitted — unexpected success; delete the healthcheck user from the pool",
+      );
+    } catch (err) {
+      const name = err?.name;
+      if (name === "AccessDeniedException" || name === "NotAuthorizedException") {
+        record(
+          "cognito-idp:AdminCreateUser",
+          false,
+          `${describe(err)} — re-render titan-server-settings and reapply it`,
+        );
+      } else {
+        record("cognito-idp:AdminCreateUser", true, `permitted (${name}, as expected)`);
+      }
+    }
   }
 
   // 5. The Loads table and both of its indexes — the API tier's data path.
@@ -263,6 +307,44 @@ async function main() {
       record(`dynamodb:Query on ${loadsTable}/${index}`, true, "permitted");
     } catch (err) {
       record(`dynamodb:Query on ${loadsTable}/${index}`, false, describe(err));
+    }
+  }
+
+  // 5b. The inventory tables. Both are API-tier tables with a company index, so
+  //     the probe is the same shape as the Loads one above. They are listed
+  //     separately because they were added after the original policy was applied,
+  //     and a policy that predates them denies exactly these two ARNs while every
+  //     other check on this page still passes.
+  const inventoryTables = [
+    appEnv.VITE_INVENTORY_ITEMS_TABLE_NAME || "InventoryItems",
+    appEnv.VITE_INVENTORY_MOVEMENTS_TABLE_NAME || "InventoryMovements",
+  ];
+  for (const table of inventoryTables) {
+    try {
+      await ddb.send(
+        new QueryCommand({
+          TableName: table,
+          IndexName: "companyId-index",
+          KeyConditionExpression: "companyId = :v",
+          ExpressionAttributeValues: { ":v": "__healthcheck__" },
+        }),
+      );
+      record(`dynamodb:Query on ${table}/companyId-index`, true, "permitted");
+    } catch (err) {
+      // AccessDenied masks whether the table exists at all, so name both
+      // possibilities rather than sending the reader to create a table that is
+      // already there.
+      const hint =
+        err?.name === "AccessDeniedException"
+          ? "re-render titan-server-settings and reapply it (the table may also not exist yet)"
+          : err?.name === "ValidationException"
+            ? "table exists; companyId-index is missing or still building"
+            : null;
+      record(
+        `dynamodb:Query on ${table}/companyId-index`,
+        false,
+        hint ? `${describe(err)} — ${hint}` : describe(err),
+      );
     }
   }
 

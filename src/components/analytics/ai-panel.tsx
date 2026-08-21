@@ -29,6 +29,7 @@ import { scoreBackhaulWhatIf } from "@/lib/analytics-kpis";
 import { formatMoneyCompact } from "@/lib/dashboard-data";
 import { getWorkspaceAiModel } from "@/lib/ai-client";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 function SectionLabel({
   icon: Icon,
@@ -78,7 +79,7 @@ function AiNarrativeBox({
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Calling workspace AI…
+          {t("Calling workspace AI…")}
         </div>
       ) : (
         <>
@@ -277,8 +278,10 @@ export function AiPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <AnalyticsPanelHeader
           icon={Brain}
-          title="AI Insights"
-          description="Event-table scores plus live narratives from your Settings → Integrations OpenAI key."
+          title={t("AI Insights")}
+          description={t(
+            "Event-table scores plus live narratives from your Settings → Integrations OpenAI key.",
+          )}
         />
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <Badge variant="secondary" className={cn("font-normal", statusTone)}>
@@ -289,7 +292,7 @@ export function AiPanel({
             <Button asChild size="sm" variant="outline" className="gap-1.5">
               <Link to="/settings">
                 <Settings2 className="h-3.5 w-3.5" />
-                Connect AI
+                {t("Connect AI")}
               </Link>
             </Button>
           )}
@@ -310,7 +313,7 @@ export function AiPanel({
       </div>
 
       <AiNarrativeBox
-        title="Workspace AI briefing"
+        title={t("Workspace AI briefing")}
         text={briefing}
         loading={briefingLoading}
         error={briefingError}
@@ -322,8 +325,10 @@ export function AiPanel({
         <div>
           <SectionLabel
             icon={ShieldAlert}
-            title="Predictive Carrier Reliability Score"
-            description="Blends OTD, claims rate, and insurance verification — explain with workspace AI."
+            title={t("Predictive Carrier Reliability Score")}
+            description={t(
+              "Blends OTD, claims rate, and insurance verification — explain with workspace AI.",
+            )}
             action={
               <Button
                 type="button"
@@ -343,12 +348,12 @@ export function AiPanel({
             }
           />
           <AnalyticsScorecard
-            title="Ranked carriers"
+            title={t("Ranked carriers")}
             rows={reliability}
             onRowClick={(row) => onScorecard(row, "Carrier reliability")}
           />
           <AiNarrativeBox
-            title="AI read — reliability"
+            title={t("AI read — reliability")}
             text={explainText.reliability ?? null}
             loading={explainDomain === "reliability"}
             error={explainError.reliability ?? null}
@@ -358,8 +363,8 @@ export function AiPanel({
         <div>
           <SectionLabel
             icon={MapPinned}
-            title="Dynamic Lane Profitability & Network Design"
-            description="Margin density by lane — grow / optimize / exit, with AI commentary."
+            title={t("Dynamic Lane Profitability & Network Design")}
+            description={t("Margin density by lane — grow / optimize / exit, with AI commentary.")}
             action={
               <Button
                 type="button"
@@ -379,12 +384,12 @@ export function AiPanel({
             }
           />
           <AnalyticsScorecard
-            title="Lane scores"
+            title={t("Lane scores")}
             rows={lanes}
             onRowClick={(row) => onScorecard(row, "Lane profitability")}
           />
           <AiNarrativeBox
-            title="AI read — lanes"
+            title={t("AI read — lanes")}
             text={explainText.lanes ?? null}
             loading={explainDomain === "lanes"}
             error={explainError.lanes ?? null}
@@ -394,8 +399,10 @@ export function AiPanel({
         <div>
           <SectionLabel
             icon={Sparkles}
-            title="Customer Risk & Credit AI"
-            description="Credit bands and exposure from events — deepen with the Integrations model."
+            title={t("Customer Risk & Credit AI")}
+            description={t(
+              "Credit bands and exposure from events — deepen with the Integrations model.",
+            )}
             action={
               <Button
                 type="button"
@@ -415,12 +422,12 @@ export function AiPanel({
             }
           />
           <AnalyticsScorecard
-            title="Watchlist (lowest score first)"
+            title={t("Watchlist (lowest score first)")}
             rows={credit}
             onRowClick={(row) => onScorecard(row, "Customer credit risk")}
           />
           <AiNarrativeBox
-            title="AI read — credit"
+            title={t("AI read — credit")}
             text={explainText.credit ?? null}
             loading={explainDomain === "credit"}
             error={explainError.credit ?? null}
@@ -430,31 +437,33 @@ export function AiPanel({
         <div className="rounded-xl border border-border/70 bg-card/60 p-4 shadow-sm">
           <SectionLabel
             icon={Route}
-            title="Load Optimization Copilot"
-            description="Deterministic uplift/bid math, then optional strategy from your OpenAI key."
+            title={t("Load Optimization Copilot")}
+            description={t(
+              "Deterministic uplift/bid math, then optional strategy from your OpenAI key.",
+            )}
           />
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="bh-origin">Origin</Label>
+                <Label htmlFor="bh-origin">{t("Origin")}</Label>
                 <Input
                   id="bh-origin"
                   value={origin}
                   onChange={(e) => setOrigin(e.target.value)}
-                  placeholder="City, ST"
+                  placeholder={t("City, ST")}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="bh-dest">Destination</Label>
+                <Label htmlFor="bh-dest">{t("Destination")}</Label>
                 <Input
                   id="bh-dest"
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
-                  placeholder="City, ST"
+                  placeholder={t("City, ST")}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="bh-empty">Empty miles</Label>
+                <Label htmlFor="bh-empty">{t("Empty miles")}</Label>
                 <Input
                   id="bh-empty"
                   type="number"
@@ -464,7 +473,7 @@ export function AiPanel({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="bh-eq">Equipment</Label>
+                <Label htmlFor="bh-eq">{t("Equipment")}</Label>
                 <Input
                   id="bh-eq"
                   value={equipment}
@@ -476,7 +485,7 @@ export function AiPanel({
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Est. uplift
+                  {t("Est. uplift")}
                 </div>
                 <div className="mt-1 text-xl font-semibold tabular-nums text-foreground">
                   {formatMoneyCompact(scenario.uplift)}
@@ -484,7 +493,7 @@ export function AiPanel({
               </div>
               <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Fill probability
+                  {t("Fill probability")}
                 </div>
                 <div className="mt-1 text-xl font-semibold tabular-nums text-foreground">
                   {(scenario.fillProbability * 100).toFixed(0)}%
@@ -492,7 +501,7 @@ export function AiPanel({
               </div>
               <div className="rounded-lg border border-border/70 bg-muted/30 p-3">
                 <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Recommended bid
+                  {t("Recommended bid")}
                 </div>
                 <div className="mt-1 text-xl font-semibold tabular-nums text-foreground">
                   {formatMoneyCompact(scenario.recommendedBid)}
@@ -517,7 +526,7 @@ export function AiPanel({
             {copilotStrategy && (
               <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 text-sm text-foreground">
                 <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                  Recommended strategy
+                  {t("Recommended strategy")}
                 </div>
                 <p className="leading-relaxed">{copilotStrategy}</p>
               </div>
@@ -526,7 +535,7 @@ export function AiPanel({
             {copilotLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Asking workspace AI for strategy…
+                {t("Asking workspace AI for strategy…")}
               </div>
             )}
             {copilotError && <p className="text-xs text-destructive">{copilotError}</p>}
@@ -564,7 +573,7 @@ export function AiPanel({
                   )
                 }
               >
-                Show related bid events
+                {t("Show related bid events")}
               </Button>
             </div>
           </div>

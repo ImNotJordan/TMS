@@ -87,6 +87,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { AppLogoMark } from "@/components/app-logo-mark";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/landing")({
   head: () => ({
@@ -111,7 +112,7 @@ function LandingPage() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring"
       >
-        Skip to content
+        {t("Skip to content")}
       </a>
       <BackgroundGlow />
       <Navbar />
@@ -208,23 +209,23 @@ function Navbar() {
   return (
     <header
       className={`sticky top-0 z-50 w-full transition-all ${
-        scrolled
-          ? "border-b border-border/60 bg-background/80 backdrop-blur-xl"
-          : "bg-transparent"
+        scrolled ? "border-b border-border/60 bg-background/80 backdrop-blur-xl" : "bg-transparent"
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <a href="#top" className="flex items-center gap-2.5">
           <AppLogoMark className="h-9 w-9 shrink-0 rounded-xl shadow-sm shadow-primary/20" />
           <div className="flex flex-col leading-tight">
-            <span className="text-[15px] font-semibold tracking-tight">Logistics Software</span>
+            <span className="text-[15px] font-semibold tracking-tight">
+              {t("Logistics Software")}
+            </span>
             <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-              Freight OS
+              {t("Freight OS")}
             </span>
           </div>
         </a>
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label={t("Primary")}>
           {NAV_LINKS.map((l) => (
             <a
               key={l.label}
@@ -251,7 +252,7 @@ function Navbar() {
             to="/login"
             className="hidden h-11 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:inline-flex"
           >
-            Login
+            {t("Login")}
           </Link>
 
           <Button
@@ -260,7 +261,7 @@ function Navbar() {
             className="hidden h-11 gap-1.5 rounded-lg bg-foreground text-background shadow-sm hover:bg-foreground/90 sm:inline-flex"
           >
             <a href="#cta">
-              Get started <ArrowRight className="h-3.5 w-3.5" />
+              {t("Get started")} <ArrowRight className="h-3.5 w-3.5" />
             </a>
           </Button>
 
@@ -284,7 +285,10 @@ function Navbar() {
           id="landing-mobile-nav"
           className="border-t border-border/60 bg-background/95 backdrop-blur-xl lg:hidden"
         >
-          <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3 sm:px-6" aria-label="Mobile">
+          <nav
+            className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3 sm:px-6"
+            aria-label={t("Mobile")}
+          >
             {NAV_LINKS.map((l) => (
               <a
                 key={l.label}
@@ -297,11 +301,11 @@ function Navbar() {
             ))}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Button asChild variant="outline" className="h-11">
-                <Link to="/login">Login</Link>
+                <Link to="/login">{t("Login")}</Link>
               </Button>
               <Button asChild className="h-11 bg-foreground text-background hover:bg-foreground/90">
                 <a href="#cta" onClick={() => setOpen(false)}>
-                  Get started
+                  {t("Get started")}
                 </a>
               </Button>
             </div>
@@ -326,14 +330,14 @@ function Hero() {
             className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur transition-colors hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="flex h-1.5 w-1.5 rounded-full bg-success" />
-            <span>New · AI Bidding Copilot &amp; smart load matching</span>
+            <span>{t("New · AI Bidding Copilot & smart load matching")}</span>
             <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </a>
 
           <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
             The operating system for{" "}
             <span className="relative inline sm:whitespace-nowrap">
-              <span className="text-primary">modern freight</span>
+              <span className="text-primary">{t("modern freight")}</span>
               <svg
                 aria-hidden
                 viewBox="0 0 200 12"
@@ -352,15 +356,19 @@ function Hero() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Dispatch faster, bid smarter, and track every shipment in real time. Logistics Software
-            unifies your loads, carriers, quotes, RFPs, accounting, and analytics into a single
-            premium command center built for brokers, carriers, shippers, and 3PLs.
+            {t(
+              "Dispatch faster, bid smarter, and track every shipment in real time. Logistics Software\r\n            unifies your loads, carriers, quotes, RFPs, accounting, and analytics into a single\r\n            premium command center built for brokers, carriers, shippers, and 3PLs.",
+            )}
           </p>
 
           <div className="mt-8 flex w-full flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Button asChild size="lg" className="h-12 w-full gap-1.5 rounded-xl px-5 text-[15px] shadow-lg shadow-primary/20 sm:w-auto">
+            <Button
+              asChild
+              size="lg"
+              className="h-12 w-full gap-1.5 rounded-xl px-5 text-[15px] shadow-lg shadow-primary/20 sm:w-auto"
+            >
               <a href="#cta">
-                Start free trial <ArrowRight className="h-4 w-4" />
+                {t("Start free trial")} <ArrowRight className="h-4 w-4" />
               </a>
             </Button>
             <Button
@@ -380,16 +388,16 @@ function Hero() {
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
             <TrustItem icon={<ShieldCheck className="h-3.5 w-3.5 text-success" />}>
-              SOC 2 Type II
+              {t("SOC 2 Type II")}
             </TrustItem>
             <TrustItem icon={<Star className="h-3.5 w-3.5 fill-warning text-warning" />}>
-              4.9 / 5 on G2
+              {t("4.9 / 5 on G2")}
             </TrustItem>
             <TrustItem icon={<Users className="h-3.5 w-3.5 text-info" />}>
-              1,800+ logistics teams
+              {t("1,800+ logistics teams")}
             </TrustItem>
             <TrustItem icon={<CircleCheck className="h-3.5 w-3.5 text-success" />}>
-              No credit card required
+              {t("No credit card required")}
             </TrustItem>
           </div>
         </div>
@@ -430,7 +438,7 @@ function HeroDashboardPreview() {
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="inline-flex h-1.5 w-1.5 rounded-full bg-success animate-pulse motion-reduce:animate-none" />
-            Live
+            {t("Live")}
           </div>
         </div>
 
@@ -453,9 +461,7 @@ function HeroDashboardPreview() {
                 <div
                   key={it.label}
                   className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium ${
-                    it.active
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground"
+                    it.active ? "bg-primary/10 text-primary" : "text-muted-foreground"
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -470,31 +476,33 @@ function HeroDashboardPreview() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Operations Dashboard
+                  {t("Operations Dashboard")}
                 </div>
-                <div className="text-sm font-semibold sm:text-base">Welcome back, Jordan</div>
+                <div className="text-sm font-semibold sm:text-base">
+                  {t("Welcome back, Jordan")}
+                </div>
               </div>
               <div className="hidden gap-1.5 sm:flex">
                 <span className="rounded-md border border-border/70 bg-card px-2 py-1 text-[11px] text-muted-foreground">
-                  Last 7 days
+                  {t("Last 7 days")}
                 </span>
                 <span className="rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground">
-                  + New Load
+                  {t("+ New Load")}
                 </span>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MiniKpi label="Active loads" value="248" delta="+12.4%" tone="success" />
-              <MiniKpi label="Open bids" value="36" delta="+4.1%" tone="info" />
-              <MiniKpi label="Revenue MTD" value="$2.41M" delta="+8.7%" tone="success" />
-              <MiniKpi label="On-time" value="96.8%" delta="+0.6%" tone="primary" />
+              <MiniKpi label={t("Active loads")} value="248" delta="+12.4%" tone="success" />
+              <MiniKpi label={t("Open bids")} value="36" delta="+4.1%" tone="info" />
+              <MiniKpi label={t("Revenue MTD")} value="$2.41M" delta="+8.7%" tone="success" />
+              <MiniKpi label={t("On-time")} value="96.8%" delta="+0.6%" tone="primary" />
             </div>
 
             <div className="grid gap-3 lg:grid-cols-3">
               <div className="rounded-xl border border-border/70 bg-card p-3 sm:p-4 lg:col-span-2">
                 <div className="mb-2 flex items-center justify-between">
-                  <div className="text-xs font-medium">Revenue vs target</div>
+                  <div className="text-xs font-medium">{t("Revenue vs target")}</div>
                   <Badge variant="secondary" className="h-5 gap-1 bg-success/15 text-success">
                     <TrendingUp className="h-3 w-3" /> +18.2%
                   </Badge>
@@ -505,23 +513,44 @@ function HeroDashboardPreview() {
               </div>
 
               <div className="rounded-xl border border-border/70 bg-card p-3 sm:p-4">
-                <div className="mb-2 text-xs font-medium">Live shipments</div>
+                <div className="mb-2 text-xs font-medium">{t("Live shipments")}</div>
                 <MiniMap />
               </div>
             </div>
 
             <div className="hidden rounded-xl border border-border/70 bg-card sm:block">
               <div className="grid grid-cols-12 border-b border-border/60 px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                <div className="col-span-2">Load</div>
-                <div className="col-span-4">Lane</div>
-                <div className="col-span-3">Carrier</div>
-                <div className="col-span-2">Status</div>
-                <div className="col-span-1 text-right">Rev</div>
+                <div className="col-span-2">{t("Load")}</div>
+                <div className="col-span-4">{t("Lane")}</div>
+                <div className="col-span-3">{t("Carrier")}</div>
+                <div className="col-span-2">{t("Status")}</div>
+                <div className="col-span-1 text-right">{t("Rev")}</div>
               </div>
               {[
-                { id: "L-2841", lane: "Atlanta → Dallas", carrier: "Bluepeak Freight", status: "On time", tone: "success", rev: "$3,420" },
-                { id: "L-2839", lane: "Long Beach → Phoenix", carrier: "Sundial Trucking", status: "At risk", tone: "warning", rev: "$2,180" },
-                { id: "L-2832", lane: "Chicago → Indianapolis", carrier: "Ironline Logistics", status: "On time", tone: "success", rev: "$1,640" },
+                {
+                  id: "L-2841",
+                  lane: "Atlanta → Dallas",
+                  carrier: "Bluepeak Freight",
+                  status: "On time",
+                  tone: "success",
+                  rev: "$3,420",
+                },
+                {
+                  id: "L-2839",
+                  lane: "Long Beach → Phoenix",
+                  carrier: "Sundial Trucking",
+                  status: "At risk",
+                  tone: "warning",
+                  rev: "$2,180",
+                },
+                {
+                  id: "L-2832",
+                  lane: "Chicago → Indianapolis",
+                  carrier: "Ironline Logistics",
+                  status: "On time",
+                  tone: "success",
+                  rev: "$1,640",
+                },
               ].map((r) => (
                 <div
                   key={r.id}
@@ -553,20 +582,20 @@ function HeroDashboardPreview() {
       <FloatingChip
         className="left-2 top-10 hidden sm:flex"
         icon={<Activity className="h-4 w-4 text-success" />}
-        title="ETA on track"
-        subtitle="L-2841 · Atlanta → Dallas"
+        title={t("ETA on track")}
+        subtitle={t("L-2841 · Atlanta → Dallas")}
       />
       <FloatingChip
         className="right-2 top-1/2 hidden -translate-y-1/2 sm:flex"
         icon={<ShieldAlert className="h-4 w-4 text-warning-foreground" />}
-        title="Risk score 72"
-        subtitle="Weather alert · I-40"
+        title={t("Risk score 72")}
+        subtitle={t("Weather alert · I-40")}
       />
       <FloatingChip
         className="bottom-6 left-12 hidden sm:flex"
         icon={<Banknote className="h-4 w-4 text-primary" />}
-        title="Invoice paid"
-        subtitle="INV-7741 · $4,210"
+        title={t("Invoice paid")}
+        subtitle={t("INV-7741 · $4,210")}
       />
     </div>
   );
@@ -629,8 +658,19 @@ function MiniAreaChart() {
           </linearGradient>
         </defs>
         <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="x" stroke="var(--color-muted-foreground)" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-        <YAxis stroke="var(--color-muted-foreground)" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+        <XAxis
+          dataKey="x"
+          stroke="var(--color-muted-foreground)"
+          tick={{ fontSize: 10 }}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          stroke="var(--color-muted-foreground)"
+          tick={{ fontSize: 10 }}
+          tickLine={false}
+          axisLine={false}
+        />
         <RTooltip
           contentStyle={{
             background: "var(--color-popover)",
@@ -639,8 +679,20 @@ function MiniAreaChart() {
             fontSize: 12,
           }}
         />
-        <Area type="monotone" dataKey="b" stroke="var(--color-chart-3)" strokeWidth={2} fill="url(#gb)" />
-        <Area type="monotone" dataKey="a" stroke="var(--color-chart-1)" strokeWidth={2.5} fill="url(#ga)" />
+        <Area
+          type="monotone"
+          dataKey="b"
+          stroke="var(--color-chart-3)"
+          strokeWidth={2}
+          fill="url(#gb)"
+        />
+        <Area
+          type="monotone"
+          dataKey="a"
+          stroke="var(--color-chart-1)"
+          strokeWidth={2.5}
+          fill="url(#ga)"
+        />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -660,7 +712,11 @@ function MiniMap() {
         }}
       />
       {/* fake route */}
-      <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+      <svg
+        viewBox="0 0 200 100"
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full"
+      >
         <path
           d="M 15 80 Q 60 20 110 50 T 188 25"
           fill="none"
@@ -675,7 +731,7 @@ function MiniMap() {
       <Pin className="left-[52%] top-[44%]" tone="primary" pulsing />
       <Pin className="left-[90%] top-[20%]" tone="info" />
       <div className="absolute bottom-2 right-2 rounded-md border border-border/60 bg-card/90 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground backdrop-blur">
-        12 in transit
+        {t("12 in transit")}
       </div>
     </div>
   );
@@ -699,7 +755,9 @@ function Pin({
   return (
     <div className={`absolute -translate-x-1/2 -translate-y-1/2 ${className}`}>
       {pulsing && (
-        <span className={`absolute inset-0 -m-1 animate-ping motion-reduce:animate-none rounded-full ${colors[tone]} opacity-40`} />
+        <span
+          className={`absolute inset-0 -m-1 animate-ping motion-reduce:animate-none rounded-full ${colors[tone]} opacity-40`}
+        />
       )}
       <span className={`block h-2.5 w-2.5 rounded-full ring-2 ring-background ${colors[tone]}`} />
     </div>
@@ -750,7 +808,7 @@ function LogosStrip() {
     <section className="px-4 pt-16 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <p className="text-center text-xs uppercase tracking-[0.18em] text-muted-foreground">
-          Trusted by freight teams moving 12M+ loads per year
+          {t("Trusted by freight teams moving 12M+ loads per year")}
         </p>
         <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 opacity-70 sm:grid-cols-4 lg:grid-cols-8">
           {LOGO_NAMES.map((name) => (
@@ -787,8 +845,10 @@ function Stats() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="By the numbers"
-          title="The most reliable platform in freight"
-          description="Built for scale and uptime — Logistics Software powers brokers, carriers, and shippers across every mode and lane in North America."
+          title={t("The most reliable platform in freight")}
+          description={t(
+            "Built for scale and uptime — Logistics Software powers brokers, carriers, and shippers across every mode and lane in North America.",
+          )}
         />
 
         <div className="mt-12 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-6">
@@ -802,7 +862,9 @@ function Stats() {
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <Icon className="h-4 w-4" />
                 </div>
-                <div className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">{s.value}</div>
+                <div className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+                  {s.value}
+                </div>
                 <div className="mt-1 text-xs text-muted-foreground sm:text-sm">{s.label}</div>
                 <div
                   aria-hidden
@@ -829,9 +891,7 @@ function SectionHeader({
   align?: "center" | "left";
 }) {
   return (
-    <div
-      className={`mx-auto max-w-3xl ${align === "center" ? "text-center" : "text-left"}`}
-    >
+    <div className={`mx-auto max-w-3xl ${align === "center" ? "text-center" : "text-left"}`}>
       {eyebrow && (
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
           {eyebrow}
@@ -872,8 +932,7 @@ const FEATURES = [
   {
     icon: Gavel,
     title: "Bidding Engine",
-    description:
-      "Win more freight with AI-assisted bids, lane history, and win/loss analytics.",
+    description: "Win more freight with AI-assisted bids, lane history, and win/loss analytics.",
     accent: "info",
   },
   {
@@ -921,22 +980,19 @@ const FEATURES = [
   {
     icon: Building2,
     title: "Carriers & Brokers",
-    description:
-      "Centralize onboarding, insurance, contacts, scorecards, and lane preferences.",
+    description: "Centralize onboarding, insurance, contacts, scorecards, and lane preferences.",
     accent: "info",
   },
   {
     icon: Radar,
     title: "Live Tracking",
-    description:
-      "GPS + ELD + driver app tracking with ETA, geofence stops, and exception alerts.",
+    description: "GPS + ELD + driver app tracking with ETA, geofence stops, and exception alerts.",
     accent: "success",
   },
   {
     icon: MessagesSquare,
     title: "Communications",
-    description:
-      "Email, SMS, and driver chat unified per load, with templates and audit history.",
+    description: "Email, SMS, and driver chat unified per load, with templates and audit history.",
     accent: "warning",
   },
   {
@@ -971,8 +1027,10 @@ function Features() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="Platform"
-          title="One platform. Every workflow in freight."
-          description="Replace 6+ disconnected tools with a unified system designed for operations, sales, and finance teams alike."
+          title={t("One platform. Every workflow in freight.")}
+          description={t(
+            "Replace 6+ disconnected tools with a unified system designed for operations, sales, and finance teams alike.",
+          )}
         />
 
         <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:gap-5">
@@ -992,7 +1050,7 @@ function Features() {
                 <h3 className="text-base font-semibold tracking-tight">{f.title}</h3>
                 <p className="text-sm leading-relaxed text-muted-foreground">{f.description}</p>
                 <div className="mt-auto flex items-center gap-1.5 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                  Learn more <ArrowRight className="h-3 w-3" />
+                  {t("Learn more")} <ArrowRight className="h-3 w-3" />
                 </div>
                 <div
                   aria-hidden
@@ -1032,8 +1090,10 @@ function WorkflowSection() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="End-to-end workflow"
-          title="From booked to billed — automated"
-          description="Eight steps. One platform. Every handoff is tracked, time-stamped, and audit-ready."
+          title={t("From booked to billed — automated")}
+          description={t(
+            "Eight steps. One platform. Every handoff is tracked, time-stamped, and audit-ready.",
+          )}
         />
 
         <div className="mt-14 hidden lg:block">
@@ -1091,13 +1151,13 @@ function WorkflowSection() {
 
         <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
           <Badge variant="secondary" className="gap-1 bg-success/12 text-success">
-            <Zap className="h-3 w-3" /> 37% faster dispatch
+            <Zap className="h-3 w-3" /> {t("37% faster dispatch")}
           </Badge>
           <Badge variant="secondary" className="gap-1 bg-info/12 text-info">
-            <Workflow className="h-3 w-3" /> Zero manual handoffs
+            <Workflow className="h-3 w-3" /> {t("Zero manual handoffs")}
           </Badge>
           <Badge variant="secondary" className="gap-1 bg-primary/12 text-primary">
-            <ShieldCheck className="h-3 w-3" /> Audit-ready every step
+            <ShieldCheck className="h-3 w-3" /> {t("Audit-ready every step")}
           </Badge>
         </div>
       </div>
@@ -1117,8 +1177,10 @@ function TrackingPreview() {
           <div>
             <SectionHeader
               eyebrow="Live Tracking"
-              title="Know exactly where every shipment is — always"
-              description="GPS, ELD, and driver-app pings unified on one map. Get proactive alerts for weather, dwell, and ETA drift before they become problems."
+              title={t("Know exactly where every shipment is — always")}
+              description={t(
+                "GPS, ELD, and driver-app pings unified on one map. Get proactive alerts for weather, dwell, and ETA drift before they become problems.",
+              )}
               align="left"
             />
             <ul className="mt-8 space-y-3">
@@ -1209,17 +1271,23 @@ function TrackingPreview() {
                   <div className="absolute left-3 top-3 rounded-lg border border-border/60 bg-card/90 px-2.5 py-1.5 text-[11px] font-medium backdrop-blur">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="inline-block h-1.5 w-1.5 animate-pulse motion-reduce:animate-none rounded-full bg-success" />
-                      L-2841 · Live
+                      {t("L-2841 · Live")}
                     </span>
                   </div>
                   <div className="absolute right-3 top-3 flex flex-col gap-1 text-[10px] text-muted-foreground">
-                    <div className="rounded-md border border-border/60 bg-card/90 px-2 py-1 backdrop-blur">+ –</div>
-                    <div className="rounded-md border border-border/60 bg-card/90 px-2 py-1 backdrop-blur">Layers</div>
+                    <div className="rounded-md border border-border/60 bg-card/90 px-2 py-1 backdrop-blur">
+                      + –
+                    </div>
+                    <div className="rounded-md border border-border/60 bg-card/90 px-2 py-1 backdrop-blur">
+                      {t("Layers")}
+                    </div>
                   </div>
                   <div className="absolute bottom-3 left-3 rounded-lg border border-border/60 bg-card/95 px-3 py-2 text-xs backdrop-blur">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">ETA</div>
-                    <div className="text-sm font-semibold">Today · 4:20 PM</div>
-                    <div className="text-[11px] text-success">On time · 96% confidence</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      ETA
+                    </div>
+                    <div className="text-sm font-semibold">{t("Today · 4:20 PM")}</div>
+                    <div className="text-[11px] text-success">{t("On time · 96% confidence")}</div>
                   </div>
                 </div>
 
@@ -1227,7 +1295,7 @@ function TrackingPreview() {
                 <div className="grid gap-0 sm:grid-cols-3">
                   <div className="border-r border-border/60 p-4">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Status timeline
+                      {t("Status timeline")}
                     </div>
                     <ul className="mt-3 space-y-2">
                       {[
@@ -1257,21 +1325,21 @@ function TrackingPreview() {
 
                   <div className="border-r border-border/60 p-4">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Exceptions
+                      {t("Exceptions")}
                     </div>
                     <div className="mt-3 space-y-2">
                       <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-2">
                         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 text-warning-foreground" />
                         <div className="text-xs">
-                          <div className="font-medium">Weather alert · I-40</div>
-                          <div className="text-muted-foreground">Reroute suggested</div>
+                          <div className="font-medium">{t("Weather alert · I-40")}</div>
+                          <div className="text-muted-foreground">{t("Reroute suggested")}</div>
                         </div>
                       </div>
                       <div className="flex items-start gap-2 rounded-md border border-info/30 bg-info/10 p-2">
                         <CircleDot className="mt-0.5 h-3.5 w-3.5 text-info" />
                         <div className="text-xs">
-                          <div className="font-medium">Dwell trending +20m</div>
-                          <div className="text-muted-foreground">Receiver historical</div>
+                          <div className="font-medium">{t("Dwell trending +20m")}</div>
+                          <div className="text-muted-foreground">{t("Receiver historical")}</div>
                         </div>
                       </div>
                     </div>
@@ -1279,7 +1347,7 @@ function TrackingPreview() {
 
                   <div className="p-4">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Shipment
+                      {t("Shipment")}
                     </div>
                     <div className="mt-3 space-y-1.5 text-xs">
                       <Row k="Carrier" v="Bluepeak Freight" />
@@ -1318,8 +1386,10 @@ function AnalyticsPreview() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="Analytics"
-          title="Decisions backed by every shipment you've ever moved"
-          description="Board-ready dashboards across revenue, carrier health, load volume, and risk — built on real-time data, not yesterday's CSV."
+          title={t("Decisions backed by every shipment you've ever moved")}
+          description={t(
+            "Board-ready dashboards across revenue, carrier health, load volume, and risk — built on real-time data, not yesterday's CSV.",
+          )}
         />
 
         <div className="mt-14 grid gap-4 lg:grid-cols-3">
@@ -1328,7 +1398,7 @@ function AnalyticsPreview() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Revenue & margin
+                    {t("Revenue & margin")}
                   </div>
                   <div className="text-base font-semibold">$2.41M · MTD</div>
                 </div>
@@ -1336,7 +1406,7 @@ function AnalyticsPreview() {
                   <Badge variant="secondary" className="gap-1 bg-success/12 text-success">
                     <TrendingUp className="h-3 w-3" /> +18.2%
                   </Badge>
-                  <span>vs. last 8 weeks</span>
+                  <span>{t("vs. last 8 weeks")}</span>
                 </div>
               </div>
               <div className="mt-4 h-56 sm:h-64">
@@ -1364,9 +1434,24 @@ function AnalyticsPreview() {
                         <stop offset="100%" stopColor="var(--color-chart-3)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="x" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} stroke="var(--color-muted-foreground)" />
-                    <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} stroke="var(--color-muted-foreground)" />
+                    <CartesianGrid
+                      stroke="var(--color-border)"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="x"
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="var(--color-muted-foreground)"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="var(--color-muted-foreground)"
+                    />
                     <RTooltip
                       contentStyle={{
                         background: "var(--color-popover)",
@@ -1375,8 +1460,22 @@ function AnalyticsPreview() {
                         fontSize: 12,
                       }}
                     />
-                    <Area type="monotone" dataKey="rev" stroke="var(--color-chart-1)" strokeWidth={2.5} fill="url(#grev)" name="Revenue (k)" />
-                    <Area type="monotone" dataKey="margin" stroke="var(--color-chart-3)" strokeWidth={2} fill="url(#gmar)" name="Margin (k)" />
+                    <Area
+                      type="monotone"
+                      dataKey="rev"
+                      stroke="var(--color-chart-1)"
+                      strokeWidth={2.5}
+                      fill="url(#grev)"
+                      name="Revenue (k)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="margin"
+                      stroke="var(--color-chart-3)"
+                      strokeWidth={2}
+                      fill="url(#gmar)"
+                      name="Margin (k)"
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -1386,7 +1485,7 @@ function AnalyticsPreview() {
           <Card className="border-border/70">
             <CardContent className="p-5 sm:p-6">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                On-time delivery
+                {t("On-time delivery")}
               </div>
               <div className="mt-1 text-base font-semibold">96.8%</div>
               <div className="mt-4 h-56 sm:h-64">
@@ -1403,9 +1502,25 @@ function AnalyticsPreview() {
                     ]}
                     margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
                   >
-                    <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="x" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} stroke="var(--color-muted-foreground)" />
-                    <YAxis domain={[85, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} stroke="var(--color-muted-foreground)" />
+                    <CartesianGrid
+                      stroke="var(--color-border)"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="x"
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="var(--color-muted-foreground)"
+                    />
+                    <YAxis
+                      domain={[85, 100]}
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="var(--color-muted-foreground)"
+                    />
                     <RTooltip
                       contentStyle={{
                         background: "var(--color-popover)",
@@ -1414,7 +1529,13 @@ function AnalyticsPreview() {
                         fontSize: 12,
                       }}
                     />
-                    <Line type="monotone" dataKey="v" stroke="var(--color-success)" strokeWidth={2.5} dot={{ r: 3 }} />
+                    <Line
+                      type="monotone"
+                      dataKey="v"
+                      stroke="var(--color-success)"
+                      strokeWidth={2.5}
+                      dot={{ r: 3 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -1424,9 +1545,9 @@ function AnalyticsPreview() {
           <Card className="border-border/70">
             <CardContent className="p-5 sm:p-6">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Load volume by lane
+                {t("Load volume by lane")}
               </div>
-              <div className="mt-1 text-base font-semibold">4,820 loads · 30d</div>
+              <div className="mt-1 text-base font-semibold">{t("4,820 loads · 30d")}</div>
               <div className="mt-4 h-56 sm:h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
@@ -1440,9 +1561,24 @@ function AnalyticsPreview() {
                     ]}
                     margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
                   >
-                    <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="l" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} stroke="var(--color-muted-foreground)" />
-                    <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} stroke="var(--color-muted-foreground)" />
+                    <CartesianGrid
+                      stroke="var(--color-border)"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="l"
+                      tick={{ fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="var(--color-muted-foreground)"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      stroke="var(--color-muted-foreground)"
+                    />
                     <RTooltip
                       contentStyle={{
                         background: "var(--color-popover)",
@@ -1463,12 +1599,12 @@ function AnalyticsPreview() {
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Carrier performance
+                    {t("Carrier performance")}
                   </div>
-                  <div className="text-base font-semibold">Top carriers by score</div>
+                  <div className="text-base font-semibold">{t("Top carriers by score")}</div>
                 </div>
                 <Badge variant="secondary" className="gap-1 bg-info/12 text-info">
-                  <Star className="h-3 w-3" /> 92.4 avg
+                  <Star className="h-3 w-3" /> {t("92.4 avg")}
                 </Badge>
               </div>
               <div className="space-y-4">
@@ -1493,7 +1629,9 @@ function AnalyticsPreview() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="tabular-nums">{c.loads} loads</span>
-                        <span className="tabular-nums font-semibold text-foreground">{c.score}</span>
+                        <span className="tabular-nums font-semibold text-foreground">
+                          {c.score}
+                        </span>
                       </div>
                     </div>
                     <Progress value={c.score} className="h-1.5" />
@@ -1546,8 +1684,10 @@ function Benefits() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="Why teams switch"
-          title="Outcomes you can measure in weeks, not quarters"
-          description="From new brokerages to enterprise 3PLs, teams move faster on Logistics Software."
+          title={t("Outcomes you can measure in weeks, not quarters")}
+          description={t(
+            "From new brokerages to enterprise 3PLs, teams move faster on Logistics Software.",
+          )}
         />
 
         <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:gap-5">
@@ -1653,8 +1793,10 @@ function Solutions() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="Solutions"
-          title="Built for every role on the freight floor"
-          description="Configure Logistics Software for your team — brokers, carriers, shippers, dispatchers, 3PLs, and private fleets."
+          title={t("Built for every role on the freight floor")}
+          description={t(
+            "Configure Logistics Software for your team — brokers, carriers, shippers, dispatchers, 3PLs, and private fleets.",
+          )}
         />
 
         <Tabs defaultValue="brokers" className="mt-14">
@@ -1701,11 +1843,11 @@ function Solutions() {
                     <div className="mt-8 flex gap-2">
                       <Button asChild className="h-10 gap-1.5">
                         <a href="#cta">
-                          See it in action <ArrowRight className="h-3.5 w-3.5" />
+                          {t("See it in action")} <ArrowRight className="h-3.5 w-3.5" />
                         </a>
                       </Button>
                       <Button asChild variant="outline" className="h-10">
-                        <a href="#pricing">Compare plans</a>
+                        <a href="#pricing">{t("Compare plans")}</a>
                       </Button>
                     </div>
                   </div>
@@ -1735,20 +1877,22 @@ function SolutionVisual() {
             <span className="h-2 w-2 rounded-full bg-warning/80" />
             <span className="h-2 w-2 rounded-full bg-success/80" />
           </div>
-          <span className="ml-2 text-[11px] text-muted-foreground">Operations · workspace</span>
+          <span className="ml-2 text-[11px] text-muted-foreground">
+            {t("Operations · workspace")}
+          </span>
         </div>
         <div className="grid grid-cols-3 gap-3 p-4 sm:p-5">
-          <MiniKpi label="Loads" value="248" delta="+12%" tone="success" />
-          <MiniKpi label="Bids" value="36" delta="+4%" tone="info" />
-          <MiniKpi label="On-time" value="96.8%" delta="+0.6%" tone="primary" />
+          <MiniKpi label={t("Loads")} value="248" delta="+12%" tone="success" />
+          <MiniKpi label={t("Bids")} value="36" delta="+4%" tone="info" />
+          <MiniKpi label={t("On-time")} value="96.8%" delta="+0.6%" tone="primary" />
           <div className="col-span-3 rounded-xl border border-border/70 bg-card p-3 sm:p-4">
-            <div className="mb-2 text-xs font-medium">Daily volume</div>
+            <div className="mb-2 text-xs font-medium">{t("Daily volume")}</div>
             <div className="h-28 sm:h-32">
               <MiniAreaChart />
             </div>
           </div>
           <div className="col-span-3 rounded-xl border border-border/70 bg-card p-3 sm:p-4">
-            <div className="mb-2 text-xs font-medium">Live shipments</div>
+            <div className="mb-2 text-xs font-medium">{t("Live shipments")}</div>
             <MiniMap />
           </div>
         </div>
@@ -1782,8 +1926,10 @@ function Integrations() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="Integrations"
-          title="Connects to your stack in minutes"
-          description="Pre-built connectors plus a developer-friendly API so your data flows wherever it needs to."
+          title={t("Connects to your stack in minutes")}
+          description={t(
+            "Pre-built connectors plus a developer-friendly API so your data flows wherever it needs to.",
+          )}
         />
 
         <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
@@ -1807,10 +1953,10 @@ function Integrations() {
         </div>
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
-          <span>Need something custom?</span>
+          <span>{t("Need something custom?")}</span>
           <Button asChild variant="outline" className="h-9 gap-1.5">
             <a href="#cta">
-              Talk to engineering <ArrowRight className="h-3.5 w-3.5" />
+              {t("Talk to engineering")} <ArrowRight className="h-3.5 w-3.5" />
             </a>
           </Button>
         </div>
@@ -1824,12 +1970,36 @@ function Integrations() {
  * ------------------------------------------------------------------------ */
 
 const SECURITY = [
-  { icon: KeyRound, title: "Role-based access", desc: "Granular roles for ops, sales, finance, and execs." },
-  { icon: ScrollText, title: "Audit logs", desc: "Every change traced to a user, time, and source." },
-  { icon: Lock, title: "2FA & SSO", desc: "TOTP, SAML, and SCIM for enterprise identity providers." },
-  { icon: ShieldCheck, title: "Permissions", desc: "Object-level rules across loads, carriers, and finance." },
-  { icon: Building2, title: "Insurance verification", desc: "Automated COI checks with expiry monitoring." },
-  { icon: ShieldAlert, title: "Risk & MC checks", desc: "Live MC, DOT, and risk scoring before you book." },
+  {
+    icon: KeyRound,
+    title: "Role-based access",
+    desc: "Granular roles for ops, sales, finance, and execs.",
+  },
+  {
+    icon: ScrollText,
+    title: "Audit logs",
+    desc: "Every change traced to a user, time, and source.",
+  },
+  {
+    icon: Lock,
+    title: "2FA & SSO",
+    desc: "TOTP, SAML, and SCIM for enterprise identity providers.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Permissions",
+    desc: "Object-level rules across loads, carriers, and finance.",
+  },
+  {
+    icon: Building2,
+    title: "Insurance verification",
+    desc: "Automated COI checks with expiry monitoring.",
+  },
+  {
+    icon: ShieldAlert,
+    title: "Risk & MC checks",
+    desc: "Live MC, DOT, and risk scoring before you book.",
+  },
 ] as const;
 
 function Security() {
@@ -1840,8 +2010,10 @@ function Security() {
           <div className="lg:col-span-2">
             <SectionHeader
               eyebrow="Security & Compliance"
-              title="Enterprise-grade by default"
-              description="SOC 2 Type II certified. GDPR & CCPA ready. Built for the audit, configured for the operator."
+              title={t("Enterprise-grade by default")}
+              description={t(
+                "SOC 2 Type II certified. GDPR & CCPA ready. Built for the audit, configured for the operator.",
+              )}
               align="left"
             />
             <div className="mt-8 flex flex-wrap gap-2">
@@ -1919,33 +2091,36 @@ function Testimonials() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="Loved by freight teams"
-          title="Operators on Logistics Software say it best"
-          description="Real teams. Real lanes. Real outcomes — measured in weeks."
+          title={t("Operators on Logistics Software say it best")}
+          description={t("Real teams. Real lanes. Real outcomes — measured in weeks.")}
         />
 
         <div className="mt-14 grid gap-4 md:grid-cols-3 lg:gap-5">
-          {TESTIMONIALS.map((t, i) => (
+          {TESTIMONIALS.map((testimonial, i) => (
             <div
               key={i}
               className="group relative flex flex-col rounded-2xl border border-border/70 bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-xl"
             >
-              <div className="flex items-center gap-1 text-warning" aria-label="5 out of 5 stars">
+              <div
+                className="flex items-center gap-1 text-warning"
+                aria-label={t("5 out of 5 stars")}
+              >
                 {Array.from({ length: 5 }).map((_, j) => (
                   <Star key={j} className="h-4 w-4 fill-warning text-warning" aria-hidden />
                 ))}
               </div>
               <Quote className="absolute right-5 top-5 h-8 w-8 text-primary/15" />
               <blockquote className="mt-4 text-[15px] leading-relaxed text-foreground">
-                "{t.quote}"
+                "{testimonial.quote}"
               </blockquote>
               <div className="mt-6 flex items-center gap-3 border-t border-border/60 pt-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-info text-sm font-semibold text-primary-foreground">
-                  {t.initials}
+                  {testimonial.initials}
                 </div>
                 <div className="leading-tight">
-                  <div className="text-sm font-semibold">{t.name}</div>
+                  <div className="text-sm font-semibold">{testimonial.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {t.role} · {t.company}
+                    {testimonial.role} · {testimonial.company}
                   </div>
                 </div>
               </div>
@@ -2018,8 +2193,10 @@ function Pricing() {
       <div className="mx-auto max-w-7xl">
         <SectionHeader
           eyebrow="Pricing"
-          title="Simple, transparent plans that scale with you"
-          description="Start free for 14 days. No credit card required. Switch plans or cancel anytime."
+          title={t("Simple, transparent plans that scale with you")}
+          description={t(
+            "Start free for 14 days. No credit card required. Switch plans or cancel anytime.",
+          )}
         />
 
         <div className="mt-14 grid gap-5 md:grid-cols-3">
@@ -2040,7 +2217,7 @@ function Pricing() {
               >
                 {popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground shadow-sm">
-                    Most popular
+                    {t("Most popular")}
                   </div>
                 )}
                 <h3 className="text-lg font-semibold tracking-tight">{p.name}</h3>
@@ -2080,19 +2257,13 @@ function Pricing() {
                     <li key={f} className="flex items-start gap-2.5 text-sm">
                       <span
                         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                          isDark
-                            ? "bg-success/25 text-success"
-                            : "bg-success/15 text-success"
+                          isDark ? "bg-success/25 text-success" : "bg-success/15 text-success"
                         }`}
                       >
                         <Check className="h-3 w-3" />
                       </span>
                       <span
-                        className={
-                          isDark
-                            ? "text-sidebar-foreground/80"
-                            : "text-foreground/90"
-                        }
+                        className={isDark ? "text-sidebar-foreground/80" : "text-foreground/90"}
                       >
                         {f}
                       </span>
@@ -2106,13 +2277,13 @@ function Pricing() {
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
-            <CreditCard className="h-3.5 w-3.5" /> No credit card required
+            <CreditCard className="h-3.5 w-3.5" /> {t("No credit card required")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5 text-success" /> SOC 2 Type II
+            <ShieldCheck className="h-3.5 w-3.5 text-success" /> {t("SOC 2 Type II")}
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <Headphones className="h-3.5 w-3.5" /> Onboarding included
+            <Headphones className="h-3.5 w-3.5" /> {t("Onboarding included")}
           </span>
         </div>
       </div>
@@ -2157,17 +2328,13 @@ function FAQSection() {
       <div className="mx-auto max-w-3xl">
         <SectionHeader
           eyebrow="FAQ"
-          title="Questions, answered"
-          description="Can't find what you're looking for? Our team is one click away."
+          title={t("Questions, answered")}
+          description={t("Can't find what you're looking for? Our team is one click away.")}
         />
 
         <Accordion type="single" collapsible className="mt-12 w-full">
           {FAQS.map((f, i) => (
-            <AccordionItem
-              key={i}
-              value={`item-${i}`}
-              className="border-border/70 last:border-b"
-            >
+            <AccordionItem key={i} value={`item-${i}`} className="border-border/70 last:border-b">
               <AccordionTrigger className="py-5 text-left text-base font-medium hover:no-underline">
                 {f.q}
               </AccordionTrigger>
@@ -2181,11 +2348,11 @@ function FAQSection() {
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
           <Button asChild className="h-10 gap-1.5">
             <a href="#cta">
-              Talk to sales <ArrowRight className="h-3.5 w-3.5" />
+              {t("Talk to sales")} <ArrowRight className="h-3.5 w-3.5" />
             </a>
           </Button>
           <Button asChild variant="outline" className="h-10">
-            <a href="#features">Explore features</a>
+            <a href="#features">{t("Explore features")}</a>
           </Button>
         </div>
       </div>
@@ -2224,25 +2391,26 @@ function FinalCTA() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border/40 bg-sidebar-accent/40 px-3 py-1 text-xs font-medium backdrop-blur">
                 <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse motion-reduce:animate-none" />
-                Free 14-day trial · no credit card
+                {t("Free 14-day trial · no credit card")}
               </div>
               <h2 className="mt-5 text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-[2.75rem] lg:leading-[1.1]">
-                Ready to run your freight on Logistics Software?
+                {t("Ready to run your freight on Logistics Software?")}
               </h2>
               <p className="mt-4 text-sm leading-relaxed text-sidebar-foreground/70 sm:text-base">
-                Join hundreds of brokers, carriers, and 3PLs running their operations on the
-                modern logistics OS. We'll have you live in weeks — not quarters.
+                {t(
+                  "Join hundreds of brokers, carriers, and 3PLs running their operations on the\r\n                modern logistics OS. We'll have you live in weeks — not quarters.",
+                )}
               </p>
             </div>
 
             <div className="rounded-2xl border border-sidebar-border/40 bg-sidebar-accent/30 p-5 backdrop-blur sm:p-6">
-              <div className="text-sm font-semibold">Start your free trial</div>
+              <div className="text-sm font-semibold">{t("Start your free trial")}</div>
               <form
                 className="mt-4 flex flex-col gap-2 sm:flex-row"
                 onSubmit={(e) => e.preventDefault()}
               >
                 <label htmlFor="landing-cta-email" className="sr-only">
-                  Work email
+                  {t("Work email")}
                 </label>
                 <Input
                   id="landing-cta-email"
@@ -2256,16 +2424,16 @@ function FinalCTA() {
                   type="submit"
                   className="h-11 shrink-0 gap-1.5 bg-primary px-5 text-primary-foreground hover:bg-primary/90"
                 >
-                  Get started <ArrowRight className="h-4 w-4" />
+                  {t("Get started")} <ArrowRight className="h-4 w-4" />
                 </Button>
               </form>
               <div className="mt-4 grid grid-cols-3 gap-3">
-                <MiniBadge icon={<ShieldCheck className="h-3 w-3" />} label="SOC 2" />
+                <MiniBadge icon={<ShieldCheck className="h-3 w-3" />} label={t("SOC 2")} />
                 <MiniBadge icon={<Star className="h-3 w-3" />} label="4.9 / 5" />
-                <MiniBadge icon={<Users className="h-3 w-3" />} label="1.8k+ teams" />
+                <MiniBadge icon={<Users className="h-3 w-3" />} label={t("1.8k+ teams")} />
               </div>
               <p className="mt-3 text-[11px] text-sidebar-foreground/60">
-                By starting a trial you agree to our Terms and Privacy Policy.
+                {t("By starting a trial you agree to our Terms and Privacy Policy.")}
               </p>
             </div>
           </div>
@@ -2320,31 +2488,34 @@ function Footer() {
             <a href="#top" className="flex items-center gap-2.5">
               <AppLogoMark className="h-9 w-9 shrink-0 rounded-xl shadow-sm" />
               <div className="flex flex-col leading-tight">
-                <span className="text-[15px] font-semibold tracking-tight">Logistics Software</span>
+                <span className="text-[15px] font-semibold tracking-tight">
+                  {t("Logistics Software")}
+                </span>
                 <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Freight OS
+                  {t("Freight OS")}
                 </span>
               </div>
             </a>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              The operating system for modern freight — dispatch, brokerage, tracking, accounting,
-              and analytics in one premium platform.
+              {t(
+                "The operating system for modern freight — dispatch, brokerage, tracking, accounting,\r\n              and analytics in one premium platform.",
+              )}
             </p>
 
             <div className="mt-5 flex max-w-sm gap-2">
               <label htmlFor="landing-footer-email" className="sr-only">
-                Email for product updates
+                {t("Email for product updates")}
               </label>
               <Input
                 id="landing-footer-email"
                 type="email"
                 name="email"
                 autoComplete="email"
-                placeholder="Subscribe to product updates"
+                placeholder={t("Subscribe to product updates")}
                 className="h-11 min-w-0 flex-1 border-border/70 bg-card"
               />
               <Button type="button" className="h-11 shrink-0 gap-1.5">
-                <Send className="h-3.5 w-3.5" aria-hidden /> Subscribe
+                <Send className="h-3.5 w-3.5" aria-hidden /> {t("Subscribe")}
               </Button>
             </div>
 
@@ -2399,11 +2570,17 @@ function Footer() {
           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-1.5 w-1.5 animate-pulse motion-reduce:animate-none rounded-full bg-success" />
-              All systems operational
+              {t("All systems operational")}
             </span>
-            <a href="#" className="hover:text-foreground">Status</a>
-            <a href="#" className="hover:text-foreground">Sitemap</a>
-            <a href="#" className="hover:text-foreground">Accessibility</a>
+            <a href="#" className="hover:text-foreground">
+              {t("Status")}
+            </a>
+            <a href="#" className="hover:text-foreground">
+              {t("Sitemap")}
+            </a>
+            <a href="#" className="hover:text-foreground">
+              {t("Accessibility")}
+            </a>
           </div>
         </div>
       </div>

@@ -2,9 +2,8 @@ import { fetchAuthSession } from "aws-amplify/auth";
 
 import { AI_API_KEY_HEADER, DEFAULT_AI_MODEL } from "@/lib/ai-proxy";
 import { GEOCODE_API_KEY_HEADER } from "@/lib/geocode-proxy";
-import { isDynamoConfigured, isWorkspaceSettingsConfigured } from "@/lib/dynamodb";
+import { isWorkspaceSettingsConfigured } from "@/lib/dynamodb";
 import {
-  loadLegacyOrgIntegrationsFromProfileTable,
   loadOrgIntegrationsFromDynamo,
   saveOrgIntegrationsToDynamo,
 } from "@/lib/org-integrations-store";
@@ -40,6 +39,15 @@ export type AiConnectionStatus = {
   /** Last four characters — identifies the key without exposing it. */
   last4?: string;
   updatedAt?: string;
+};
+
+/** What the browser is allowed to know about the stored Resend key. */
+export type ResendConnectionStatus = {
+  connected: boolean;
+  fromEmail: string | null;
+  last4?: string;
+  updatedAt?: string;
+  lastDigestAt?: string;
 };
 
 export type IntegrationsConfig = {
@@ -128,17 +136,6 @@ export function mergeIntegrationsConfig(partial: unknown): IntegrationsConfig {
   return { googleMaps, ai: { ...ai, apiKey: "" } };
 }
 
-function readLegacyLocalStorage(): IntegrationsConfig | null {
-  if (!canUseBrowserStorage()) return null;
-  try {
-    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (!raw) return null;
-    return mergeIntegrationsConfig(JSON.parse(raw) as unknown);
-  } catch {
-    return null;
-  }
-}
-
 function clearLegacyLocalStorage() {
   if (!canUseBrowserStorage()) return;
   try {
@@ -181,25 +178,10 @@ export async function loadIntegrationsConfig(): Promise<IntegrationsConfig> {
         return readIntegrationsConfig();
       }
 
-      if (isDynamoConfigured()) {
-        const { data: profileLegacy } =
-          await loadLegacyOrgIntegrationsFromProfileTable<IntegrationsConfig>();
-        if (profileLegacy) {
-          await saveOrgIntegrationsToDynamo(profileLegacy);
-          clearLegacyLocalStorage();
-          applyIntegrationsConfig(profileLegacy);
-          return readIntegrationsConfig();
-        }
-      }
-
-      const browserLegacy = readLegacyLocalStorage();
-      if (browserLegacy) {
-        await saveOrgIntegrationsToDynamo(browserLegacy);
-        clearLegacyLocalStorage();
-        applyIntegrationsConfig(browserLegacy);
-        return readIntegrationsConfig();
-      }
-
+      // Empty for this company. Do not copy `global`, the `__org__` profile
+      // row, or unscoped localStorage — those are other tenants' keys, and
+      // writing them here is how a Maps/OpenAI credential hops companies.
+      clearLegacyLocalStorage();
       applyIntegrationsConfig(INTEGRATIONS_CONFIG_DEFAULTS);
       return readIntegrationsConfig();
     } catch (error) {
@@ -357,6 +339,7 @@ export async function recordGoogleMapsTestResult(ok: boolean) {
 
 let aiStatusCache: AiConnectionStatus | null = null;
 let aiStatusPromise: Promise<AiConnectionStatus> | null = null;
+let resendStatusCache: ResendConnectionStatus | null = null;
 
 const DISCONNECTED: AiConnectionStatus = { connected: false, model: DEFAULT_AI_MODEL };
 
@@ -365,9 +348,21 @@ export function readAiConnectionStatus(): AiConnectionStatus | null {
   return aiStatusCache;
 }
 
+export function readResendConnectionStatus(): ResendConnectionStatus | null {
+  return resendStatusCache;
+}
+
+export function applyResendConnectionStatus(status: ResendConnectionStatus) {
+  resendStatusCache = status;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(INTEGRATIONS_CONFIG_CHANGED));
+  }
+}
+
 export function clearAiConnectionStatusCache() {
   aiStatusCache = null;
   aiStatusPromise = null;
+  resendStatusCache = null;
 }
 
 /**
@@ -389,7 +384,10 @@ export async function ensureAiConnectionStatus(options?: {
         headers: { Accept: "application/json", ...(await getCognitoAuthHeaders()) },
       });
       if (!response.ok) return DISCONNECTED;
-      const body = (await response.json()) as { ai?: Partial<AiConnectionStatus> };
+      const body = (await response.json()) as {
+        ai?: Partial<AiConnectionStatus>;
+        resend?: Partial<ResendConnectionStatus>;
+      };
       const status: AiConnectionStatus = {
         connected: Boolean(body.ai?.connected),
         model: body.ai?.model?.trim() || DEFAULT_AI_MODEL,
@@ -397,6 +395,16 @@ export async function ensureAiConnectionStatus(options?: {
         updatedAt: body.ai?.updatedAt,
       };
       aiStatusCache = status;
+      resendStatusCache = {
+        connected: Boolean(body.resend?.connected),
+        fromEmail: body.resend?.fromEmail?.trim() || null,
+        last4: body.resend?.last4,
+        updatedAt: body.resend?.updatedAt,
+        lastDigestAt: body.resend?.lastDigestAt,
+      };
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(INTEGRATIONS_CONFIG_CHANGED));
+      }
       return status;
     } catch {
       // Fail closed: unknown status reads as not configured, so the UI offers

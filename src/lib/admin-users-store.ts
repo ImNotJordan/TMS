@@ -83,6 +83,7 @@ export type CreateAdminUserPayload = {
   accessLevel?: string;
   assignedTeam?: string;
   assignedBranch?: string;
+  assignedCustomers?: string;
   dataAccessScope?: string;
   accountStatus: string;
   inviteStatus: string;
@@ -143,9 +144,7 @@ function describeDynamoListError(err: unknown, op: string): Error {
   if (err instanceof Error) {
     const awsName = (err as { name?: string }).name;
     if (awsName === "AccessDeniedException") {
-      return new Error(
-        `Not authorized for ${op}.`,
-      );
+      return new Error(`Not authorized for ${op}.`);
     }
     const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
     const detail = [awsName && `${awsName}`, status && `HTTP ${status}`, err.message]
@@ -417,20 +416,18 @@ export async function createAdminDirectoryUser(
     userId,
     "permissions",
     stripUndefinedDeep({
-      // Placeholder only. The authoritative role and its Cognito group are set
-      // by syncUserRole below, server-side.
-      role: storageRole,
+      // `role`, `companyId`, and `companyName` are owned by dedicated endpoints
+      // (`/api/admin/user-role`, `/api/admin/company-assignment`). Writing them
+      // here is refused with `server_owned_field`.
       permissionGroup: payload.permissionTemplate?.trim() || undefined,
       accessLevel: payload.accessLevel?.trim() || undefined,
       branch: payload.assignedBranch?.trim() || payload.officeBranch?.trim() || undefined,
       teams: payload.assignedTeam?.trim() || undefined,
+      assignedCustomers: payload.assignedCustomers?.trim() || undefined,
       status: payload.accountStatus,
       dataAccessScope: payload.dataAccessScope?.trim() || undefined,
       modulePermissions: payload.modulePermissions,
       fieldPermissions: payload.fieldPermissions,
-      // Tenant assignment — the one place a company is bound to a user.
-      companyId,
-      companyName,
     }),
   );
 
@@ -441,16 +438,15 @@ export async function createAdminDirectoryUser(
     createdAt: now,
   });
 
-  // Put the new user in their role's Cognito group. Deliberately after the
-  // profile rows exist, because the endpoint reads the target's company from
-  // them to run its cross-tenant check.
-  try {
+  // Role and company are not profile fields. `/api/profile` refuses them.
+  // Driver first gets the group so a later employer assignment (if any) does
+  // not stamp a tenant claim. Everyone else is assigned to the company first —
+  // the role endpoint reads that row for its same-company check.
+  if (isTenantExempt) {
     await syncUserRole(userId, payload.role);
-  } catch (err) {
-    // The account exists and is usable; only the group is missing. Surfacing
-    // this rather than swallowing it matters — an admin who thinks they created
-    // a Dispatcher should not discover later that the token says otherwise.
-    console.error("[admin] role group sync failed for the new user", err);
+  } else {
+    await assignUserCompany(userId, { companyId, companyName });
+    await syncUserRole(userId, payload.role);
   }
 
   return {
@@ -471,6 +467,8 @@ export async function createAdminDirectoryUser(
     inviteStatus: payload.inviteStatus,
     twoFAStatus: payload.twoFAStatus,
     createdDate: now,
+    companyId: companyId || undefined,
+    companyName: companyName || undefined,
   };
 }
 

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ConversationFilter } from "../hooks/useConversations";
 import { CHANNEL_LABELS, formatRelativeTime, truncatePreview } from "../lib/formatters";
 import type { ChannelId, Conversation } from "../types";
+import { t } from "@/lib/i18n/t";
 
 const ICONS: Record<ChannelId, typeof Mail> = {
   email: Mail,
@@ -47,14 +48,14 @@ export function ConversationFilters({
           className="pl-8"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search subject, contact, load…"
-          aria-label="Search conversations"
+          placeholder={t("Search subject, contact, load…")}
+          aria-label={t("Search conversations")}
         />
       </div>
       <div
         className="flex flex-wrap gap-1 rounded-lg border border-border/70 bg-muted/20 p-1"
         role="listbox"
-        aria-label="Channel filters"
+        aria-label={t("Channel filters")}
       >
         {items.map((item) => {
           const disabled =
@@ -123,7 +124,9 @@ export function ConversationListItem({
         <span
           className={cn(
             "min-w-0 flex-1 truncate text-sm",
-            conversation.unreadCount > 0 ? "font-semibold text-foreground" : "font-medium text-foreground",
+            conversation.unreadCount > 0
+              ? "font-semibold text-foreground"
+              : "font-medium text-foreground",
           )}
         >
           {conversation.subject}
@@ -147,7 +150,7 @@ export function ConversationListItem({
             variant="outline"
             className="h-5 border-destructive/25 bg-destructive/15 text-[10px] text-destructive"
           >
-            Critical
+            {t("Critical")}
           </Badge>
         ) : null}
         {conversation.aiHandled ? (
@@ -189,16 +192,16 @@ export function ConversationList({
   if (conversations.length === 0) {
     return (
       <div className="px-3 py-10 text-center">
-        <p className="text-sm font-medium text-foreground">No conversations</p>
+        <p className="text-sm font-medium text-foreground">{t("No conversations")}</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Start one from any load or contact, or compose a new thread.
+          {t("Start one from any load or contact, or compose a new thread.")}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-border/60" role="listbox" aria-label="Conversations">
+    <div className="divide-y divide-border/60" role="listbox" aria-label={t("Conversations")}>
       {conversations.map((c) => (
         <ConversationListItem
           key={c.id}

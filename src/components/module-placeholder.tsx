@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
+import { t } from "@/lib/i18n/t";
 
 export function ModulePlaceholder({
   icon: Icon,
@@ -32,13 +33,13 @@ export function ModulePlaceholder({
         actions={
           <>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Filter className="h-4 w-4" /> Filters
+              <Filter className="h-4 w-4" /> {t("Filters")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" /> Export
+              <Download className="h-4 w-4" /> {t("Export")}
             </Button>
             <Button size="sm" className="gap-1.5">
-              <Plus className="h-4 w-4" /> New
+              <Plus className="h-4 w-4" /> {t("New")}
             </Button>
           </>
         }
@@ -56,7 +57,7 @@ export function ModulePlaceholder({
                     {p.value}
                   </div>
                   <Badge variant="secondary" className={toneClass[p.tone ?? "default"]}>
-                    Live
+                    {t("Live")}
                   </Badge>
                 </div>
               </CardContent>
@@ -73,13 +74,16 @@ export function ModulePlaceholder({
               <div className="max-w-md">
                 <h3 className="text-base font-semibold text-foreground">{title} workspace</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Connected to your live operations data. Tables, filters, and bulk actions appear
-                  here. Use the quick create button above to populate this module.
+                  {t(
+                    "Connected to your live operations data. Tables, filters, and bulk actions appear\r\n                  here. Use the quick create button above to populate this module.",
+                  )}
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">View documentation</Button>
-                <Button size="sm">Get started</Button>
+                <Button variant="outline" size="sm">
+                  {t("View documentation")}
+                </Button>
+                <Button size="sm">{t("Get started")}</Button>
               </div>
             </CardContent>
           </Card>

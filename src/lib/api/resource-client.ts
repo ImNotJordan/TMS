@@ -56,7 +56,15 @@ function withoutServerOwnedFields(input: Record<string, unknown>): Record<string
   return out;
 }
 
-async function send<T>(
+/**
+ * One authenticated JSON round trip against the API tier.
+ *
+ * Exported because endpoints whose shape does not fit the five-operation CRUD
+ * contract below — `/api/inventory/movements` returns a movement *and* the item
+ * it moved — still need identical auth, error and 204 handling. Reimplementing
+ * that per endpoint is how one of them ends up not attaching the token.
+ */
+export async function sendResourceRequest<T>(
   path: string,
   init: Omit<RequestInit, "body"> & { body?: unknown } = {},
 ): Promise<T | null> {
@@ -86,6 +94,8 @@ async function send<T>(
   }
   return parsed;
 }
+
+const send = sendResourceRequest;
 
 export type ResourceClient<T> = {
   list(): Promise<T[]>;

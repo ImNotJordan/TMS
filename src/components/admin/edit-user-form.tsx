@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { t } from "@/lib/i18n/t";
 
 function Field({
   label,
@@ -136,51 +137,50 @@ export function EditUserForm({
     <div className="space-y-6">
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Profile</CardTitle>
-          <CardDescription>Identity and contact details stored in UsersTable.</CardDescription>
+          <CardTitle className="text-base">{t("Profile")}</CardTitle>
+          <CardDescription>
+            {t("Identity and contact details stored in UsersTable.")}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Field label="First Name" required>
+          <Field label={t("First Name")} required>
             <Input value={draft.firstName} onChange={(e) => patch("firstName", e.target.value)} />
           </Field>
-          <Field label="Last Name" required>
+          <Field label={t("Last Name")} required>
             <Input value={draft.lastName} onChange={(e) => patch("lastName", e.target.value)} />
           </Field>
-          <Field label="Display Name">
+          <Field label={t("Display Name")}>
             <Input
               value={draft.displayName}
               onChange={(e) => patch("displayName", e.target.value)}
             />
           </Field>
-          <Field label="Email" required>
+          <Field label={t("Email")} required>
             <Input
               type="email"
               value={draft.email}
               onChange={(e) => patch("email", e.target.value)}
             />
           </Field>
-          <Field label="Phone">
+          <Field label={t("Phone")}>
             <Input value={draft.phone} onChange={(e) => patch("phone", e.target.value)} />
           </Field>
-          <Field label="Job Title">
+          <Field label={t("Job Title")}>
             <Input value={draft.jobTitle} onChange={(e) => patch("jobTitle", e.target.value)} />
           </Field>
-          <Field label="Department">
-            <Input
-              value={draft.department}
-              onChange={(e) => patch("department", e.target.value)}
-            />
+          <Field label={t("Department")}>
+            <Input value={draft.department} onChange={(e) => patch("department", e.target.value)} />
           </Field>
-          <Field label="Office / Branch">
+          <Field label={t("Office / Branch")}>
             <Input
               value={draft.officeBranch}
               onChange={(e) => patch("officeBranch", e.target.value)}
             />
           </Field>
-          <Field label="Time Zone">
+          <Field label={t("Time Zone")}>
             <Input value={draft.timeZone} onChange={(e) => patch("timeZone", e.target.value)} />
           </Field>
-          <Field label="Language">
+          <Field label={t("Language")}>
             <Input value={draft.language} onChange={(e) => patch("language", e.target.value)} />
           </Field>
         </CardContent>
@@ -188,14 +188,17 @@ export function EditUserForm({
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Role & access</CardTitle>
-          <CardDescription>Role, team, branch, and data scope.</CardDescription>
+          <CardTitle className="text-base">{t("Role & access")}</CardTitle>
+          <CardDescription>{t("Role, team, branch, and data scope.")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Field label="Role" required>
-            <Select value={draft.role} onValueChange={(value) => patch("role", value as typeof draft.role)}>
+          <Field label={t("Role")} required>
+            <Select
+              value={draft.role}
+              onValueChange={(value) => patch("role", value as typeof draft.role)}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Select role" />
+                <SelectValue placeholder={t("Select role")} />
               </SelectTrigger>
               <SelectContent>
                 {ROLES.map((role) => (
@@ -206,7 +209,7 @@ export function EditUserForm({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Permission template">
+          <Field label={t("Permission template")}>
             <Select
               value={draft.permissionTemplate}
               onValueChange={(value) =>
@@ -225,7 +228,7 @@ export function EditUserForm({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Access level">
+          <Field label={t("Access level")}>
             <Select
               value={draft.accessLevel}
               onValueChange={(value) => patch("accessLevel", value as typeof draft.accessLevel)}
@@ -234,28 +237,35 @@ export function EditUserForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Standard">Standard</SelectItem>
-                <SelectItem value="Elevated">Elevated</SelectItem>
-                <SelectItem value="Restricted">Restricted</SelectItem>
+                <SelectItem value="Standard">{t("Standard")}</SelectItem>
+                <SelectItem value="Elevated">{t("Elevated")}</SelectItem>
+                <SelectItem value="Restricted">{t("Restricted")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Manager">
+          <Field label={t("Manager")}>
             <Input value={draft.manager} onChange={(e) => patch("manager", e.target.value)} />
           </Field>
-          <Field label="Assigned team">
+          <Field label={t("Assigned team")}>
             <Input
               value={draft.assignedTeam}
               onChange={(e) => patch("assignedTeam", e.target.value)}
             />
           </Field>
-          <Field label="Assigned branch">
+          <Field label={t("Assigned branch")}>
             <Input
               value={draft.assignedBranch}
               onChange={(e) => patch("assignedBranch", e.target.value)}
             />
           </Field>
-          <Field label="Data access scope" required>
+          <Field label={t("Assigned customers")}>
+            <Input
+              value={draft.assignedCustomers}
+              onChange={(e) => patch("assignedCustomers", e.target.value)}
+              placeholder={t("Acme Manufacturing, Northwind")}
+            />
+          </Field>
+          <Field label={t("Data access scope")} required>
             <Select
               value={draft.dataAccessScope}
               onValueChange={(value) =>
@@ -279,11 +289,11 @@ export function EditUserForm({
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Account & security</CardTitle>
-          <CardDescription>Status, invite, and two-factor settings.</CardDescription>
+          <CardTitle className="text-base">{t("Account & security")}</CardTitle>
+          <CardDescription>{t("Status, invite, and two-factor settings.")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
-          <Field label="Account status">
+          <Field label={t("Account status")}>
             <Select
               value={draft.accountStatus}
               onValueChange={(value) => patch("accountStatus", value as typeof draft.accountStatus)}
@@ -300,7 +310,7 @@ export function EditUserForm({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Invite status">
+          <Field label={t("Invite status")}>
             <Select
               value={draft.inviteStatus}
               onValueChange={(value) => patch("inviteStatus", value as typeof draft.inviteStatus)}
@@ -317,7 +327,7 @@ export function EditUserForm({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="2FA status">
+          <Field label={t("2FA status")}>
             <Select
               value={draft.twoFAStatus}
               onValueChange={(value) => patch("twoFAStatus", value as typeof draft.twoFAStatus)}
@@ -339,14 +349,14 @@ export function EditUserForm({
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Module permissions</CardTitle>
-          <CardDescription>Per-module access levels for this user.</CardDescription>
+          <CardTitle className="text-base">{t("Module permissions")}</CardTitle>
+          <CardDescription>{t("Per-module access levels for this user.")}</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-[160px]">Module</TableHead>
+                <TableHead className="min-w-[160px]">{t("Module")}</TableHead>
                 {PERMISSION_LEVELS.map((level) => (
                   <TableHead key={level} className="min-w-[88px] text-center text-xs">
                     {level}
@@ -377,8 +387,8 @@ export function EditUserForm({
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Field-level permissions</CardTitle>
-          <CardDescription>Sensitive data and financial visibility.</CardDescription>
+          <CardTitle className="text-base">{t("Field-level permissions")}</CardTitle>
+          <CardDescription>{t("Sensitive data and financial visibility.")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 md:grid-cols-2">
           {FIELD_PERMISSIONS.map((permission) => (

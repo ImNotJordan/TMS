@@ -16,6 +16,7 @@ import { useChannelAvailability } from "../hooks/useChannelAvailability";
 import type { GuardResult } from "../types";
 import type { ChannelId, MessageLink, TranslationRecord } from "../types";
 import { CHANNEL_LABELS } from "../lib/formatters";
+import { t } from "@/lib/i18n/t";
 
 const LANGS = [
   { id: "en", label: "English" },
@@ -47,10 +48,7 @@ export function Composer({
   guardNotice?: GuardResult | null;
   onAcknowledgeConsent?: () => void;
   onRecordConsent?: () => void;
-  onSend: (opts: {
-    translateTo?: string;
-    translation?: TranslationRecord;
-  }) => Promise<void>;
+  onSend: (opts: { translateTo?: string; translation?: TranslationRecord }) => Promise<void>;
   sending: boolean;
   isAiDraft?: boolean;
 }) {
@@ -62,11 +60,7 @@ export function Composer({
   const channelDisabled = channelState && !channelState.available;
   const missingLink = !link;
   const sendDisabled =
-    sending ||
-    !body.trim() ||
-    missingLink ||
-    Boolean(channelDisabled) ||
-    Boolean(disabledReason);
+    sending || !body.trim() || missingLink || Boolean(channelDisabled) || Boolean(disabledReason);
 
   const reason =
     disabledReason ||
@@ -125,8 +119,14 @@ export function Composer({
       {guardNotice?.status === "blocked-no-consent" ? (
         <div className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           No consent on file for this channel.{" "}
-          <Button type="button" variant="outline" size="sm" className="h-7" onClick={onRecordConsent}>
-            Record consent
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7"
+            onClick={onRecordConsent}
+          >
+            {t("Record consent")}
           </Button>
         </div>
       ) : null}
@@ -140,14 +140,14 @@ export function Composer({
             className="h-7"
             onClick={onAcknowledgeConsent}
           >
-            Confirm and send
+            {t("Confirm and send")}
           </Button>
         </div>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Select value={channel} onValueChange={(v) => onChannelChange(v as ChannelId)}>
-          <SelectTrigger className="h-9 w-[130px]" aria-label="Channel">
+          <SelectTrigger className="h-9 w-[130px]" aria-label={t("Channel")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -156,7 +156,7 @@ export function Composer({
               return (
                 <SelectItem key={id} value={id} disabled={avail && !avail.available}>
                   {CHANNEL_LABELS[id]}
-                  {avail && !avail.available ? " (disconnected)" : ""}
+                  {avail && !avail.available ? " (disabled)" : ""}
                 </SelectItem>
               );
             })}
@@ -170,23 +170,23 @@ export function Composer({
             if (v !== "none") onBodyChange(v);
           }}
         >
-          <SelectTrigger className="h-9 w-[160px]" aria-label="Template">
-            <SelectValue placeholder="Template" />
+          <SelectTrigger className="h-9 w-[160px]" aria-label={t("Template")}>
+            <SelectValue placeholder={t("Template")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">No template</SelectItem>
-            <SelectItem value="Driver has arrived at pickup.">Arrived at pickup</SelectItem>
-            <SelectItem value="Driver is in transit.">In transit</SelectItem>
-            <SelectItem value="POD has been uploaded.">POD uploaded</SelectItem>
+            <SelectItem value="none">{t("No template")}</SelectItem>
+            <SelectItem value="Driver has arrived at pickup.">{t("Arrived at pickup")}</SelectItem>
+            <SelectItem value="Driver is in transit.">{t("In transit")}</SelectItem>
+            <SelectItem value="POD has been uploaded.">{t("POD uploaded")}</SelectItem>
           </SelectContent>
         </Select>
 
         <Select value={translateTo} onValueChange={setTranslateTo}>
-          <SelectTrigger className="h-9 w-[150px]" aria-label="Translate to">
-            <SelectValue placeholder="Translate to" />
+          <SelectTrigger className="h-9 w-[150px]" aria-label={t("Translate to")}>
+            <SelectValue placeholder={t("Translate to")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="none">No translation</SelectItem>
+            <SelectItem value="none">{t("No translation")}</SelectItem>
             {LANGS.map((l) => (
               <SelectItem key={l.id} value={l.id}>
                 Translate to {l.label}
@@ -200,7 +200,7 @@ export function Composer({
         <p className="text-xs text-muted-foreground">
           {channelState?.reason}{" "}
           <Link to="/settings" search={{ category: "integrations" } as never} className="underline">
-            Connect in Settings → Integrations.
+            {t("Connect in Settings → Integrations.")}
           </Link>
         </p>
       ) : null}
@@ -211,7 +211,7 @@ export function Composer({
         placeholder={isAiDraft ? "AI draft — edit before sending" : "Write a message"}
         rows={3}
         className="min-h-[88px] resize-none"
-        aria-label="Message body"
+        aria-label={t("Message body")}
       />
 
       <div className="flex items-center justify-between gap-2">
@@ -226,7 +226,7 @@ export function Composer({
           onClick={() => void handleSend()}
         >
           <Send className="h-4 w-4" aria-hidden />
-          Send
+          {t("Send")}
         </Button>
       </div>
     </div>

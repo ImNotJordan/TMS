@@ -87,6 +87,7 @@ import { useProfileSection, type UseProfileSection } from "@/hooks/use-profile-s
 import { ensureCompanyContext } from "@/lib/tenant/company-context";
 import { isDynamoConfigured } from "@/lib/dynamodb";
 import { Skeleton } from "@/components/ui/skeleton";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -166,8 +167,10 @@ function ProfilePage() {
   return (
     <div>
       <PageHeader
-        title="Profile"
-        description="Your account command center — identity, preferences, security, and connected systems."
+        title={t("Profile")}
+        description={t(
+          "Your account command center — identity, preferences, security, and connected systems.",
+        )}
         actions={
           <>
             {!isDynamoConfigured() && (
@@ -175,11 +178,11 @@ function ProfilePage() {
                 variant="outline"
                 className="border-warning/30 bg-warning/15 text-warning-foreground"
               >
-                Cloud sync offline
+                {t("Cloud sync offline")}
               </Badge>
             )}
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" /> Export data
+              <Download className="h-4 w-4" /> {t("Export data")}
             </Button>
           </>
         }
@@ -405,7 +408,7 @@ function ProfileSidebar({
                 size="icon"
                 variant="secondary"
                 className="absolute bottom-0 right-0 h-8 w-8 rounded-full border-2 border-background shadow"
-                aria-label="Change photo"
+                aria-label={t("Change photo")}
                 onClick={() => toast.info("Photo upload coming soon")}
               >
                 <Camera className="h-3.5 w-3.5" />
@@ -427,7 +430,7 @@ function ProfileSidebar({
 
           <div className="rounded-lg border border-border/70 bg-muted/40 p-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-foreground">Profile strength</span>
+              <span className="font-medium text-foreground">{t("Profile strength")}</span>
               <span className={`font-semibold tabular-nums ${strengthTone}`}>
                 {strengthLoading ? "…" : `${completion}%`}
               </span>
@@ -454,7 +457,7 @@ function ProfileSidebar({
                 onClick={() => onJump(nextHint.tab)}
                 className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
               >
-                Complete now <ArrowUpRight className="h-3 w-3" />
+                {t("Complete now")} <ArrowUpRight className="h-3 w-3" />
               </button>
             )}
           </div>
@@ -471,7 +474,7 @@ function ProfileSidebar({
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Quick actions</CardTitle>
+          <CardTitle className="text-sm">{t("Quick actions")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 pt-0">
           {quickActions.map((q) => {
@@ -606,12 +609,12 @@ function SaveBar<T extends Record<string, unknown>>({
           variant="outline"
           className="border-warning/30 bg-warning/15 text-warning-foreground"
         >
-          Cloud sync offline
+          {t("Cloud sync offline")}
         </Badge>
       )}
       {hook.enabled && hook.loading && (
         <Badge variant="outline" className="gap-1 border-info/20 bg-info/10 text-info">
-          <Loader2 className="h-3 w-3 animate-spin" /> Loading
+          <Loader2 className="h-3 w-3 animate-spin" /> {t("Loading")}
         </Badge>
       )}
       {hook.dirty && (
@@ -619,7 +622,7 @@ function SaveBar<T extends Record<string, unknown>>({
           variant="outline"
           className="border-warning/30 bg-warning/15 text-warning-foreground"
         >
-          Unsaved changes
+          {t("Unsaved changes")}
         </Badge>
       )}
       {extra}
@@ -629,7 +632,7 @@ function SaveBar<T extends Record<string, unknown>>({
         onClick={hook.reset}
         disabled={!hook.dirty || hook.saving}
       >
-        Reset
+        {t("Reset")}
       </Button>
       <Button
         size="sm"
@@ -786,16 +789,16 @@ function OverviewTab({
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Assigned Loads" value="—" icon={Package} tone="info" />
-        <StatTile label="Open Tasks" value="—" icon={Inbox} tone="warning" />
-        <StatTile label="Approvals" value="—" icon={ShieldCheck} tone="warning" />
-        <StatTile label="On-time %" value="—" icon={BadgeCheck} tone="success" />
+        <StatTile label={t("Assigned Loads")} value="—" icon={Package} tone="info" />
+        <StatTile label={t("Open Tasks")} value="—" icon={Inbox} tone="warning" />
+        <StatTile label={t("Approvals")} value="—" icon={ShieldCheck} tone="warning" />
+        <StatTile label={t("On-time %")} value="—" icon={BadgeCheck} tone="success" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <SectionCard
-          title="At a glance"
-          description="Live from Cognito and your DynamoDB profile record."
+          title={t("At a glance")}
+          description={t("Live from Cognito and your DynamoDB profile record.")}
           action={
             <div className="flex items-center gap-1.5">
               {cloudOffline && (
@@ -803,7 +806,7 @@ function OverviewTab({
                   variant="outline"
                   className="gap-1 border-warning/30 bg-warning/15 text-warning-foreground"
                 >
-                  Cloud sync offline
+                  {t("Cloud sync offline")}
                 </Badge>
               )}
               {loadError && (
@@ -812,11 +815,11 @@ function OverviewTab({
                   className="border-destructive/40 bg-destructive/10 text-destructive"
                   title={loadError}
                 >
-                  Sync error
+                  {t("Sync error")}
                 </Badge>
               )}
               <Button variant="ghost" size="sm" className="gap-1 text-primary">
-                View all <ArrowUpRight className="h-4 w-4" />
+                {t("View all")} <ArrowUpRight className="h-4 w-4" />
               </Button>
             </div>
           }
@@ -825,27 +828,27 @@ function OverviewTab({
             <AtAGlanceSkeleton />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
-              <InfoRow label="Full name" value={fullName} />
-              <InfoRow label="Job title" value={jobTitle} />
-              <InfoRow label="Department" value={department} />
-              <InfoRow label="Email" value={emailValue} />
-              <InfoRow label="Phone" value={phoneValue} />
-              <InfoRow label="Time zone" value={timeZone} />
-              <InfoRow label="Location" value={locationValue} />
-              <InfoRow label="Status" value={statusLabel} tone={statusTone} />
-              <InfoRow label="Last login" value={lastLogin} />
-              <InfoRow label="Member since" value={memberSince} />
+              <InfoRow label={t("Full name")} value={fullName} />
+              <InfoRow label={t("Job title")} value={jobTitle} />
+              <InfoRow label={t("Department")} value={department} />
+              <InfoRow label={t("Email")} value={emailValue} />
+              <InfoRow label={t("Phone")} value={phoneValue} />
+              <InfoRow label={t("Time zone")} value={timeZone} />
+              <InfoRow label={t("Location")} value={locationValue} />
+              <InfoRow label={t("Status")} value={statusLabel} tone={statusTone} />
+              <InfoRow label={t("Last login")} value={lastLogin} />
+              <InfoRow label={t("Member since")} value={memberSince} />
             </div>
           )}
         </SectionCard>
 
         <SectionCard
-          title="Allowed modules"
-          description="From your role & permissions record."
+          title={t("Allowed modules")}
+          description={t("From your role & permissions record.")}
           action={
             permissions.loading ? (
               <Badge variant="outline" className="gap-1 border-info/20 bg-info/10 text-info">
-                <Loader2 className="h-3 w-3 animate-spin" /> Loading
+                <Loader2 className="h-3 w-3 animate-spin" /> {t("Loading")}
               </Badge>
             ) : undefined
           }
@@ -873,7 +876,7 @@ function OverviewTab({
           <Separator className="my-4" />
           <div className="space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Permission group</span>
+              <span className="text-muted-foreground">{t("Permission group")}</span>
               {permissions.loading ? (
                 <Skeleton className="h-4 w-24" />
               ) : (
@@ -881,7 +884,7 @@ function OverviewTab({
               )}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Access level</span>
+              <span className="text-muted-foreground">{t("Access level")}</span>
               {permissions.loading ? (
                 <Skeleton className="h-4 w-16" />
               ) : (
@@ -891,7 +894,7 @@ function OverviewTab({
               )}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Branch</span>
+              <span className="text-muted-foreground">{t("Branch")}</span>
               {permissions.loading ? (
                 <Skeleton className="h-4 w-20" />
               ) : (
@@ -903,11 +906,11 @@ function OverviewTab({
       </div>
 
       <SectionCard
-        title="Recent activity"
-        description="Latest things you and your account touched."
+        title={t("Recent activity")}
+        description={t("Latest things you and your account touched.")}
         action={
           <Button variant="ghost" size="sm" className="gap-1 text-primary">
-            Open activity log <ArrowUpRight className="h-4 w-4" />
+            {t("Open activity log")} <ArrowUpRight className="h-4 w-4" />
           </Button>
         }
       >
@@ -935,7 +938,7 @@ function AtAGlanceSkeleton() {
     <div
       className="grid gap-4 sm:grid-cols-2"
       aria-busy="true"
-      aria-label="Loading profile summary"
+      aria-label={t("Loading profile summary")}
     >
       {AT_A_GLANCE_SKELETON_ROWS.map((row, i) => (
         <div key={i} className="min-w-0 space-y-2">
@@ -1195,7 +1198,7 @@ function PersonalTab() {
                 {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm"}
               </Button>
               <Button size="sm" variant="outline" onClick={handleResend}>
-                Resend
+                {t("Resend")}
               </Button>
             </div>
           </CardContent>
@@ -1203,8 +1206,8 @@ function PersonalTab() {
       )}
 
       <SectionCard
-        title="Personal information"
-        description="How you appear across the workspace."
+        title={t("Personal information")}
+        description={t("How you appear across the workspace.")}
         action={
           <div className="flex items-center gap-2">
             {!hook.enabled && (
@@ -1212,7 +1215,7 @@ function PersonalTab() {
                 variant="outline"
                 className="border-warning/30 bg-warning/15 text-warning-foreground"
               >
-                Cloud sync offline
+                {t("Cloud sync offline")}
               </Badge>
             )}
             {hook.dirty && (
@@ -1220,7 +1223,7 @@ function PersonalTab() {
                 variant="outline"
                 className="border-warning/30 bg-warning/15 text-warning-foreground"
               >
-                Unsaved changes
+                {t("Unsaved changes")}
               </Badge>
             )}
             <Button
@@ -1229,7 +1232,7 @@ function PersonalTab() {
               onClick={hook.reset}
               disabled={!hook.dirty || savingCognito || hook.saving}
             >
-              Reset
+              {t("Reset")}
             </Button>
             <Button
               size="sm"
@@ -1248,35 +1251,38 @@ function PersonalTab() {
         }
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="First name">
+          <Field label={t("First name")}>
             <Input value={form.given_name} onChange={(e) => set("given_name", e.target.value)} />
           </Field>
-          <Field label="Last name">
+          <Field label={t("Last name")}>
             <Input value={form.family_name} onChange={(e) => set("family_name", e.target.value)} />
           </Field>
-          <Field label="Display name">
+          <Field label={t("Display name")}>
             <Input value={form.nickname} onChange={(e) => set("nickname", e.target.value)} />
           </Field>
-          <Field label="Email address" hint="Changing email triggers a Cognito verification code.">
+          <Field
+            label={t("Email address")}
+            hint={t("Changing email triggers a Cognito verification code.")}
+          >
             <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
           </Field>
-          <Field label="Phone number" hint="E.164 format, e.g. +14045550142">
+          <Field label={t("Phone number")} hint={t("E.164 format, e.g. +14045550142")}>
             <Input
               value={form.phone_number}
               onChange={(e) => set("phone_number", e.target.value)}
               placeholder="+14045550142"
             />
           </Field>
-          <Field label="Mobile number">
+          <Field label={t("Mobile number")}>
             <Input value={form.mobile} onChange={(e) => set("mobile", e.target.value)} />
           </Field>
-          <Field label="Job title">
+          <Field label={t("Job title")}>
             <Input value={form.job_title} onChange={(e) => set("job_title", e.target.value)} />
           </Field>
-          <Field label="Department">
+          <Field label={t("Department")}>
             <Input value={form.department} onChange={(e) => set("department", e.target.value)} />
           </Field>
-          <Field label="Preferred language">
+          <Field label={t("Preferred language")}>
             <Select value={form.locale} onValueChange={(v) => set("locale", v)}>
               <SelectTrigger>
                 <SelectValue />
@@ -1290,7 +1296,7 @@ function PersonalTab() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Preferred time zone">
+          <Field label={t("Preferred time zone")}>
             <Select value={form.zoneinfo} onValueChange={(v) => set("zoneinfo", v)}>
               <SelectTrigger>
                 <SelectValue />
@@ -1307,21 +1313,24 @@ function PersonalTab() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Address" description="Stored as a structured Cognito address claim.">
+      <SectionCard
+        title={t("Address")}
+        description={t("Stored as a structured Cognito address claim.")}
+      >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Street address">
+          <Field label={t("Street address")}>
             <Input value={form.street} onChange={(e) => set("street", e.target.value)} />
           </Field>
-          <Field label="City">
+          <Field label={t("City")}>
             <Input value={form.city} onChange={(e) => set("city", e.target.value)} />
           </Field>
-          <Field label="State / Region">
+          <Field label={t("State / Region")}>
             <Input value={form.state} onChange={(e) => set("state", e.target.value)} />
           </Field>
-          <Field label="ZIP / Postal code">
+          <Field label={t("ZIP / Postal code")}>
             <Input value={form.zip} onChange={(e) => set("zip", e.target.value)} />
           </Field>
-          <Field label="Country">
+          <Field label={t("Country")}>
             <Select value={form.country} onValueChange={(v) => set("country", v)}>
               <SelectTrigger>
                 <SelectValue />
@@ -1338,12 +1347,15 @@ function PersonalTab() {
         </div>
       </SectionCard>
 
-      <SectionCard title="About" description="A short bio saved to your Cognito profile attribute.">
+      <SectionCard
+        title={t("About")}
+        description={t("A short bio saved to your Cognito profile attribute.")}
+      >
         <Textarea
           rows={4}
           value={form.bio}
           onChange={(e) => set("bio", e.target.value)}
-          placeholder="A short bio for your team profile"
+          placeholder={t("A short bio for your team profile")}
         />
       </SectionCard>
     </>
@@ -1409,21 +1421,21 @@ function PermissionsTab() {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Role" value={roleLabel} icon={ShieldCheck} tone="info" />
+        <StatTile label={t("Role")} value={roleLabel} icon={ShieldCheck} tone="info" />
         <StatTile
-          label="Permission Group"
+          label={t("Permission Group")}
           value={form.permissionGroup.trim() || "—"}
           icon={Users}
           tone="default"
         />
         <StatTile
-          label="Access level"
+          label={t("Access level")}
           value={form.accessLevel.trim() || "—"}
           icon={LayoutDashboard}
           tone="default"
         />
         <StatTile
-          label="Branch"
+          label={t("Branch")}
           value={form.branch.trim() || "—"}
           icon={Building2}
           tone="default"
@@ -1431,94 +1443,99 @@ function PermissionsTab() {
       </div>
 
       <SectionCard
-        title="Role & access"
-        description="What you can do across the platform. Role and access level are set by an administrator — ask yours to change them."
+        title={t("Role & access")}
+        description={t(
+          "What you can do across the platform. Role and access level are set by an administrator — ask yours to change them.",
+        )}
         action={<SaveBar hook={hook} />}
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Read-only: these drive RBAC, so self-service edits are rejected at the
               store (`sanitizeSelfServiceSection`). Showing them as editable would
               be a save that silently does nothing. */}
-          <Field label="User role">
+          <Field label={t("User role")}>
             <Select value={form.role || undefined} disabled>
               <SelectTrigger>
-                <SelectValue placeholder="Not assigned" />
+                <SelectValue placeholder={t("Not assigned")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="admin">Administrator</SelectItem>
-                <SelectItem value="ops">Operations Manager</SelectItem>
-                <SelectItem value="dispatch">Dispatcher</SelectItem>
-                <SelectItem value="broker">Broker</SelectItem>
-                <SelectItem value="driver">Driver</SelectItem>
+                <SelectItem value="admin">{t("Administrator")}</SelectItem>
+                <SelectItem value="ops">{t("Operations Manager")}</SelectItem>
+                <SelectItem value="dispatch">{t("Dispatcher")}</SelectItem>
+                <SelectItem value="broker">{t("Broker")}</SelectItem>
+                <SelectItem value="driver">{t("Driver")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Permission group">
-            <Input value={form.permissionGroup} readOnly disabled placeholder="Not assigned" />
+          <Field label={t("Permission group")}>
+            <Input value={form.permissionGroup} readOnly disabled placeholder={t("Not assigned")} />
           </Field>
-          <Field label="Access level">
+          <Field label={t("Access level")}>
             <Select value={form.accessLevel || undefined} disabled>
               <SelectTrigger>
-                <SelectValue placeholder="Not assigned" />
+                <SelectValue placeholder={t("Not assigned")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="full">Full access</SelectItem>
-                <SelectItem value="edit">Edit</SelectItem>
-                <SelectItem value="view">View only</SelectItem>
+                <SelectItem value="full">{t("Full access")}</SelectItem>
+                <SelectItem value="edit">{t("Edit")}</SelectItem>
+                <SelectItem value="view">{t("View only")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Assigned branch / office">
+          <Field label={t("Assigned branch / office")}>
             <Input
               value={form.branch}
               onChange={(e) => patch({ branch: e.target.value })}
-              placeholder="Branch or office"
+              placeholder={t("Branch or office")}
             />
           </Field>
-          <Field label="Assigned teams">
+          <Field label={t("Assigned teams")}>
             <Input
               value={form.teams}
               onChange={(e) => patch({ teams: e.target.value })}
-              placeholder="Comma-separated teams"
+              placeholder={t("Comma-separated teams")}
             />
           </Field>
           {/* Read-only for the same reason as role: `adminAccess` grants the Admin
               module in rbac.ts, so it cannot be self-served. */}
-          <Field label="Admin access">
+          <Field label={t("Admin access")}>
             <div className="flex h-9 items-center justify-between rounded-md border border-input bg-background px-3">
               <span className="text-sm">{form.adminAccess ? "Enabled" : "Disabled"}</span>
               <Switch checked={form.adminAccess} disabled />
             </div>
           </Field>
-          <Field label="Assigned customers" hint="Comma-separated list.">
+          <Field label={t("Assigned customers")} hint={t("Comma-separated list.")}>
             <Input value={form.customers} onChange={(e) => patch({ customers: e.target.value })} />
           </Field>
-          <Field label="Assigned carriers" hint="Comma-separated list.">
+          <Field label={t("Assigned carriers")} hint={t("Comma-separated list.")}>
             <Input value={form.carriers} onChange={(e) => patch({ carriers: e.target.value })} />
           </Field>
-          <Field label="Assigned brokers" hint="Comma-separated list.">
+          <Field label={t("Assigned brokers")} hint={t("Comma-separated list.")}>
             <Input value={form.brokers} onChange={(e) => patch({ brokers: e.target.value })} />
           </Field>
         </div>
       </SectionCard>
 
-      <SectionCard title="Assigned book of business" description="Accounts attached to you.">
+      <SectionCard
+        title={t("Assigned book of business")}
+        description={t("Accounts attached to you.")}
+      >
         <div className="space-y-3 text-sm">
           <AssignedRow
             icon={Users}
-            label="Customers"
+            label={t("Customers")}
             count={countCsvEntries(form.customers)}
             sample={csvPreview(form.customers)}
           />
           <AssignedRow
             icon={Truck}
-            label="Carriers"
+            label={t("Carriers")}
             count={countCsvEntries(form.carriers)}
             sample={csvPreview(form.carriers)}
           />
           <AssignedRow
             icon={Building2}
-            label="Brokers"
+            label={t("Brokers")}
             count={countCsvEntries(form.brokers)}
             sample={csvPreview(form.brokers)}
           />
@@ -1588,40 +1605,40 @@ function PreferencesTab() {
   return (
     <>
       <SectionCard
-        title="Work preferences"
-        description="Tune how the workspace shows up for you."
+        title={t("Work preferences")}
+        description={t("Tune how the workspace shows up for you.")}
         action={<SaveBar hook={hook} />}
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Default landing page">
+          <Field label={t("Default landing page")}>
             <Select
               value={form.landingPage || undefined}
               onValueChange={(v) => patch({ landingPage: v })}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select page" />
+                <SelectValue placeholder={t("Select page")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="dashboard">Dashboard</SelectItem>
-                <SelectItem value="loads">Loads</SelectItem>
-                <SelectItem value="truckboard">TruckBoard</SelectItem>
-                <SelectItem value="tracking">Tracking</SelectItem>
+                <SelectItem value="dashboard">{t("Dashboard")}</SelectItem>
+                <SelectItem value="loads">{t("Loads")}</SelectItem>
+                <SelectItem value="truckboard">{t("TruckBoard")}</SelectItem>
+                <SelectItem value="tracking">{t("Tracking")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Default dashboard view">
+          <Field label={t("Default dashboard view")}>
             <Select value={form.dashboardView} onValueChange={(v) => patch({ dashboardView: v })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ops">Operations</SelectItem>
-                <SelectItem value="sales">Sales</SelectItem>
-                <SelectItem value="exec">Executive</SelectItem>
+                <SelectItem value="ops">{t("Operations")}</SelectItem>
+                <SelectItem value="sales">{t("Sales")}</SelectItem>
+                <SelectItem value="exec">{t("Executive")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Default load board filters">
+          <Field label={t("Default load board filters")}>
             <Select
               value={form.loadBoardFilter}
               onValueChange={(v) => patch({ loadBoardFilter: v })}
@@ -1630,19 +1647,19 @@ function PreferencesTab() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="my">My loads</SelectItem>
-                <SelectItem value="team">My team</SelectItem>
-                <SelectItem value="all">All loads</SelectItem>
+                <SelectItem value="my">{t("My loads")}</SelectItem>
+                <SelectItem value="team">{t("My team")}</SelectItem>
+                <SelectItem value="all">{t("All loads")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Preferred equipment">
+          <Field label={t("Preferred equipment")}>
             <Input value={form.equipment} onChange={(e) => patch({ equipment: e.target.value })} />
           </Field>
-          <Field label="Preferred regions / lanes">
+          <Field label={t("Preferred regions / lanes")}>
             <Input value={form.regions} onChange={(e) => patch({ regions: e.target.value })} />
           </Field>
-          <Field label="Date format">
+          <Field label={t("Date format")}>
             <Select value={form.dateFormat} onValueChange={(v) => patch({ dateFormat: v })}>
               <SelectTrigger>
                 <SelectValue />
@@ -1654,39 +1671,39 @@ function PreferencesTab() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Currency">
+          <Field label={t("Currency")}>
             <Select value={form.currency} onValueChange={(v) => patch({ currency: v })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="usd">USD ($)</SelectItem>
-                <SelectItem value="cad">CAD ($)</SelectItem>
-                <SelectItem value="mxn">MXN ($)</SelectItem>
+                <SelectItem value="usd">{t("USD ($)")}</SelectItem>
+                <SelectItem value="cad">{t("CAD ($)")}</SelectItem>
+                <SelectItem value="mxn">{t("MXN ($)")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Table density">
+          <Field label={t("Table density")}>
             <Select value={form.density} onValueChange={(v) => patch({ density: v })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="compact">Compact</SelectItem>
-                <SelectItem value="comfortable">Comfortable</SelectItem>
-                <SelectItem value="roomy">Roomy</SelectItem>
+                <SelectItem value="compact">{t("Compact")}</SelectItem>
+                <SelectItem value="comfortable">{t("Comfortable")}</SelectItem>
+                <SelectItem value="roomy">{t("Roomy")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Theme">
+          <Field label={t("Theme")}>
             <Select value={form.theme} onValueChange={(v) => patch({ theme: v })}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="system">Match system</SelectItem>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="dark">Dark</SelectItem>
+                <SelectItem value="system">{t("Match system")}</SelectItem>
+                <SelectItem value="light">{t("Light")}</SelectItem>
+                <SelectItem value="dark">{t("Dark")}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -1767,8 +1784,8 @@ function NotificationsTab() {
   return (
     <>
       <SectionCard
-        title="Channels"
-        description="Where we should reach you."
+        title={t("Channels")}
+        description={t("Where we should reach you.")}
         action={<SaveBar hook={hook} />}
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1803,14 +1820,14 @@ function NotificationsTab() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Topics" description="Mute or amplify what matters to you.">
+      <SectionCard title={t("Topics")} description={t("Mute or amplify what matters to you.")}>
         <div className="overflow-hidden rounded-md border border-border/70">
           <Table>
             <TableHeader>
               <TableRow className="border-border/70">
-                <TableHead className="pl-4">Topic</TableHead>
-                <TableHead>Channels</TableHead>
-                <TableHead className="text-right pr-4">Enabled</TableHead>
+                <TableHead className="pl-4">{t("Topic")}</TableHead>
+                <TableHead>{t("Channels")}</TableHead>
+                <TableHead className="text-right pr-4">{t("Enabled")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1890,54 +1907,57 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="2FA" value={twoFaLabel} icon={Shield} tone="default" />
         <StatTile
-          label="Active sessions"
+          label={t("Active sessions")}
           value={sessions.length ? String(sessions.length) : "—"}
           icon={Wifi}
           tone="info"
         />
         <StatTile
-          label="API tokens"
+          label={t("API tokens")}
           value={tokens.length ? String(tokens.length) : "—"}
           icon={Key}
           tone="default"
         />
-        <StatTile label="Trusted devices" value="—" icon={Fingerprint} tone="default" />
+        <StatTile label={t("Trusted devices")} value="—" icon={Fingerprint} tone="default" />
       </div>
 
-      <SectionCard title="Password" description="Use a strong password you don't use elsewhere.">
+      <SectionCard
+        title={t("Password")}
+        description={t("Use a strong password you don't use elsewhere.")}
+      >
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Current password">
+          <Field label={t("Current password")}>
             <div className="relative">
-              <Input type={show ? "text" : "password"} placeholder="Current password" />
+              <Input type={show ? "text" : "password"} placeholder={t("Current password")} />
               <button
                 type="button"
                 onClick={() => setShow((s) => !s)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label="Toggle password visibility"
+                aria-label={t("Toggle password visibility")}
               >
                 {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </Field>
-          <Field label="New password">
-            <Input type="password" placeholder="At least 12 characters" />
+          <Field label={t("New password")}>
+            <Input type="password" placeholder={t("At least 12 characters")} />
           </Field>
-          <Field label="Confirm new password">
-            <Input type="password" placeholder="Repeat new password" />
+          <Field label={t("Confirm new password")}>
+            <Input type="password" placeholder={t("Repeat new password")} />
           </Field>
         </div>
         <div className="mt-3 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">Last changed 47 days ago.</p>
+          <p className="text-xs text-muted-foreground">{t("Last changed 47 days ago.")}</p>
           <Button size="sm" onClick={() => toast.success("Password updated")}>
-            Update password
+            {t("Update password")}
           </Button>
         </div>
       </SectionCard>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard
-          title="Two-factor authentication"
-          description="Add an extra layer of security at sign-in."
+          title={t("Two-factor authentication")}
+          description={t("Add an extra layer of security at sign-in.")}
           action={<SaveBar hook={hook} />}
         >
           <div className="flex items-center justify-between rounded-md border border-success/30 bg-success/10 p-3">
@@ -1948,32 +1968,32 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
                   {form.authenticatorApp ? "2FA is enabled" : "2FA is not enabled"}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Authenticator app · 8 backup codes left
+                  {t("Authenticator app · 8 backup codes left")}
                 </div>
               </div>
             </div>
             <Button size="sm" variant="outline">
-              Manage
+              {t("Manage")}
             </Button>
           </div>
           <Separator className="my-4" />
           <div className="space-y-3">
             <ControlledToggleRow
               icon={Smartphone}
-              title="Authenticator app"
+              title={t("Authenticator app")}
               sub="TOTP via Google Authenticator, Authy, 1Password"
               value={form.authenticatorApp}
               onChange={(v) => patch({ authenticatorApp: v })}
             />
             <ControlledToggleRow
               icon={MessageSquare}
-              title="SMS codes"
+              title={t("SMS codes")}
               sub="Receive a 6-digit code via text message"
               value={form.smsCodes}
               onChange={(v) => patch({ smsCodes: v })}
             />
             <div className="rounded-md border border-border/60 bg-card p-3">
-              <Label className="text-xs font-medium">Backup email</Label>
+              <Label className="text-xs font-medium">{t("Backup email")}</Label>
               <Input
                 className="mt-1.5"
                 placeholder="backup@example.com"
@@ -1984,35 +2004,38 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
           </div>
         </SectionCard>
 
-        <SectionCard title="Session preferences" description="Auto-lock and idle timeout.">
+        <SectionCard
+          title={t("Session preferences")}
+          description={t("Auto-lock and idle timeout.")}
+        >
           <div className="space-y-3">
-            <Field label="Session timeout">
+            <Field label={t("Session timeout")}>
               <Select
                 value={form.sessionTimeout || undefined}
                 onValueChange={(v) => patch({ sessionTimeout: v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select timeout" />
+                  <SelectValue placeholder={t("Select timeout")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="15">15 minutes</SelectItem>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
-                  <SelectItem value="480">8 hours</SelectItem>
-                  <SelectItem value="never">Never (not recommended)</SelectItem>
+                  <SelectItem value="15">{t("15 minutes")}</SelectItem>
+                  <SelectItem value="30">{t("30 minutes")}</SelectItem>
+                  <SelectItem value="60">{t("1 hour")}</SelectItem>
+                  <SelectItem value="480">{t("8 hours")}</SelectItem>
+                  <SelectItem value="never">{t("Never (not recommended)")}</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
             <ControlledToggleRow
               icon={Fingerprint}
-              title="Require biometrics on mobile"
+              title={t("Require biometrics on mobile")}
               sub="Face ID / Touch ID on iPhone & iPad"
               value={form.requireBiometrics}
               onChange={(v) => patch({ requireBiometrics: v })}
             />
             <ControlledToggleRow
               icon={ShieldCheck}
-              title="Sign-in alerts"
+              title={t("Sign-in alerts")}
               sub="Get notified about new device sign-ins"
               value={form.signInAlerts}
               onChange={(v) => patch({ signInAlerts: v })}
@@ -2020,24 +2043,24 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
           </div>
           <Separator className="my-4" />
           <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={onSignOutAll}>
-            <LogOut className="h-4 w-4" /> Sign out of all other devices
+            <LogOut className="h-4 w-4" /> {t("Sign out of all other devices")}
           </Button>
         </SectionCard>
       </div>
 
       <SectionCard
-        title="Active sessions"
-        description="Devices currently signed into your account."
+        title={t("Active sessions")}
+        description={t("Devices currently signed into your account.")}
         action={
           <Button variant="ghost" size="sm" className="gap-1 text-destructive">
-            <Trash2 className="h-4 w-4" /> Revoke all
+            <Trash2 className="h-4 w-4" /> {t("Revoke all")}
           </Button>
         }
       >
         <div className="space-y-2">
           {sessions.length === 0 ? (
             <p className="rounded-md border border-dashed border-border/70 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-              No active sessions.
+              {t("No active sessions.")}
             </p>
           ) : (
             sessions.map((s) => {
@@ -2056,7 +2079,7 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
                         {s.device}
                         {s.current && (
                           <Badge variant="secondary" className="bg-success/15 text-success">
-                            This device
+                            {t("This device")}
                           </Badge>
                         )}
                       </div>
@@ -2071,7 +2094,7 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
                       variant="ghost"
                       className="text-destructive hover:bg-destructive/10"
                     >
-                      Revoke
+                      {t("Revoke")}
                     </Button>
                   )}
                 </div>
@@ -2082,11 +2105,11 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
       </SectionCard>
 
       <SectionCard
-        title="API access tokens"
-        description="Programmatic access to your account. Treat these like passwords."
+        title={t("API access tokens")}
+        description={t("Programmatic access to your account. Treat these like passwords.")}
         action={
           <Button size="sm" className="gap-1.5">
-            <Plus className="h-4 w-4" /> New token
+            <Plus className="h-4 w-4" /> {t("New token")}
           </Button>
         }
       >
@@ -2094,11 +2117,11 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
           <Table>
             <TableHeader>
               <TableRow className="border-border/70">
-                <TableHead className="pl-4">Name</TableHead>
-                <TableHead>Scopes</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Last used</TableHead>
-                <TableHead className="pr-4 text-right">Actions</TableHead>
+                <TableHead className="pl-4">{t("Name")}</TableHead>
+                <TableHead>{t("Scopes")}</TableHead>
+                <TableHead>{t("Created")}</TableHead>
+                <TableHead>{t("Last used")}</TableHead>
+                <TableHead className="pr-4 text-right">{t("Actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2108,26 +2131,26 @@ function SecurityTab({ onSignOutAll }: { onSignOutAll: () => void }) {
                     colSpan={5}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
-                    No API tokens yet.
+                    {t("No API tokens yet.")}
                   </TableCell>
                 </TableRow>
               ) : (
-                tokens.map((t) => (
-                  <TableRow key={t.name} className="border-border/60">
-                    <TableCell className="pl-4 font-medium">{t.name}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{t.scopes}</TableCell>
-                    <TableCell className="text-muted-foreground">{t.created}</TableCell>
-                    <TableCell className="text-muted-foreground">{t.lastUsed}</TableCell>
+                tokens.map((token) => (
+                  <TableRow key={token.name} className="border-border/60">
+                    <TableCell className="pl-4 font-medium">{token.name}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{token.scopes}</TableCell>
+                    <TableCell className="text-muted-foreground">{token.created}</TableCell>
+                    <TableCell className="text-muted-foreground">{token.lastUsed}</TableCell>
                     <TableCell className="pr-4 text-right">
                       <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs">
-                        <Copy className="h-3.5 w-3.5" /> Copy
+                        <Copy className="h-3.5 w-3.5" /> {t("Copy")}
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10"
                       >
-                        <Trash2 className="h-3.5 w-3.5" /> Revoke
+                        <Trash2 className="h-3.5 w-3.5" /> {t("Revoke")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -2174,40 +2197,43 @@ function ActivityTab() {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Actions (7d)" value="—" icon={Activity} tone="info" />
-        <StatTile label="Logins (30d)" value="—" icon={KeyRound} tone="default" />
-        <StatTile label="Devices" value="—" icon={Monitor} tone="default" />
-        <StatTile label="Last login" value="—" icon={Clock} tone="default" />
+        <StatTile label={t("Actions (7d)")} value="—" icon={Activity} tone="info" />
+        <StatTile label={t("Logins (30d)")} value="—" icon={KeyRound} tone="default" />
+        <StatTile label={t("Devices")} value="—" icon={Monitor} tone="default" />
+        <StatTile label={t("Last login")} value="—" icon={Clock} tone="default" />
       </div>
 
       <SectionCard
-        title="Activity timeline"
-        description="A live feed of everything you've done across the platform."
+        title={t("Activity timeline")}
+        description={t("A live feed of everything you've done across the platform.")}
         action={
           <Button variant="outline" size="sm" className="gap-1.5">
-            <RefreshCw className="h-4 w-4" /> Refresh
+            <RefreshCw className="h-4 w-4" /> {t("Refresh")}
           </Button>
         }
       >
         <ActivityList />
       </SectionCard>
 
-      <SectionCard title="IP & device log" description="Audit-friendly raw access records.">
+      <SectionCard
+        title={t("IP & device log")}
+        description={t("Audit-friendly raw access records.")}
+      >
         <div className="overflow-hidden rounded-md border border-border/70">
           <Table>
             <TableHeader>
               <TableRow className="border-border/70">
-                <TableHead className="pl-4">When</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Device</TableHead>
+                <TableHead className="pl-4">{t("When")}</TableHead>
+                <TableHead>{t("Action")}</TableHead>
+                <TableHead>{t("Device")}</TableHead>
                 <TableHead>IP</TableHead>
-                <TableHead className="pr-4">Location</TableHead>
+                <TableHead className="pr-4">{t("Location")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               <TableRow className="border-border/60">
                 <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                  No access records yet.
+                  {t("No access records yet.")}
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -2231,7 +2257,7 @@ function ActivityList({ compact = false }: { compact?: boolean }) {
   if (shown.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border/70 bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
-        No recent activity yet.
+        {t("No recent activity yet.")}
       </p>
     );
   }
@@ -2323,13 +2349,13 @@ function DocumentsTab() {
   return (
     <>
       <SectionCard
-        title="Documents"
-        description="ID, tax, compliance, training, and signed agreements."
+        title={t("Documents")}
+        description={t("ID, tax, compliance, training, and signed agreements.")}
         action={
           <div className="flex items-center gap-2">
             <SaveBar hook={hook} />
             <Button size="sm" className="gap-1.5" onClick={addDoc}>
-              <Upload className="h-4 w-4" /> Add
+              <Upload className="h-4 w-4" /> {t("Add")}
             </Button>
           </div>
         }
@@ -2338,12 +2364,12 @@ function DocumentsTab() {
           <Table>
             <TableHeader>
               <TableRow className="border-border/70">
-                <TableHead className="pl-4">Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Uploaded</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="pr-4 text-right">Actions</TableHead>
+                <TableHead className="pl-4">{t("Name")}</TableHead>
+                <TableHead>{t("Type")}</TableHead>
+                <TableHead>{t("Size")}</TableHead>
+                <TableHead>{t("Uploaded")}</TableHead>
+                <TableHead>{t("Status")}</TableHead>
+                <TableHead className="pr-4 text-right">{t("Actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2353,7 +2379,7 @@ function DocumentsTab() {
                     colSpan={6}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
-                    No documents uploaded yet.
+                    {t("No documents uploaded yet.")}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -2377,7 +2403,7 @@ function DocumentsTab() {
                     </TableCell>
                     <TableCell className="pr-4 text-right">
                       <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs">
-                        <Eye className="h-3.5 w-3.5" /> View
+                        <Eye className="h-3.5 w-3.5" /> {t("View")}
                       </Button>
                       <Button
                         size="sm"
@@ -2385,7 +2411,7 @@ function DocumentsTab() {
                         className="h-7 gap-1 text-xs text-destructive hover:bg-destructive/10"
                         onClick={() => removeDoc(idx)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" /> Remove
+                        <Trash2 className="h-3.5 w-3.5" /> {t("Remove")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -2449,8 +2475,8 @@ function IntegrationsTab() {
   return (
     <>
       <SectionCard
-        title="Connected accounts"
-        description="Link your tools so data flows automatically."
+        title={t("Connected accounts")}
+        description={t("Link your tools so data flows automatically.")}
         action={<SaveBar hook={hook} />}
       >
         <div className="grid gap-3 sm:grid-cols-2">
@@ -2471,7 +2497,7 @@ function IntegrationsTab() {
                       {i.name}
                       {connected && (
                         <Badge variant="secondary" className="bg-success/15 text-success">
-                          Connected
+                          {t("Connected")}
                         </Badge>
                       )}
                     </div>
@@ -2492,18 +2518,18 @@ function IntegrationsTab() {
       </SectionCard>
 
       <SectionCard
-        title="Webhooks"
-        description="Push events to your own endpoints in real time."
+        title={t("Webhooks")}
+        description={t("Push events to your own endpoints in real time.")}
         action={
           <Button size="sm" className="gap-1.5" onClick={addWebhook}>
-            <Plus className="h-4 w-4" /> Add webhook
+            <Plus className="h-4 w-4" /> {t("Add webhook")}
           </Button>
         }
       >
         <div className="space-y-2">
           {form.webhooks.length === 0 ? (
             <p className="rounded-md border border-dashed border-border/70 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-              No webhooks configured yet.
+              {t("No webhooks configured yet.")}
             </p>
           ) : (
             form.webhooks.map((w, idx) => (
@@ -2607,7 +2633,7 @@ function AssignedCompanyBanner() {
 
   return (
     <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3">
-      <p className="text-xs font-medium text-muted-foreground">Assigned company</p>
+      <p className="text-xs font-medium text-muted-foreground">{t("Assigned company")}</p>
       <p className="mt-0.5 text-sm font-semibold">
         {company?.companyName?.trim() || "Not assigned"}
       </p>
@@ -2628,13 +2654,13 @@ function CompanyTab() {
     <>
       <AssignedCompanyBanner />
       <SectionCard
-        title="Company profile"
-        description="Visible to admins. Powers compliance and billing."
+        title={t("Company profile")}
+        description={t("Visible to admins. Powers compliance and billing.")}
         action={
           <div className="flex items-center gap-2">
             <SaveBar hook={hook} />
             <Button variant="outline" size="sm" className="gap-1.5">
-              <ExternalLink className="h-4 w-4" /> Public profile
+              <ExternalLink className="h-4 w-4" /> {t("Public profile")}
             </Button>
           </div>
         }
@@ -2648,7 +2674,7 @@ function CompanyTab() {
               <h3 className="text-base font-semibold">{form.name.trim() || "—"}</h3>
               {form.name.trim() ? (
                 <Badge variant="outline" className="border-success/20 bg-success/15 text-success">
-                  <Check className="mr-1 h-3 w-3" /> Verified
+                  <Check className="mr-1 h-3 w-3" /> {t("Verified")}
                 </Badge>
               ) : null}
               {form.type ? <Badge variant="outline">{form.type}</Badge> : null}
@@ -2663,65 +2689,65 @@ function CompanyTab() {
         <Separator className="my-5" />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Company name">
+          <Field label={t("Company name")}>
             <Input value={form.name} onChange={(e) => patch({ name: e.target.value })} />
           </Field>
-          <Field label="MC number">
+          <Field label={t("MC number")}>
             <Input value={form.mc} onChange={(e) => patch({ mc: e.target.value })} />
           </Field>
-          <Field label="DOT number">
+          <Field label={t("DOT number")}>
             <Input value={form.dot} onChange={(e) => patch({ dot: e.target.value })} />
           </Field>
-          <Field label="Tax ID / EIN">
+          <Field label={t("Tax ID / EIN")}>
             <Input value={form.ein} onChange={(e) => patch({ ein: e.target.value })} />
           </Field>
-          <Field label="Company type">
+          <Field label={t("Company type")}>
             <Select value={form.type || undefined} onValueChange={(v) => patch({ type: v })}>
               <SelectTrigger>
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder={t("Select type")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="brokerage">Brokerage</SelectItem>
-                <SelectItem value="asset">Asset Carrier</SelectItem>
-                <SelectItem value="hybrid">Hybrid</SelectItem>
+                <SelectItem value="brokerage">{t("Brokerage")}</SelectItem>
+                <SelectItem value="asset">{t("Asset Carrier")}</SelectItem>
+                <SelectItem value="hybrid">{t("Hybrid")}</SelectItem>
                 <SelectItem value="3pl">3PL</SelectItem>
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Website">
+          <Field label={t("Website")}>
             <Input value={form.website} onChange={(e) => patch({ website: e.target.value })} />
           </Field>
-          <Field label="Business address">
+          <Field label={t("Business address")}>
             <Input
               value={form.businessAddress}
               onChange={(e) => patch({ businessAddress: e.target.value })}
             />
           </Field>
-          <Field label="Billing address">
+          <Field label={t("Billing address")}>
             <Input
               value={form.billingAddress}
               onChange={(e) => patch({ billingAddress: e.target.value })}
             />
           </Field>
-          <Field label="Main contact">
+          <Field label={t("Main contact")}>
             <Input
               value={form.mainContact}
               onChange={(e) => patch({ mainContact: e.target.value })}
             />
           </Field>
-          <Field label="Support email">
+          <Field label={t("Support email")}>
             <Input
               value={form.supportEmail}
               onChange={(e) => patch({ supportEmail: e.target.value })}
             />
           </Field>
-          <Field label="Dispatch phone">
+          <Field label={t("Dispatch phone")}>
             <Input
               value={form.dispatchPhone}
               onChange={(e) => patch({ dispatchPhone: e.target.value })}
             />
           </Field>
-          <Field label="Accounting email">
+          <Field label={t("Accounting email")}>
             <Input
               value={form.accountingEmail}
               onChange={(e) => patch({ accountingEmail: e.target.value })}
@@ -2732,7 +2758,7 @@ function CompanyTab() {
         <Separator className="my-5" />
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Operating regions" hint="Comma-separated.">
+          <Field label={t("Operating regions")} hint={t("Comma-separated.")}>
             <Input
               value={form.regions.join(", ")}
               onChange={(e) =>
@@ -2752,7 +2778,7 @@ function CompanyTab() {
               ))}
             </div>
           </Field>
-          <Field label="Equipment types supported" hint="Comma-separated.">
+          <Field label={t("Equipment types supported")} hint={t("Comma-separated.")}>
             <Input
               value={form.equipment.join(", ")}
               onChange={(e) =>

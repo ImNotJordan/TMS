@@ -7,11 +7,11 @@
  * `global`, which every signed-in browser reads directly. That made a billable
  * third-party credential world-readable to anyone with an account.
  *
- * The key now lives under its **own partition key** (`secrets`). That is not
- * cosmetic: DynamoDB IAM conditions (`dynamodb:LeadingKeys`) can only match the
- * partition key, so a separate sort key under `global` could not have been
- * denied to the browser. With its own partition the deny is expressible — see
- * docs/security/stage-0-iam.md.
+ * The key now lives under the **secrets** partition, sort key
+ * `<companyId>#openai`. The partition split is load-bearing for IAM
+ * (`dynamodb:LeadingKeys` cannot match a sort key). The company in the sort
+ * key is load-bearing for tenancy: a single `secrets/openai` row was every
+ * company's key.
  *
  * ## Write-only from the client
  *
@@ -19,19 +19,33 @@
  * `connected` and the last four characters — enough to confirm which key is
  * installed, useless to an attacker.
  *
- * The Google Maps key deliberately stays browser-readable: the Maps JS SDK loads
- * it in the page, so it cannot be secret. Its control is HTTP-referrer and API
- * restriction in Google Cloud, not concealment.
+ * The Google Maps key stays browser-readable (the Maps JS SDK loads it in
+ * the page) but is stored under that company's partition, not `global`.
+ * HTTP-referrer restriction in Google Cloud still applies.
  */
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 import { authorizeAdminRequest } from "@/lib/ai/ai-authz";
 import { getAiDynamoClient, getWorkspaceSettingsTable } from "@/lib/ai/server-aws";
 import { invalidateOpenAiConfigCache } from "@/lib/ai/get-openai-key";
-import { OPENAI_SECRET_SECTION, SECRETS_SCOPE } from "@/lib/ai/settings-scopes";
+import {
+  CHINA_TAX_SECRET_SECTION,
+  OPENAI_SECRET_SECTION,
+  SECRETS_SCOPE,
+  companySecretKey,
+} from "@/lib/ai/settings-scopes";
 import { DEFAULT_AI_MODEL } from "@/lib/ai-proxy";
+import {
+  describeChinaTaxSecret as describeChinaTax,
+  readChinaTaxSecret as readChinaTax,
+} from "@/lib/settings-china-tax";
+import {
+  describeResendSecret as describeResend,
+  readResendSecret as readResend,
+} from "@/lib/settings-resend";
+import { requireSettingsCompany } from "@/lib/settings-tenant";
 
-export { OPENAI_SECRET_SECTION, SECRETS_SCOPE };
+export { CHINA_TAX_SECRET_SECTION, OPENAI_SECRET_SECTION, SECRETS_SCOPE };
 
 const ALLOWED_MODELS = new Set(["gpt-4o-mini", "gpt-4o"]);
 /** Generous upper bound — a real key is ~164 chars; this only stops abuse. */
@@ -53,6 +67,17 @@ export function isSettingsAiWriteRequest(url: URL, method: string) {
   return method === "POST" && url.pathname === "/api/settings/integrations/ai";
 }
 
+/**
+ * The China tax credential lives in its own module. Re-exported here so the
+ * status endpoint below can describe it without importing across the two.
+ */
+export {
+  describeChinaTaxSecret,
+  handleSettingsChinaTaxWriteRequest,
+  isSettingsChinaTaxWriteRequest,
+  readChinaTaxSecret,
+} from "@/lib/settings-china-tax";
+
 function jsonError(message: string, status: number, code?: string) {
   return Response.json({ error: message, code }, { status });
 }
@@ -64,12 +89,15 @@ function maskKey(apiKey: string): string | undefined {
   return trimmed.slice(-4);
 }
 
-export async function readOpenAiSecret(request: Request): Promise<OpenAiSecret | null> {
+export async function readOpenAiSecret(
+  request: Request,
+  companyId: string,
+): Promise<OpenAiSecret | null> {
   const client = await getAiDynamoClient(request);
   const out = (await client.send(
     new GetCommand({
       TableName: getWorkspaceSettingsTable(),
-      Key: { scope: SECRETS_SCOPE, section: OPENAI_SECRET_SECTION },
+      Key: companySecretKey(companyId, OPENAI_SECRET_SECTION),
     }) as never,
   )) as { Item?: { data?: OpenAiSecret } };
   return out.Item?.data ?? null;
@@ -86,8 +114,11 @@ export async function handleSettingsStatusRequest(request: Request): Promise<Res
     return jsonError(authz.message, authz.code === "forbidden" ? 403 : 401, authz.code);
   }
 
+  const tenant = await requireSettingsCompany(request);
+  if (!tenant.ok) return tenant.response;
+
   try {
-    const secret = await readOpenAiSecret(request);
+    const secret = await readOpenAiSecret(request, tenant.companyId);
     const apiKey = secret?.apiKey?.trim() ?? "";
     return Response.json({
       ai: {
@@ -96,6 +127,8 @@ export async function handleSettingsStatusRequest(request: Request): Promise<Res
         last4: maskKey(apiKey),
         updatedAt: secret?.updatedAt,
       },
+      chinaTax: describeChinaTax(await readChinaTax(request, tenant.companyId)),
+      resend: describeResend(await readResend(request, tenant.companyId)),
     });
   } catch (err) {
     console.error("[settings] status read failed", err instanceof Error ? err.message : err);
@@ -121,6 +154,10 @@ export async function handleSettingsAiWriteRequest(request: Request): Promise<Re
   if (!authz.ok) {
     return jsonError(authz.message, authz.code === "forbidden" ? 403 : 401, authz.code);
   }
+
+  const tenant = await requireSettingsCompany(request);
+  if (!tenant.ok) return tenant.response;
+  const secretKey = companySecretKey(tenant.companyId, OPENAI_SECRET_SECTION);
 
   let body: AiWriteBody;
   try {
@@ -185,7 +222,7 @@ export async function handleSettingsAiWriteRequest(request: Request): Promise<Re
     await client.send(
       new UpdateCommand({
         TableName: getWorkspaceSettingsTable(),
-        Key: { scope: SECRETS_SCOPE, section: OPENAI_SECRET_SECTION },
+        Key: secretKey,
         UpdateExpression: `SET #data = if_not_exists(#data, :empty)`,
         ExpressionAttributeNames: { "#data": "data" },
         ExpressionAttributeValues: { ":empty": {} },
@@ -194,21 +231,22 @@ export async function handleSettingsAiWriteRequest(request: Request): Promise<Re
     await client.send(
       new UpdateCommand({
         TableName: getWorkspaceSettingsTable(),
-        Key: { scope: SECRETS_SCOPE, section: OPENAI_SECRET_SECTION },
+        Key: secretKey,
         UpdateExpression: `SET ${sets.join(", ")}`,
         ExpressionAttributeNames: names,
         ExpressionAttributeValues: values,
       }) as never,
     );
 
-    invalidateOpenAiConfigCache();
+    invalidateOpenAiConfigCache(tenant.companyId);
     // Field names only — never the values.
     console.info("[settings] OpenAI integration updated", {
       by: authz.sub,
+      companyId: tenant.companyId,
       fields: Object.keys(body),
     });
 
-    const secret = await readOpenAiSecret(request);
+    const secret = await readOpenAiSecret(request, tenant.companyId);
     const apiKey = secret?.apiKey?.trim() ?? "";
     return Response.json({
       ok: true,

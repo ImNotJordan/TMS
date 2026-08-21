@@ -41,6 +41,7 @@ import {
   type CreateCarrierInput,
 } from "@/lib/carriers-store";
 import { useAuth } from "@/lib/auth";
+import { t } from "@/lib/i18n/t";
 
 export type CarrierDraft = {
   companyName: string;
@@ -109,7 +110,12 @@ const INITIAL: CarrierDraft = {
 
 const CARRIER_KIND_OPTIONS: FancySelectOption[] = [
   { value: "carrier", label: "Carrier", description: "Operates its own trucks", icon: Truck },
-  { value: "broker", label: "Broker", description: "Arranges freight via other carriers", icon: Building2 },
+  {
+    value: "broker",
+    label: "Broker",
+    description: "Arranges freight via other carriers",
+    icon: Building2,
+  },
 ];
 
 const AUTHORITY_STATUS_OPTIONS: FancySelectOption[] = [
@@ -318,7 +324,11 @@ function FieldShell({
         {hint && <span className="text-[10px] text-muted-foreground">{hint}</span>}
       </div>
       {children}
-      {error && <div className="text-[11px] font-medium text-destructive">This field is required.</div>}
+      {error && (
+        <div className="text-[11px] font-medium text-destructive">
+          {t("This field is required.")}
+        </div>
+      )}
     </div>
   );
 }
@@ -399,7 +409,7 @@ function AddTextRow({
           }
         }}
       />
-      <Button type="button" variant="outline" size="icon" onClick={submit} aria-label="Add">
+      <Button type="button" variant="outline" size="icon" onClick={submit} aria-label={t("Add")}>
         <Plus className="h-4 w-4" />
       </Button>
     </div>
@@ -454,9 +464,12 @@ export function CreateCarrierDialog({
     }
   }, [open, reset]);
 
-  const update = React.useCallback(<K extends keyof CarrierDraft>(key: K, value: CarrierDraft[K]) => {
-    setDraft((d) => ({ ...d, [key]: value }));
-  }, []);
+  const update = React.useCallback(
+    <K extends keyof CarrierDraft>(key: K, value: CarrierDraft[K]) => {
+      setDraft((d) => ({ ...d, [key]: value }));
+    },
+    [],
+  );
 
   const errors = React.useMemo(() => computeCarrierErrors(draft), [draft]);
 
@@ -485,9 +498,11 @@ export function CreateCarrierDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="!max-w-4xl w-[96vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl">
-        <DialogTitle className="sr-only">Add Carrier / Broker</DialogTitle>
+        <DialogTitle className="sr-only">{t("Add Carrier / Broker")}</DialogTitle>
         <DialogDescription className="sr-only">
-          Create a carrier or broker profile with docs, equipment, lanes, score, and contacts.
+          {t(
+            "Create a carrier or broker profile with docs, equipment, lanes, score, and contacts.",
+          )}
         </DialogDescription>
         <div className="flex items-center justify-between border-b border-border/70 px-6 py-4">
           <div className="min-w-0">
@@ -497,14 +512,14 @@ export function CreateCarrierDialog({
               </span>
             </div>
             <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-foreground">
-              Add Carrier / Broker
+              {t("Add Carrier / Broker")}
             </h2>
           </div>
           <button
             type="button"
             onClick={() => setOpen(false)}
             className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Close"
+            aria-label={t("Close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -513,32 +528,32 @@ export function CreateCarrierDialog({
         <div className="max-h-[75vh] overflow-y-auto px-6 py-6">
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="profile">Profile</TabsTrigger>
-              <TabsTrigger value="docs">Docs</TabsTrigger>
-              <TabsTrigger value="equipment">Equipment & Lanes</TabsTrigger>
-              <TabsTrigger value="score">Score</TabsTrigger>
-              <TabsTrigger value="contacts">Contacts</TabsTrigger>
+              <TabsTrigger value="profile">{t("Profile")}</TabsTrigger>
+              <TabsTrigger value="docs">{t("Docs")}</TabsTrigger>
+              <TabsTrigger value="equipment">{t("Equipment & Lanes")}</TabsTrigger>
+              <TabsTrigger value="score">{t("Score")}</TabsTrigger>
+              <TabsTrigger value="contacts">{t("Contacts")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="profile" className="space-y-4">
               <Card>
-                <SectionTitle title="Company profile" icon={Building2} />
+                <SectionTitle title={t("Company profile")} icon={Building2} />
                 <GridSection cols={2}>
                   <FieldShell
-                    label="Company Name"
+                    label={t("Company Name")}
                     required
                     error={touched && errors.includes("companyName")}
                   >
                     <Input
                       value={draft.companyName}
                       onChange={(e) => update("companyName", e.target.value)}
-                      placeholder="Bluepeak Freight"
+                      placeholder={t("Bluepeak Freight")}
                       className={cn(
                         touched && errors.includes("companyName") && "border-destructive/60",
                       )}
                     />
                   </FieldShell>
-                  <FieldShell label="Type" required>
+                  <FieldShell label={t("Type")} required>
                     <FancySelect
                       value={draft.carrierKind}
                       onChange={(v) => update("carrierKind", v as CarrierKind)}
@@ -548,29 +563,53 @@ export function CreateCarrierDialog({
                   </FieldShell>
                 </GridSection>
                 <GridSection cols={3} className="mt-4">
-                  <FieldShell label="MC Number">
-                    <Input value={draft.mcNumber} onChange={(e) => update("mcNumber", e.target.value)} placeholder="MC-123456" />
+                  <FieldShell label={t("MC Number")}>
+                    <Input
+                      value={draft.mcNumber}
+                      onChange={(e) => update("mcNumber", e.target.value)}
+                      placeholder="MC-123456"
+                    />
                   </FieldShell>
-                  <FieldShell label="DOT Number">
-                    <Input value={draft.dotNumber} onChange={(e) => update("dotNumber", e.target.value)} placeholder="DOT-7654321" />
+                  <FieldShell label={t("DOT Number")}>
+                    <Input
+                      value={draft.dotNumber}
+                      onChange={(e) => update("dotNumber", e.target.value)}
+                      placeholder="DOT-7654321"
+                    />
                   </FieldShell>
-                  <FieldShell label="SCAC Code">
-                    <Input value={draft.scacCode} onChange={(e) => update("scacCode", e.target.value)} placeholder="BLPK" />
+                  <FieldShell label={t("SCAC Code")}>
+                    <Input
+                      value={draft.scacCode}
+                      onChange={(e) => update("scacCode", e.target.value)}
+                      placeholder="BLPK"
+                    />
                   </FieldShell>
                 </GridSection>
                 <GridSection cols={3} className="mt-4">
-                  <FieldShell label="HQ City">
-                    <Input value={draft.hqCity} onChange={(e) => update("hqCity", e.target.value)} placeholder="Dallas" />
+                  <FieldShell label={t("HQ City")}>
+                    <Input
+                      value={draft.hqCity}
+                      onChange={(e) => update("hqCity", e.target.value)}
+                      placeholder={t("Dallas")}
+                    />
                   </FieldShell>
-                  <FieldShell label="HQ State">
-                    <Input value={draft.hqState} onChange={(e) => update("hqState", e.target.value)} placeholder="TX" />
+                  <FieldShell label={t("HQ State")}>
+                    <Input
+                      value={draft.hqState}
+                      onChange={(e) => update("hqState", e.target.value)}
+                      placeholder="TX"
+                    />
                   </FieldShell>
-                  <FieldShell label="Website">
-                    <Input value={draft.website} onChange={(e) => update("website", e.target.value)} placeholder="https://" />
+                  <FieldShell label={t("Website")}>
+                    <Input
+                      value={draft.website}
+                      onChange={(e) => update("website", e.target.value)}
+                      placeholder="https://"
+                    />
                   </FieldShell>
                 </GridSection>
                 <div className="mt-4">
-                  <FieldShell label="Internal Notes" hint="Not visible to the carrier">
+                  <FieldShell label={t("Internal Notes")} hint={t("Not visible to the carrier")}>
                     <Textarea
                       value={draft.internalNotes}
                       onChange={(e) => update("internalNotes", e.target.value)}
@@ -584,38 +623,38 @@ export function CreateCarrierDialog({
             <TabsContent value="docs" className="space-y-4">
               <Card>
                 <SectionTitle
-                  title="Insurance"
-                  hint="Expiry blocks auto-award unless a Manager overrides"
+                  title={t("Insurance")}
+                  hint={t("Expiry blocks auto-award unless a Manager overrides")}
                   icon={ShieldCheck}
                 />
                 <GridSection cols={2}>
-                  <FieldShell label="Provider">
+                  <FieldShell label={t("Provider")}>
                     <Input
                       value={draft.insuranceProvider}
                       onChange={(e) => update("insuranceProvider", e.target.value)}
                     />
                   </FieldShell>
-                  <FieldShell label="Policy Number">
+                  <FieldShell label={t("Policy Number")}>
                     <Input
                       value={draft.insurancePolicyNumber}
                       onChange={(e) => update("insurancePolicyNumber", e.target.value)}
                     />
                   </FieldShell>
-                  <FieldShell label="Cargo Insurance Amount">
+                  <FieldShell label={t("Cargo Insurance Amount")}>
                     <Input
                       value={draft.insuranceCargoAmount}
                       onChange={(e) => update("insuranceCargoAmount", e.target.value)}
                       placeholder="$100,000"
                     />
                   </FieldShell>
-                  <FieldShell label="Auto Liability Amount">
+                  <FieldShell label={t("Auto Liability Amount")}>
                     <Input
                       value={draft.insuranceLiabilityAmount}
                       onChange={(e) => update("insuranceLiabilityAmount", e.target.value)}
                       placeholder="$1,000,000"
                     />
                   </FieldShell>
-                  <FieldShell label="Insurance Expires">
+                  <FieldShell label={t("Insurance Expires")}>
                     <Input
                       type="date"
                       value={draft.insuranceExpiresAt}
@@ -626,13 +665,13 @@ export function CreateCarrierDialog({
               </Card>
 
               <Card>
-                <SectionTitle title="W-9 & authority" icon={FileText} />
+                <SectionTitle title={t("W-9 & authority")} icon={FileText} />
                 <div className="flex items-center justify-between rounded-lg border border-input bg-card px-3 py-2.5">
-                  <span className="text-sm text-muted-foreground">W-9 on file</span>
+                  <span className="text-sm text-muted-foreground">{t("W-9 on file")}</span>
                   <Switch checked={draft.w9OnFile} onCheckedChange={(v) => update("w9OnFile", v)} />
                 </div>
                 <GridSection cols={3} className="mt-4">
-                  <FieldShell label="W-9 Received">
+                  <FieldShell label={t("W-9 Received")}>
                     <Input
                       type="date"
                       value={draft.w9ReceivedAt}
@@ -640,14 +679,14 @@ export function CreateCarrierDialog({
                       disabled={!draft.w9OnFile}
                     />
                   </FieldShell>
-                  <FieldShell label="Authority Status">
+                  <FieldShell label={t("Authority Status")}>
                     <FancySelect
                       value={draft.authorityStatus}
                       onChange={(v) => update("authorityStatus", v)}
                       options={AUTHORITY_STATUS_OPTIONS}
                     />
                   </FieldShell>
-                  <FieldShell label="Safety Rating">
+                  <FieldShell label={t("Safety Rating")}>
                     <FancySelect
                       value={draft.safetyRating}
                       onChange={(v) => update("safetyRating", v)}
@@ -660,8 +699,8 @@ export function CreateCarrierDialog({
 
             <TabsContent value="equipment" className="space-y-4">
               <Card>
-                <SectionTitle title="Equipment" icon={Truck} />
-                <FieldShell label="Equipment Types">
+                <SectionTitle title={t("Equipment")} icon={Truck} />
+                <FieldShell label={t("Equipment Types")}>
                   <div className="flex flex-wrap gap-2">
                     {EQUIPMENT_OPTIONS.map((opt) => {
                       const active = draft.equipmentTypes.includes(opt.value);
@@ -691,7 +730,7 @@ export function CreateCarrierDialog({
                   </div>
                 </FieldShell>
                 <div className="mt-4">
-                  <FieldShell label="Fleet Size" hint="Approximate power units">
+                  <FieldShell label={t("Fleet Size")} hint={t("Approximate power units")}>
                     <Input
                       value={draft.fleetSize}
                       onChange={(e) => update("fleetSize", e.target.value)}
@@ -702,32 +741,44 @@ export function CreateCarrierDialog({
               </Card>
 
               <Card>
-                <SectionTitle title="Lanes served" hint="Common origin → destination pairs" icon={RouteIcon} />
+                <SectionTitle
+                  title={t("Lanes served")}
+                  hint={t("Common origin → destination pairs")}
+                  icon={RouteIcon}
+                />
                 <ChipList
                   items={draft.lanesServed}
-                  onRemove={(i) => update("lanesServed", draft.lanesServed.filter((_, idx) => idx !== i))}
-                  emptyLabel="No lanes added yet"
+                  onRemove={(i) =>
+                    update(
+                      "lanesServed",
+                      draft.lanesServed.filter((_, idx) => idx !== i),
+                    )
+                  }
+                  emptyLabel={t("No lanes added yet")}
                 />
                 <div className="mt-3">
                   <AddTextRow
-                    placeholder="e.g. Dallas, TX → Atlanta, GA"
+                    placeholder={t("e.g. Dallas, TX → Atlanta, GA")}
                     onAdd={(v) => update("lanesServed", [...draft.lanesServed, v])}
                   />
                 </div>
               </Card>
 
               <Card>
-                <SectionTitle title="Preferred regions" icon={MapPin} />
+                <SectionTitle title={t("Preferred regions")} icon={MapPin} />
                 <ChipList
                   items={draft.preferredRegions}
                   onRemove={(i) =>
-                    update("preferredRegions", draft.preferredRegions.filter((_, idx) => idx !== i))
+                    update(
+                      "preferredRegions",
+                      draft.preferredRegions.filter((_, idx) => idx !== i),
+                    )
                   }
-                  emptyLabel="No regions added yet"
+                  emptyLabel={t("No regions added yet")}
                 />
                 <div className="mt-3">
                   <AddTextRow
-                    placeholder="e.g. Southeast"
+                    placeholder={t("e.g. Southeast")}
                     onAdd={(v) => update("preferredRegions", [...draft.preferredRegions, v])}
                   />
                 </div>
@@ -736,23 +787,27 @@ export function CreateCarrierDialog({
 
             <TabsContent value="score" className="space-y-4">
               <Card>
-                <SectionTitle title="Performance score" hint="OTD and claims history" icon={Award} />
+                <SectionTitle
+                  title={t("Performance score")}
+                  hint={t("OTD and claims history")}
+                  icon={Award}
+                />
                 <GridSection cols={3}>
-                  <FieldShell label="On-Time Delivery %">
+                  <FieldShell label={t("On-Time Delivery %")}>
                     <Input
                       value={draft.otdPercentage}
                       onChange={(e) => update("otdPercentage", e.target.value)}
                       placeholder="96"
                     />
                   </FieldShell>
-                  <FieldShell label="Claims Count" hint="Trailing 12 months">
+                  <FieldShell label={t("Claims Count")} hint={t("Trailing 12 months")}>
                     <Input
                       value={draft.claimsCount}
                       onChange={(e) => update("claimsCount", e.target.value)}
                       placeholder="2"
                     />
                   </FieldShell>
-                  <FieldShell label="Claims Rate %">
+                  <FieldShell label={t("Claims Rate %")}>
                     <Input
                       value={draft.claimsRatePercentage}
                       onChange={(e) => update("claimsRatePercentage", e.target.value)}
@@ -761,7 +816,7 @@ export function CreateCarrierDialog({
                   </FieldShell>
                 </GridSection>
                 <div className="mt-4">
-                  <FieldShell label="Score Notes">
+                  <FieldShell label={t("Score Notes")}>
                     <Textarea
                       value={draft.scoreNotes}
                       onChange={(e) => update("scoreNotes", e.target.value)}
@@ -774,10 +829,12 @@ export function CreateCarrierDialog({
 
             <TabsContent value="contacts" className="space-y-4">
               <Card>
-                <SectionTitle title="Contacts" icon={Phone} />
+                <SectionTitle title={t("Contacts")} icon={Phone} />
                 <div className="space-y-3">
                   {draft.contacts.length === 0 && (
-                    <div className="text-xs text-muted-foreground">No contacts added yet.</div>
+                    <div className="text-xs text-muted-foreground">
+                      {t("No contacts added yet.")}
+                    </div>
                   )}
                   {draft.contacts.map((contact, i) => (
                     <div
@@ -794,7 +851,7 @@ export function CreateCarrierDialog({
                             ),
                           )
                         }
-                        placeholder="Name"
+                        placeholder={t("Name")}
                       />
                       <Input
                         value={contact.role ?? ""}
@@ -806,7 +863,7 @@ export function CreateCarrierDialog({
                             ),
                           )
                         }
-                        placeholder="Role"
+                        placeholder={t("Role")}
                       />
                       <Input
                         value={contact.phone ?? ""}
@@ -818,7 +875,7 @@ export function CreateCarrierDialog({
                             ),
                           )
                         }
-                        placeholder="Phone"
+                        placeholder={t("Phone")}
                       />
                       <Input
                         value={contact.email ?? ""}
@@ -830,7 +887,7 @@ export function CreateCarrierDialog({
                             ),
                           )
                         }
-                        placeholder="Email"
+                        placeholder={t("Email")}
                       />
                       <Button
                         type="button"
@@ -838,9 +895,12 @@ export function CreateCarrierDialog({
                         size="icon"
                         className="text-muted-foreground hover:text-destructive"
                         onClick={() =>
-                          update("contacts", draft.contacts.filter((_, idx) => idx !== i))
+                          update(
+                            "contacts",
+                            draft.contacts.filter((_, idx) => idx !== i),
+                          )
                         }
-                        aria-label="Remove contact"
+                        aria-label={t("Remove contact")}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -858,7 +918,7 @@ export function CreateCarrierDialog({
                       ])
                     }
                   >
-                    <Plus className="h-4 w-4" /> Add contact
+                    <Plus className="h-4 w-4" /> {t("Add contact")}
                   </Button>
                 </div>
               </Card>
@@ -878,13 +938,13 @@ export function CreateCarrierDialog({
             ) : touched && errors.length > 0 ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-destructive/12 px-2 py-1 font-medium text-destructive">
                 <AlertTriangle className="h-3 w-3" />
-                Company name is required
+                {t("Company name is required")}
               </span>
             ) : null}
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               type="button"
@@ -895,11 +955,11 @@ export function CreateCarrierDialog({
             >
               {submitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                  <Loader2 className="h-4 w-4 animate-spin" /> {t("Saving…")}
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="h-4 w-4" /> Save Carrier
+                  <CheckCircle2 className="h-4 w-4" /> {t("Save Carrier")}
                 </>
               )}
             </Button>

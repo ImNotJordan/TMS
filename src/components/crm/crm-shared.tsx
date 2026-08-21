@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import type { CrmLeadStage } from "@/lib/crm-store";
 import type { Tone } from "@/lib/loads-display";
+import { t } from "@/lib/i18n/t";
 
 export function generateCrmId(prefix: string) {
   const n = Math.floor(1000 + Math.random() * 8999);
@@ -66,7 +67,11 @@ export function FieldShell({
         {hint && <span className="text-[10px] text-muted-foreground">{hint}</span>}
       </div>
       {children}
-      {error && <div className="text-[11px] font-medium text-destructive">This field is required.</div>}
+      {error && (
+        <div className="text-[11px] font-medium text-destructive">
+          {t("This field is required.")}
+        </div>
+      )}
     </div>
   );
 }
@@ -106,12 +111,21 @@ export const CRM_STAGE_BADGE_CLASS: Record<Tone, string> = {
 
 export function formatCurrency(value: number | undefined | null): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  return value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 }
 
 export function formatTimestamp(iso: string | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }

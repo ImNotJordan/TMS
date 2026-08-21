@@ -1,9 +1,9 @@
 /**
- * CORS for the driver portal.
+ * CORS for the driver and client portals.
  *
- * The portal is a static SPA deployed to its own origin, so its `/api/*` calls
- * are cross-origin. Without these headers the browser blocks the response and
- * the portal sees a network error it cannot explain.
+ * Those apps are static SPAs deployed to their own origins, so their `/api/*`
+ * calls are cross-origin. Without these headers the browser blocks the response
+ * and the portal sees a network error it cannot explain.
  *
  * ## Allowlist, not `*`
  *
@@ -38,7 +38,7 @@ export function corsHeadersFor(request: Request): Record<string, string> {
     // to another.
     Vary: "Origin",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Titan-Geocode-Key",
     "Access-Control-Max-Age": "600",
   };
 }
