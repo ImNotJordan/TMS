@@ -61,6 +61,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/quotes")({
   head: () => ({
@@ -205,7 +206,7 @@ function StatTile({
         <div className="mt-2 flex items-baseline justify-between">
           <div className="text-2xl font-semibold tracking-tight text-foreground">{value}</div>
           <Badge variant="secondary" className={toneClass[tone]}>
-            Live
+            {t("Live")}
           </Badge>
         </div>
       </CardContent>
@@ -217,15 +218,15 @@ function QuotesFeatureSpec() {
   return (
     <Card className="border-border/70 shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Quotes — Feature Spec</CardTitle>
+        <CardTitle className="text-base">{t("Quotes — Feature Spec")}</CardTitle>
         <CardDescription>
-          Purpose: Price proposals that can convert to one or many loads.
+          {t("Purpose: Price proposals that can convert to one or many loads.")}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Fields
+            {t("Fields")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {FIELDS.map((field) => (
@@ -242,7 +243,7 @@ function QuotesFeatureSpec() {
 
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Actions
+            {t("Actions")}
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ACTIONS.map(({ label, icon: Icon }) => (
@@ -259,7 +260,7 @@ function QuotesFeatureSpec() {
 
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Acceptance
+            {t("Acceptance")}
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {ACCEPTANCE.map((text) => (
@@ -559,12 +560,12 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="Quotes"
-        description="Customer quotes, pricing rules, and approval workflows."
+        title={t("Quotes")}
+        description={t("Customer quotes, pricing rules, and approval workflows.")}
         actions={
           <>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Filter className="h-4 w-4" /> Filters
+              <Filter className="h-4 w-4" /> {t("Filters")}
             </Button>
             <Button
               variant="outline"
@@ -577,7 +578,7 @@ function Page() {
               Refresh
             </Button>
             <Button size="sm" className="gap-1.5" onClick={openCreateForm}>
-              <Plus className="h-4 w-4" /> New Quote
+              <Plus className="h-4 w-4" /> {t("New Quote")}
             </Button>
           </>
         }
@@ -592,17 +593,23 @@ function Page() {
 
         {loadingRows ? null : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile label="Pending" value={`${stats.pending}`} tone="warning" />
-            <StatTile label="Sent" value={`${stats.sent}`} tone="info" />
-            <StatTile label="Accepted / Converted" value={`${stats.accepted}`} tone="success" />
-            <StatTile label="Total Quotes" value={`${stats.total}`} tone="default" />
+            <StatTile label={t("Pending")} value={`${stats.pending}`} tone="warning" />
+            <StatTile label={t("Sent")} value={`${stats.sent}`} tone="info" />
+            <StatTile
+              label={t("Accepted / Converted")}
+              value={`${stats.accepted}`}
+              tone="success"
+            />
+            <StatTile label={t("Total Quotes")} value={`${stats.total}`} tone="default" />
           </div>
         )}
 
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Quotes</CardTitle>
-            <CardDescription>Connected to AWS DynamoDB — live customer quotes.</CardDescription>
+            <CardTitle className="text-base">{t("Quotes")}</CardTitle>
+            <CardDescription>
+              {t("Connected to AWS DynamoDB — live customer quotes.")}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),200px]">
@@ -612,15 +619,15 @@ function Page() {
                   className="pl-8"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search quote ID, customer, lane, owner, status..."
+                  placeholder={t("Search quote ID, customer, lane, owner, status...")}
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t("Status")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="all">{t("All statuses")}</SelectItem>
                   {QUOTE_STATUS_VALUES.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status}
@@ -634,17 +641,17 @@ function Page() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Quote ID</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Lane</TableHead>
-                    <TableHead>Stops</TableHead>
-                    <TableHead>Equipment</TableHead>
-                    <TableHead>Dates</TableHead>
-                    <TableHead>Rate</TableHead>
-                    <TableHead>Risk</TableHead>
-                    <TableHead>AI Notes</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>{t("Quote ID")}</TableHead>
+                    <TableHead>{t("Customer")}</TableHead>
+                    <TableHead>{t("Lane")}</TableHead>
+                    <TableHead>{t("Stops")}</TableHead>
+                    <TableHead>{t("Equipment")}</TableHead>
+                    <TableHead>{t("Dates")}</TableHead>
+                    <TableHead>{t("Rate")}</TableHead>
+                    <TableHead>{t("Risk")}</TableHead>
+                    <TableHead>{t("AI Notes")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
+                    <TableHead>{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -664,7 +671,7 @@ function Page() {
                         colSpan={11}
                         className="py-8 text-center text-sm text-muted-foreground"
                       >
-                        No quotes found.
+                        {t("No quotes found.")}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -702,10 +709,14 @@ function Page() {
                               {row.status}
                             </Badge>
                             {row.routeApproved ? (
-                              <div className="mt-1 text-[10px] text-success">Route approved</div>
+                              <div className="mt-1 text-[10px] text-success">
+                                {t("Route approved")}
+                              </div>
                             ) : null}
                             {row.routingGuideAttached ? (
-                              <div className="text-[10px] text-info">Routing guide attached</div>
+                              <div className="text-[10px] text-info">
+                                {t("Routing guide attached")}
+                              </div>
                             ) : null}
                             {row.convertedLoadIds.length > 0 ? (
                               <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
@@ -734,7 +745,7 @@ function Page() {
                                 onClick={() => void convertToLoads(row)}
                               >
                                 <RouteIcon className="mr-1 h-3.5 w-3.5" />
-                                Convert to Load(s)
+                                {t("Convert to Load(s)")}
                               </Button>
                               <Button
                                 size="sm"
@@ -743,7 +754,7 @@ function Page() {
                                 onClick={() => void duplicateQuote(row)}
                               >
                                 <Copy className="mr-1 h-3.5 w-3.5" />
-                                Duplicate
+                                {t("Duplicate")}
                               </Button>
                               <Button
                                 size="sm"
@@ -752,7 +763,7 @@ function Page() {
                                 onClick={() => void saveRowUpdate(row, { routeApproved: true })}
                               >
                                 <ShieldCheck className="mr-1 h-3.5 w-3.5" />
-                                Approve route
+                                {t("Approve route")}
                               </Button>
                               <Button
                                 size="sm"
@@ -761,7 +772,7 @@ function Page() {
                                 onClick={() => void saveRowUpdate(row, { status: "Sent" })}
                               >
                                 <Send className="mr-1 h-3.5 w-3.5" />
-                                Send to customer
+                                {t("Send to customer")}
                               </Button>
                               <Button
                                 size="sm"
@@ -772,7 +783,7 @@ function Page() {
                                 }
                               >
                                 <Link2 className="mr-1 h-3.5 w-3.5" />
-                                Attach routing guide
+                                {t("Attach routing guide")}
                               </Button>
                               <Button
                                 size="sm"
@@ -781,7 +792,7 @@ function Page() {
                                 onClick={() => openEditForm(row)}
                               >
                                 <PencilLine className="mr-1 h-3.5 w-3.5" />
-                                Edit
+                                {t("Edit")}
                               </Button>
                               <Button
                                 size="sm"
@@ -791,7 +802,7 @@ function Page() {
                                 onClick={() => setDeleteTarget(row)}
                               >
                                 <Trash2 className="mr-1 h-3.5 w-3.5" />
-                                Delete
+                                {t("Delete")}
                               </Button>
                             </div>
                           </TableCell>
@@ -825,39 +836,41 @@ function Page() {
           </DialogHeader>
           <div className="grid gap-3 py-1 sm:grid-cols-2">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Customer</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Customer")}</label>
               <Input
                 value={form.customer}
                 onChange={(e) => setForm((prev) => ({ ...prev, customer: e.target.value }))}
-                placeholder="Customer name"
+                placeholder={t("Customer name")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Equipment</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Equipment")}</label>
               <Input
                 value={form.equipment}
                 onChange={(e) => setForm((prev) => ({ ...prev, equipment: e.target.value }))}
-                placeholder="Dry Van"
+                placeholder={t("Dry Van")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Origin</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Origin")}</label>
               <Input
                 value={form.origin}
                 onChange={(e) => setForm((prev) => ({ ...prev, origin: e.target.value }))}
-                placeholder="Chicago, IL"
+                placeholder={t("Chicago, IL")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Destination</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("Destination")}
+              </label>
               <Input
                 value={form.destination}
                 onChange={(e) => setForm((prev) => ({ ...prev, destination: e.target.value }))}
-                placeholder="Dallas, TX"
+                placeholder={t("Dallas, TX")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Stops</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Stops")}</label>
               <Input
                 type="number"
                 min={0}
@@ -866,7 +879,7 @@ function Page() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Status</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Status")}</label>
               <Select
                 value={form.status}
                 onValueChange={(value) =>
@@ -886,23 +899,27 @@ function Page() {
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Pickup Date</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("Pickup Date")}
+              </label>
               <Input
                 value={form.pickupDate}
                 onChange={(e) => setForm((prev) => ({ ...prev, pickupDate: e.target.value }))}
-                placeholder="Jul 15, 2026"
+                placeholder={t("Jul 15, 2026")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Delivery Date</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("Delivery Date")}
+              </label>
               <Input
                 value={form.deliveryDate}
                 onChange={(e) => setForm((prev) => ({ ...prev, deliveryDate: e.target.value }))}
-                placeholder="Jul 17, 2026"
+                placeholder={t("Jul 17, 2026")}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Base Rate</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Base Rate")}</label>
               <Input
                 type="number"
                 value={form.baseRate}
@@ -910,7 +927,9 @@ function Page() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Fuel Surcharge</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("Fuel Surcharge")}
+              </label>
               <Input
                 type="number"
                 value={form.fuelSurcharge}
@@ -918,7 +937,9 @@ function Page() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Accessorials</label>
+              <label className="text-xs font-medium text-muted-foreground">
+                {t("Accessorials")}
+              </label>
               <Input
                 type="number"
                 value={form.accessorials}
@@ -926,7 +947,7 @@ function Page() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Risk Score</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Risk Score")}</label>
               <Input
                 type="number"
                 min={0}
@@ -936,32 +957,32 @@ function Page() {
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">AI Notes</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("AI Notes")}</label>
               <Textarea
                 rows={3}
                 value={form.aiNotes}
                 onChange={(e) => setForm((prev) => ({ ...prev, aiNotes: e.target.value }))}
-                placeholder="AI pricing rationale and lane observations"
+                placeholder={t("AI pricing rationale and lane observations")}
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-muted-foreground">Owner</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("Owner")}</label>
               <Input
                 value={form.owner}
                 onChange={(e) => setForm((prev) => ({ ...prev, owner: e.target.value }))}
-                placeholder="Owner"
+                placeholder={t("Owner")}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" disabled={formBusy} onClick={() => setFormOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button disabled={formBusy} onClick={() => void submitForm()}>
               {formBusy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
+                  {t("Saving...")}
                 </>
               ) : formMode === "create" ? (
                 "Create Quote"
@@ -976,7 +997,7 @@ function Page() {
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Quote?</DialogTitle>
+            <DialogTitle>{t("Delete Quote?")}</DialogTitle>
             <DialogDescription>
               {deleteTarget
                 ? `This will permanently remove ${deleteTarget.quoteId} (${deleteTarget.customer}) from AWS DynamoDB.`
@@ -985,13 +1006,13 @@ function Page() {
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button variant="destructive" disabled={deleteBusy} onClick={() => void handleDelete()}>
               {deleteBusy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
+                  {t("Deleting...")}
                 </>
               ) : (
                 "Delete"

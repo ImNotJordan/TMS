@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 /** Fixed panel chrome: header + message lane + composer. */
 export const LOGISTICS_AI_PANEL_HEIGHT = "h-[560px]";
@@ -65,12 +66,20 @@ export function AiChatPanel({ connected, status, onClose, className }: AiChatPan
     [],
   );
 
-  const { messages, sendMessage, status: chatStatus, stop, setMessages, error, clearError, regenerate } =
-    useChat({
-      id: `logistics-ai-${userId}`,
-      messages: initialMessages,
-      transport,
-    });
+  const {
+    messages,
+    sendMessage,
+    status: chatStatus,
+    stop,
+    setMessages,
+    error,
+    clearError,
+    regenerate,
+  } = useChat({
+    id: `logistics-ai-${userId}`,
+    messages: initialMessages,
+    transport,
+  });
 
   const streaming = chatStatus === "streaming" || chatStatus === "submitted";
   const showTyping =
@@ -146,7 +155,7 @@ export function AiChatPanel({ connected, status, onClose, className }: AiChatPan
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold tracking-tight text-foreground">
-            Logistics AI
+            {t("Logistics AI")}
           </p>
           <div className="mt-0.5 flex items-center gap-1.5">
             <span
@@ -171,7 +180,7 @@ export function AiChatPanel({ connected, status, onClose, className }: AiChatPan
           size="icon"
           className="h-8 w-8 cursor-pointer rounded-lg"
           onClick={clearConversation}
-          aria-label="Clear conversation"
+          aria-label={t("Clear conversation")}
           disabled={messages.length === 0 && !error}
         >
           <Eraser className="h-3.5 w-3.5" />
@@ -182,7 +191,7 @@ export function AiChatPanel({ connected, status, onClose, className }: AiChatPan
           size="icon"
           className="h-8 w-8 cursor-pointer rounded-lg"
           onClick={onClose}
-          aria-label="Close Logistics AI"
+          aria-label={t("Close Logistics AI")}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -215,9 +224,7 @@ export function AiChatPanel({ connected, status, onClose, className }: AiChatPan
                   key={message.id}
                   message={message}
                   isStreaming={
-                    streaming &&
-                    index === messages.length - 1 &&
-                    message.role === "assistant"
+                    streaming && index === messages.length - 1 && message.role === "assistant"
                   }
                 />
               ))}

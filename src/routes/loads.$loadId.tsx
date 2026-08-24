@@ -1,6 +1,16 @@
 import * as React from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowLeft, Loader2, MapPin, Package, Receipt, Save, Truck, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Loader2,
+  MapPin,
+  Package,
+  Receipt,
+  Save,
+  Truck,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
@@ -20,6 +30,7 @@ import {
   recordToLoadDraft,
   type LoadDraft,
 } from "@/components/loads/create-load-dialog";
+import { withStoredLoadTax } from "@/features/tax/stamp-load-tax";
 import { isLoadBillable } from "@/lib/accounting-store";
 import { getLoadByIdCached, updateLoad, type LoadRecord } from "@/lib/loads-store";
 import { useLoadOwnershipOptions } from "@/hooks/use-assignable-users";
@@ -27,6 +38,7 @@ import {
   normalizeLoadForDriverAssignment,
   syncTrackingSessionForLoad,
 } from "@/lib/tracking-workflow-store";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/loads/$loadId")({
   head: ({ params }) => ({
@@ -177,7 +189,9 @@ function LoadDetailPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const payload = normalizeLoadForDriverAssignment(loadDraftToRecord(draft, baseline));
+      const payload = normalizeLoadForDriverAssignment(
+        withStoredLoadTax(loadDraftToRecord(draft, baseline)),
+      );
       const saved = await updateLoad(payload);
       syncTrackingSessionForLoad(saved, "Dispatcher");
       setBaseline(saved);
@@ -217,7 +231,7 @@ function LoadDetailPage() {
       return (
         <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-          Unsaved edits
+          {t("Unsaved edits")}
         </span>
       );
     }
@@ -231,10 +245,10 @@ function LoadDetailPage() {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
         <div className="rounded-xl border border-destructive/30 bg-destructive/8 p-6 text-sm text-destructive">
-          <div className="font-semibold">Could not load this shipment</div>
+          <div className="font-semibold">{t("Could not load this shipment")}</div>
           <p className="mt-2 text-xs opacity-90">{fetchError}</p>
           <Button className="mt-4" variant="outline" asChild>
-            <Link to="/loads">Back to loads</Link>
+            <Link to="/loads">{t("Back to loads")}</Link>
           </Button>
         </div>
       </div>
@@ -246,13 +260,13 @@ function LoadDetailPage() {
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-20 text-center">
         <Package className="h-12 w-12 text-muted-foreground" />
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Load not found</h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("Load not found")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             No DynamoDB item for <span className="font-mono">{loadId}</span>.
           </p>
         </div>
         <Button variant="outline" asChild>
-          <Link to="/loads">Back to loads</Link>
+          <Link to="/loads">{t("Back to loads")}</Link>
         </Button>
       </div>
     );
@@ -268,7 +282,7 @@ function LoadDetailPage() {
         <div className="sticky top-0 z-20 -mx-px mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-1 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex min-w-0 items-center gap-3">
             <Button variant="ghost" size="icon" className="shrink-0" asChild>
-              <Link to="/loads" aria-label="Back to loads">
+              <Link to="/loads" aria-label={t("Back to loads")}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
@@ -278,7 +292,7 @@ function LoadDetailPage() {
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-lg font-semibold tracking-tight text-foreground">
-                  Edit load
+                  {t("Edit load")}
                 </h1>
                 <p className="truncate text-xs text-muted-foreground">
                   {draft.loadId}
@@ -291,7 +305,7 @@ function LoadDetailPage() {
             {draft.assignedDriver?.trim() ? (
               <Button type="button" variant="outline" size="sm" asChild>
                 <Link to="/tracking" search={{ loadId: draft.loadId }}>
-                  <MapPin className="mr-1 h-4 w-4" /> Track
+                  <MapPin className="mr-1 h-4 w-4" /> {t("Track")}
                 </Link>
               </Button>
             ) : null}
@@ -301,7 +315,7 @@ function LoadDetailPage() {
                   to="/accounting"
                   search={{ tab: "builder", queue: "ready-to-bill", loadId: draft.loadId }}
                 >
-                  <Receipt className="mr-1 h-4 w-4" /> Invoice
+                  <Receipt className="mr-1 h-4 w-4" /> {t("Invoice")}
                 </Link>
               </Button>
             ) : null}
@@ -313,11 +327,11 @@ function LoadDetailPage() {
                 onClick={handleDiscard}
                 className="text-muted-foreground"
               >
-                <X className="mr-1 h-4 w-4" /> Discard
+                <X className="mr-1 h-4 w-4" /> {t("Discard")}
               </Button>
             )}
             <Button type="button" variant="outline" size="sm" asChild>
-              <Link to="/loads">Close</Link>
+              <Link to="/loads">{t("Close")}</Link>
             </Button>
             <Button
               type="button"
@@ -328,11 +342,11 @@ function LoadDetailPage() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Saving…
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("Saving…")}
                 </>
               ) : (
                 <>
-                  <Save className="mr-1 h-4 w-4" /> Save changes
+                  <Save className="mr-1 h-4 w-4" /> {t("Save changes")}
                 </>
               )}
             </Button>
@@ -364,6 +378,7 @@ function LoadDetailPage() {
               stepErrors={stepErrors}
               onJump={scrollToSection}
               variant="edit"
+              update={update}
               customerOptions={customerOptions}
               brokerOptions={brokerOptions}
               dispatcherOptions={dispatcherOptions}

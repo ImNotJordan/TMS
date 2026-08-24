@@ -31,7 +31,7 @@ export type DriverProfile = {
   safetyScore: number;
   totalMiles: number;
   attributes: FetchUserAttributesOutput;
-  audience: "driver" | "ops" | "unknown";
+  audience: "driver" | "ops" | "client" | "unknown";
 };
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -66,9 +66,11 @@ function resolveAudience(attributes: FetchUserAttributesOutput): DriverProfile["
     .toLowerCase();
   if (!raw.trim()) return "unknown";
   const isDriver = /\bdriver\b/.test(raw);
+  const isClient = /\b(client|customer)\b/.test(raw);
   const isOps = /\b(admin|superadmin|dispatcher|broker|ops|operations|manager|shipper)\b/.test(raw);
-  if (isDriver && !isOps) return "driver";
-  if (isOps && !isDriver) return "ops";
+  if (isOps) return "ops";
+  if (isDriver) return "driver";
+  if (isClient) return "client";
   return "unknown";
 }
 

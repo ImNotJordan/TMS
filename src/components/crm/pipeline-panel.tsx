@@ -8,6 +8,7 @@ import { EntityDetailSheet } from "./entity-detail-sheet";
 import { crmLeadMarginPct, crmLeadRevenueForecast } from "@/lib/crm-store";
 import type { CrmAccountRecord, CrmContactRecord, CrmLeadRecord } from "@/lib/crm-store";
 import { formatCurrency } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
 export function PipelinePanel({
   leads,
@@ -35,11 +36,12 @@ export function PipelinePanel({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          Revenue forecast: <span className="font-medium text-foreground">{formatCurrency(totalForecast)}</span>{" "}
-          vs. {marginTarget}% margin target
+          Revenue forecast:{" "}
+          <span className="font-medium text-foreground">{formatCurrency(totalForecast)}</span> vs.{" "}
+          {marginTarget}% margin target
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> New Lead
+          <Plus className="h-4 w-4" /> {t("New Lead")}
         </Button>
       </div>
 
@@ -50,7 +52,12 @@ export function PipelinePanel({
         </div>
       )}
 
-      <PipelineBoard leads={rows} loading={loading} onOpenLead={setSelected} onChanged={onRefresh} />
+      <PipelineBoard
+        leads={rows}
+        loading={loading}
+        onOpenLead={setSelected}
+        onChanged={onRefresh}
+      />
 
       <CreateLeadDialog
         open={createOpen}
@@ -79,8 +86,14 @@ export function PipelinePanel({
                 return m == null ? "—" : `${m.toFixed(1)}%`;
               })(),
             },
-            { label: "Margin floor", value: selected.marginFloorPct != null ? `${selected.marginFloorPct}%` : "—" },
-            { label: "Win probability", value: selected.probabilityPct != null ? `${selected.probabilityPct}%` : "—" },
+            {
+              label: "Margin floor",
+              value: selected.marginFloorPct != null ? `${selected.marginFloorPct}%` : "—",
+            },
+            {
+              label: "Win probability",
+              value: selected.probabilityPct != null ? `${selected.probabilityPct}%` : "—",
+            },
             { label: "Source", value: selected.source },
             { label: "Notes", value: selected.notes },
           ]}

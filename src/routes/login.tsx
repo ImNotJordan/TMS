@@ -23,6 +23,7 @@ import { AppLogoMark } from "@/components/app-logo-mark";
 import { useAuth } from "@/lib/auth";
 import { DRIVER_APP_URL } from "@/lib/external-links";
 import { toast } from "sonner";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -223,22 +224,20 @@ function LoginPage() {
           <AppLogoMark className="h-9 w-9 rounded-md" />
           <div className="leading-tight">
             <div className="text-sm font-semibold tracking-tight text-foreground">
-              Logistics Software
+              {t("Logistics Software")}
             </div>
-            <div className="text-[11px] text-muted-foreground">Operations Console</div>
+            <div className="text-[11px] text-muted-foreground">{t("Operations Console")}</div>
           </div>
         </div>
 
         <div className="mx-auto w-full max-w-md py-12">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            {heading}
-          </h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">{heading}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{subheading}</p>
 
           {step === "signIn" ? (
             <form onSubmit={onSubmit} className="mt-8 space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Work email</Label>
+                <Label htmlFor="email">{t("Work email")}</Label>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -255,13 +254,13 @@ function LoginPage() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("Password")}</Label>
                   <button
                     type="button"
                     className="text-xs font-medium text-primary hover:underline"
                     onClick={() => setStep("forgotRequest")}
                   >
-                    Forgot password?
+                    {t("Forgot password?")}
                   </button>
                 </div>
                 <div className="relative">
@@ -281,7 +280,7 @@ function LoginPage() {
               <div className="flex items-center gap-2">
                 <Checkbox id="remember" />
                 <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground">
-                  Keep me signed in for 30 days
+                  {t("Keep me signed in for 30 days")}
                 </Label>
               </div>
 
@@ -290,7 +289,7 @@ function LoginPage() {
                   "Signing in..."
                 ) : (
                   <>
-                    Sign in
+                    {t("Sign in")}
                     <ArrowRight className="ml-1 h-4 w-4" />
                   </>
                 )}
@@ -299,23 +298,23 @@ function LoginPage() {
               <div className="relative py-2">
                 <Separator />
                 <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-2 text-xs uppercase tracking-wider text-muted-foreground">
-                  or continue with
+                  {t("or continue with")}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Button type="button" variant="outline" className="h-11">
-                  SSO / SAML
+                  {t("SSO / SAML")}
                 </Button>
                 <Button type="button" variant="outline" className="h-11">
-                  Google
+                  {t("Google")}
                 </Button>
               </div>
 
               <p className="pt-2 text-center text-sm text-muted-foreground">
                 New to the platform?{" "}
                 <Link to="/" className="font-medium text-primary hover:underline">
-                  Request access
+                  {t("Request access")}
                 </Link>
               </p>
               <p className="text-center text-sm text-muted-foreground">
@@ -326,7 +325,7 @@ function LoginPage() {
                   rel="noreferrer"
                   className="font-medium text-primary hover:underline"
                 >
-                  Open the driver app →
+                  {t("Open the driver app →")}
                 </a>
               </p>
             </form>
@@ -335,14 +334,14 @@ function LoginPage() {
           {step === "newPassword" ? (
             <form onSubmit={onConfirmNewPassword} className="mt-8 space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="newPassword">New password</Label>
+                <Label htmlFor="newPassword">{t("New password")}</Label>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="newPassword"
                     type="password"
                     autoComplete="new-password"
-                    placeholder="At least 8 characters"
+                    placeholder={t("At least 8 characters")}
                     className="h-11 pl-9"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -350,7 +349,7 @@ function LoginPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
+                <Label htmlFor="confirmPassword">{t("Confirm password")}</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
@@ -375,7 +374,7 @@ function LoginPage() {
                   setConfirmPassword("");
                 }}
               >
-                Back to sign in
+                {t("Back to sign in")}
               </Button>
             </form>
           ) : null}
@@ -389,7 +388,7 @@ function LoginPage() {
               className="mt-8 space-y-5"
             >
               <div className="space-y-2">
-                <Label htmlFor="forgotEmail">Work email</Label>
+                <Label htmlFor="forgotEmail">{t("Work email")}</Label>
                 <Input
                   id="forgotEmail"
                   type="email"
@@ -408,7 +407,7 @@ function LoginPage() {
                 className="h-10 w-full"
                 onClick={() => setStep("signIn")}
               >
-                Back to sign in
+                {t("Back to sign in")}
               </Button>
             </form>
           ) : null}
@@ -416,7 +415,7 @@ function LoginPage() {
           {step === "forgotConfirm" ? (
             <form onSubmit={onForgotConfirm} className="mt-8 space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="resetCode">Verification code</Label>
+                <Label htmlFor="resetCode">{t("Verification code")}</Label>
                 <Input
                   id="resetCode"
                   inputMode="numeric"
@@ -427,7 +426,7 @@ function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="forgotNewPassword">New password</Label>
+                <Label htmlFor="forgotNewPassword">{t("New password")}</Label>
                 <Input
                   id="forgotNewPassword"
                   type="password"
@@ -438,7 +437,7 @@ function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="forgotConfirmPassword">Confirm password</Label>
+                <Label htmlFor="forgotConfirmPassword">{t("Confirm password")}</Label>
                 <Input
                   id="forgotConfirmPassword"
                   type="password"
@@ -458,7 +457,7 @@ function LoginPage() {
                 disabled={loading}
                 onClick={() => void sendResetCode()}
               >
-                Resend code
+                {t("Resend code")}
               </Button>
               <Button
                 type="button"
@@ -471,7 +470,7 @@ function LoginPage() {
                   setConfirmPassword("");
                 }}
               >
-                Back to sign in
+                {t("Back to sign in")}
               </Button>
             </form>
           ) : null}
@@ -481,13 +480,13 @@ function LoginPage() {
           <span>(c) {new Date().getFullYear()} Logistics Software, Inc.</span>
           <div className="flex gap-4">
             <a href="#" className="hover:text-foreground">
-              Privacy
+              {t("Privacy")}
             </a>
             <a href="#" className="hover:text-foreground">
-              Terms
+              {t("Terms")}
             </a>
             <a href="#" className="hover:text-foreground">
-              Status
+              {t("Status")}
             </a>
           </div>
         </div>
@@ -515,14 +514,15 @@ function LoginPage() {
         <div className="relative z-10 w-full max-w-none">
           <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border/40 bg-sidebar-accent/40 px-3 py-1 text-xs font-medium backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-            All systems operational
+            {t("All systems operational")}
           </div>
           <h2 className="mt-8 max-w-2xl text-4xl font-semibold leading-tight tracking-tight">
-            One operating system for your entire freight network.
+            {t("One operating system for your entire freight network.")}
           </h2>
           <p className="mt-4 max-w-2xl text-sm text-sidebar-foreground/70">
-            Dispatch, brokerage, tracking, accounting, and analytics - unified in a single command
-            center built for modern logistics teams.
+            {t(
+              "Dispatch, brokerage, tracking, accounting, and analytics - unified in a single command\r\n            center built for modern logistics teams.",
+            )}
           </p>
 
           <div className="mt-8 grid w-full gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
@@ -530,18 +530,18 @@ function LoginPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-xs font-medium uppercase tracking-[0.24em] text-sidebar-foreground/55">
-                    Live command center
+                    {t("Live command center")}
                   </div>
                   <div className="mt-2 text-xl font-semibold tracking-tight text-white">
-                    Morning network pulse
+                    {t("Morning network pulse")}
                   </div>
                   <div className="mt-1 text-sm text-sidebar-foreground/65">
-                    Prioritized signals across dispatch, ETA health, and facility flow.
+                    {t("Prioritized signals across dispatch, ETA health, and facility flow.")}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
                   <div className="text-[10px] uppercase tracking-[0.22em] text-sidebar-foreground/45">
-                    Today's margin
+                    {t("Today's margin")}
                   </div>
                   <div className="mt-1 flex items-center gap-1 text-sm font-semibold text-white">
                     <TrendingUp className="h-4 w-4 text-success" />
@@ -551,17 +551,17 @@ function LoginPage() {
               </div>
 
               <div className="mt-5 grid grid-cols-3 gap-3">
-                <MetricTile label="On-time" value="96.8%" hint="+1.2 vs avg" />
-                <MetricTile label="Tracked now" value="1,284" hint="312 high-priority" />
-                <MetricTile label="Exceptions" value="19" hint="7 need action" />
+                <MetricTile label={t("On-time")} value="96.8%" hint={t("+1.2 vs avg")} />
+                <MetricTile label={t("Tracked now")} value="1,284" hint={t("312 high-priority")} />
+                <MetricTile label={t("Exceptions")} value="19" hint={t("7 need action")} />
               </div>
 
               <div className="mt-5 rounded-2xl border border-white/8 bg-black/10 p-4">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-white">Lane watchlist</div>
+                  <div className="text-sm font-medium text-white">{t("Lane watchlist")}</div>
                   <div className="flex items-center gap-1 text-xs text-sidebar-foreground/55">
                     <Clock3 className="h-3.5 w-3.5" />
-                    Updated 2 min ago
+                    {t("Updated 2 min ago")}
                   </div>
                 </div>
                 <div className="mt-4 space-y-3">
@@ -577,7 +577,9 @@ function LoginPage() {
                           <div className="text-xs text-sidebar-foreground/55">{lane.status}</div>
                         </div>
                       </div>
-                      <div className="text-sm font-semibold text-sidebar-foreground">{lane.eta}</div>
+                      <div className="text-sm font-semibold text-sidebar-foreground">
+                        {lane.eta}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -587,7 +589,7 @@ function LoginPage() {
             <div className="flex h-full flex-col gap-4">
               <div className="rounded-[24px] border border-sidebar-border/40 bg-sidebar-accent/35 p-5 backdrop-blur-md">
                 <div className="text-xs font-medium uppercase tracking-[0.24em] text-sidebar-foreground/55">
-                  Why teams switch
+                  {t("Why teams switch")}
                 </div>
                 <div className="mt-4 space-y-4">
                   {workflowMoments.map((moment) => (
@@ -608,14 +610,15 @@ function LoginPage() {
 
               <div className="flex-1 rounded-[24px] border border-primary/25 bg-primary/10 p-5 backdrop-blur-md">
                 <div className="text-xs font-medium uppercase tracking-[0.24em] text-primary-foreground/70">
-                  Connected stack
+                  {t("Connected stack")}
                 </div>
                 <div className="mt-3 text-2xl font-semibold tracking-tight text-white">
-                  TMS, ELD, accounting, and customer comms in one flow.
+                  {t("TMS, ELD, accounting, and customer comms in one flow.")}
                 </div>
                 <div className="mt-3 text-sm leading-6 text-sidebar-foreground/65">
-                  Teams stop chasing updates across tabs and start making decisions from one shared
-                  operating picture.
+                  {t(
+                    "Teams stop chasing updates across tabs and start making decisions from one shared\r\n                  operating picture.",
+                  )}
                 </div>
               </div>
             </div>

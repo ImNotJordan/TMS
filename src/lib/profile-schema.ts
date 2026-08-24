@@ -83,6 +83,11 @@ export const PRIVILEGED_PERMISSION_FIELDS: ReadonlySet<string> = new Set([
   "employerCompanyId",
   "employerCompanyName",
   "sessionEpoch",
+  /**
+   * Which customer names a Client portal user may see. Self-serving this would
+   * let them attach someone else's freight to their login.
+   */
+  "assignedCustomers",
 ]);
 
 /**

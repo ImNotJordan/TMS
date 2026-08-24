@@ -2,6 +2,7 @@ import { apiCreateLoad, apiDeleteLoad, apiGetLoad, apiListLoads, apiUpdateLoad }
 import {
   fetchOperationalListCached,
   getOperationalCacheScope,
+  invalidateOperationalList,
   readOperationalItemFromListCache,
   removeOperationalListItem,
   upsertOperationalListItem,
@@ -77,6 +78,30 @@ export type LoadRecord = {
   tonuFee?: string;
   layoverFee?: string;
   paymentTerms?: string;
+
+  /* ---- Stored tax (the figure the client portal shows) -----------------
+   *
+   * Written at create/save from the ops preview: Settings rates go through the
+   * estimator, a typed override is kept as-is. Empty used to mean "re-estimate
+   * at read time", which made the client portal disagree with the load. The
+   * client dashboard now reads these fields and does not recompute.
+   *
+   * Gated by `LOAD_TAX_SETTERS` — see load-permissions.
+   */
+  /** Amount in `taxCurrency`. Set on every save. */
+  taxManualAmount?: string;
+  /** ISO 4217. Kept explicit: a CNY figure must never render with a dollar sign. */
+  taxCurrency?: string;
+  /** `estimator` when stamped from the preview; otherwise the override's source. */
+  taxManualSource?: string;
+  /** Why it differs from the estimate, when it does. */
+  taxManualNote?: string;
+  /**
+   * Per-jurisdiction tax on this load. A China→US movement can carry China VAT
+   * and a US figure at once; the client portal renders these lines instead of
+   * collapsing them into `taxManualAmount`.
+   */
+  taxLines?: LoadTaxLine[];
   assignedCarrier?: string;
   assignedDriver?: string;
   driverWorkflowStatus?: string;
@@ -97,6 +122,21 @@ export type LoadRecord = {
   insuranceVerified?: boolean;
   authorityVerified?: boolean;
   highValueFlag?: boolean;
+  /**
+   * Warehouse SKUs this load will move. Stock itself is not stored here — saving
+   * the load posts allocate / shipment / release rows against the inventory
+   * ledger. See `load-inventory`.
+   */
+  inventoryLines?: import("./load-inventory").LoadInventoryLine[];
+};
+
+export type LoadTaxLine = {
+  country: "US" | "CN" | "UNKNOWN";
+  label: string;
+  amount: string;
+  currency: string;
+  source?: string;
+  note?: string;
 };
 
 export type DriverStatusHistoryEntry = {
@@ -226,12 +266,19 @@ export async function getLoadByIdCached(
   return remote;
 }
 
+function bustInventoryCaches() {
+  const scope = getOperationalCacheScope();
+  invalidateOperationalList("inventoryItems", scope);
+  invalidateOperationalList("inventoryMovements", scope);
+}
+
 export async function createLoad(
   input: Omit<LoadRecord, "createdAt" | "updatedAt">,
 ): Promise<LoadRecord> {
   warnIfLoadDocumentsOversized(input as LoadRecord);
   const created = await apiCreateLoad(input);
   upsertOperationalListItem(LOADS_CACHE_KIND, getOperationalCacheScope(), created, getLoadId);
+  bustInventoryCaches();
   return created;
 }
 
@@ -245,6 +292,7 @@ export async function updateLoad(record: LoadRecord): Promise<LoadRecord> {
   warnIfLoadDocumentsOversized(record);
   const updated = await apiUpdateLoad(record.loadId, record);
   upsertOperationalListItem(LOADS_CACHE_KIND, getOperationalCacheScope(), updated, getLoadId);
+  bustInventoryCaches();
   return updated;
 }
 
@@ -252,6 +300,7 @@ export async function updateLoad(record: LoadRecord): Promise<LoadRecord> {
 export async function patchLoad(loadId: string, attributes: Partial<LoadRecord>): Promise<void> {
   const updated = await apiUpdateLoad(loadId, attributes);
   upsertOperationalListItem(LOADS_CACHE_KIND, getOperationalCacheScope(), updated, getLoadId);
+  bustInventoryCaches();
 }
 
 export async function deleteLoad(loadId: string): Promise<void> {
@@ -262,6 +311,7 @@ export async function deleteLoad(loadId: string): Promise<void> {
     loadId,
     getLoadId as unknown as (row: { updatedAt: string }) => string,
   );
+  bustInventoryCaches();
 }
 
 /**

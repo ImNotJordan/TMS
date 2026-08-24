@@ -54,7 +54,7 @@ describe("authorizeAdminRequest", () => {
   });
 
   // The AI path allows a roleless user for setup DX. Settings writes touch a
-  // shared secret, so that grace must not extend here.
+  // company-scoped secret, so that grace must not extend here.
   it("denies a user with no role at all", async () => {
     const req = request();
     roleIs(null);

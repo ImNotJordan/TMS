@@ -14,13 +14,7 @@ import { cn } from "@/lib/utils";
 const POLL_MS = 30_000;
 const TOAST_CAP = 2;
 
-function DriverUpdateToast({
-  item,
-  onOpen,
-}: {
-  item: AppNotificationItem;
-  onOpen: () => void;
-}) {
+function DriverUpdateToast({ item, onOpen }: { item: AppNotificationItem; onOpen: () => void }) {
   const isDelivered = item.title.toLowerCase().includes("delivered");
   return (
     <button
@@ -46,8 +40,12 @@ function DriverUpdateToast({
         <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           Driver update · {formatNotificationTime(item.createdAt)}
         </span>
-        <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">{item.title}</span>
-        <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{item.description}</span>
+        <span className="mt-0.5 block truncate text-sm font-semibold text-foreground">
+          {item.title}
+        </span>
+        <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
+          {item.description}
+        </span>
       </span>
       <span className="flex shrink-0 items-center self-center text-primary opacity-70 transition group-hover:translate-x-0.5 group-hover:opacity-100">
         <ArrowRight className="h-4 w-4" />
@@ -103,10 +101,13 @@ export function DriverStatusNotificationsWatcher() {
       }
 
       if (fresh.length > TOAST_CAP) {
-        toast.message(`${fresh.length - TOAST_CAP} more driver update${fresh.length - TOAST_CAP === 1 ? "" : "s"}`, {
-          description: "Open Notifications to review everything.",
-          duration: 7_000,
-        });
+        toast.message(
+          `${fresh.length - TOAST_CAP} more driver update${fresh.length - TOAST_CAP === 1 ? "" : "s"}`,
+          {
+            description: "Open Notifications to review everything.",
+            duration: 7_000,
+          },
+        );
       }
     };
 

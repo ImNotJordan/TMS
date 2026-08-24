@@ -33,11 +33,7 @@ import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 import { authorizeAdminRequest } from "@/lib/ai/ai-authz";
 import { getAiDynamoClient, getProfileTable } from "@/lib/ai/server-aws";
-import {
-  isSectionKey,
-  sanitizeSelfServiceSection,
-  type SectionKey,
-} from "@/lib/profile-schema";
+import { isSectionKey, sanitizeSelfServiceSection, type SectionKey } from "@/lib/profile-schema";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
 import { strictRole } from "@/lib/tenant/strict-role";
 import {
@@ -101,8 +97,48 @@ async function resolveTarget(
   ctx: TenantContext,
   requestedUserId: string | null,
 ): Promise<{ userId: string; isAdminAccess: boolean } | Response> {
-  if (!requestedUserId || requestedUserId === ctx.userId) {
+  // Implicit self — the profile page, which never sends a userId. Always
+  // self-service, so the sanitizer applies and a mis-wired field on that page
+  // cannot write privilege. An accident guard rather than a boundary (an admin
+  // could name themselves explicitly below), and worth keeping as one.
+  if (!requestedUserId) {
     return { userId: ctx.userId, isAdminAccess: false };
+  }
+
+  /**
+   * An admin editing their own row in the admin console.
+   *
+   * This used to fall in with the implicit-self case, which made the admin
+   * console unable to save its own Module Permissions and Field-level
+   * Permissions grids: the payload named the caller, so it was treated as
+   * self-service and refused with `privileged_field` naming all five fields.
+   * Every *other* user in the directory saved fine, which is what made it look
+   * like a permissions problem rather than a routing one.
+   *
+   * Granting the admin path here escalates nothing, and that is why it is safe
+   * rather than merely convenient:
+   *
+   * - `authorizeAdminRequest` passes only for Organization Owner, Admin and
+   *   SuperAdmin. Anyone who reaches this line is already privileged.
+   * - For those roles `canAccessModule` and `hasFieldPermission` short-circuit
+   *   to full access *before* reading either matrix, so writing your own matrix
+   *   grants you nothing you did not already have. By the same token you cannot
+   *   lock yourself out with it.
+   * - `accessLevel`, `permissionGroup` and `dataAccessScope` are recorded and
+   *   displayed but are not access-control inputs anywhere.
+   * - The fields that would be an escalation — `role`, `companyId`,
+   *   `employerCompanyId`, `sessionEpoch` — are refused on the admin path too,
+   *   by `SERVER_OWNED_PERMISSION_FIELDS` below. Self-promotion to SuperAdmin
+   *   and moving yourself into another tenant both stay impossible here; they
+   *   belong to /api/admin/user-role and /api/admin/company-assignment, which
+   *   bump the session epoch and audit the change.
+   *
+   * A non-admin naming themselves gets `isAdminAccess: false` and the ordinary
+   * sanitizer, exactly as before.
+   */
+  if (requestedUserId === ctx.userId) {
+    const selfAdmin = await authorizeAdminRequest(request);
+    return { userId: ctx.userId, isAdminAccess: selfAdmin.ok };
   }
 
   const authorized = await authorizeAdminRequest(request);
@@ -243,7 +279,11 @@ export async function handleProfileRequest(request: Request): Promise<Response> 
       if (rejected.length > 0) {
         // A self-service surface tried to write its own privilege. Refused
         // outright rather than quietly dropped, so it shows up.
-        logTenantDenial(ctx, `self-service write to privileged fields: ${rejected.join(",")}`, PATH);
+        logTenantDenial(
+          ctx,
+          `self-service write to privileged fields: ${rejected.join(",")}`,
+          PATH,
+        );
         return jsonError(
           `These fields cannot be changed here: ${rejected.join(", ")}.`,
           403,

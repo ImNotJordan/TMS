@@ -2,18 +2,9 @@ import * as React from "react";
 import { Building2, Truck, User, Users } from "lucide-react";
 
 import type { FancySelectOption } from "@/components/loads/fancy-select";
-import {
-  listAssignableUsersByKind,
-  type AdminUserDirectoryEntry,
-} from "@/lib/admin-users-store";
-import {
-  listAllCrmAccountsCached,
-  type CrmAccountRecord,
-} from "@/lib/crm-store";
-import {
-  listAllCarriersCached,
-  type CarrierRecord,
-} from "@/lib/carriers-store";
+import { listAssignableUsersByKind, type AdminUserDirectoryEntry } from "@/lib/admin-users-store";
+import { listAllCrmAccountsCached, type CrmAccountRecord } from "@/lib/crm-store";
+import { listAllCarriersCached, type CarrierRecord } from "@/lib/carriers-store";
 
 function userToOption(entry: AdminUserDirectoryEntry, icon = User): FancySelectOption {
   const label = entry.name?.trim() || entry.email?.trim() || entry.id;

@@ -38,9 +38,7 @@ export function roleGroupName(role: Role): string {
 }
 
 /** The canonical group names this system creates. */
-export const MANAGED_ROLE_GROUPS: ReadonlySet<string> = new Set(
-  Object.values(ROLE_STORAGE_KEYS),
-);
+export const MANAGED_ROLE_GROUPS: ReadonlySet<string> = new Set(Object.values(ROLE_STORAGE_KEYS));
 
 /**
  * Is this an existing group that role sync owns, whatever it is called?

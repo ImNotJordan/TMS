@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  keywordEngine,
-  validateRegexTerm,
-} from "@/features/communications/lib/keywordEngine";
+import { keywordEngine, validateRegexTerm } from "@/features/communications/lib/keywordEngine";
 import type { KeywordRule } from "@/features/communications/types";
 
-const baseRule = (partial: Partial<KeywordRule> & Pick<KeywordRule, "id" | "label" | "terms">): KeywordRule => ({
+const baseRule = (
+  partial: Partial<KeywordRule> & Pick<KeywordRule, "id" | "label" | "terms">,
+): KeywordRule => ({
   matchType: "contains",
   caseSensitive: false,
   channels: ["sms"],
@@ -29,9 +28,7 @@ describe("keywordEngine", () => {
   });
 
   it("matches whole words only", () => {
-    const rules = [
-      baseRule({ id: "1", label: "Rate", terms: ["rate"], matchType: "word" }),
-    ];
+    const rules = [baseRule({ id: "1", label: "Rate", terms: ["rate"], matchType: "word" })];
     expect(
       keywordEngine("flatbed rate increase", rules, { channel: "sms", direction: "inbound" }),
     ).toHaveLength(1);
@@ -50,15 +47,13 @@ describe("keywordEngine", () => {
         direction: "inbound",
       }),
     ];
-    expect(
-      keywordEngine("hello", rules, { channel: "sms", direction: "inbound" }),
-    ).toHaveLength(0);
-    expect(
-      keywordEngine("hello", rules, { channel: "email", direction: "outbound" }),
-    ).toHaveLength(0);
-    expect(
-      keywordEngine("hello", rules, { channel: "email", direction: "inbound" }),
-    ).toHaveLength(1);
+    expect(keywordEngine("hello", rules, { channel: "sms", direction: "inbound" })).toHaveLength(0);
+    expect(keywordEngine("hello", rules, { channel: "email", direction: "outbound" })).toHaveLength(
+      0,
+    );
+    expect(keywordEngine("hello", rules, { channel: "email", direction: "inbound" })).toHaveLength(
+      1,
+    );
   });
 
   it("returns overlapping rule hits", () => {
@@ -87,8 +82,6 @@ describe("keywordEngine", () => {
         matchType: "regex",
       }),
     ];
-    expect(
-      keywordEngine("aaaa", rules, { channel: "sms", direction: "inbound" }),
-    ).toHaveLength(0);
+    expect(keywordEngine("aaaa", rules, { channel: "sms", direction: "inbound" })).toHaveLength(0);
   });
 });

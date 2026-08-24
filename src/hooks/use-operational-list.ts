@@ -44,20 +44,23 @@ export function useOperationalList<T>({
   const fetchListRef = React.useRef(fetchList);
   fetchListRef.current = fetchList;
 
-  const run = React.useCallback(async (mode: OperationalFetchMode) => {
-    if (mode === "initial") setLoading(true);
-    else setRefreshing(true);
-    setError(null);
-    try {
-      const next = await fetchListRef.current({ force: mode === "refresh" });
-      setItems(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : errorMessage);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [errorMessage]);
+  const run = React.useCallback(
+    async (mode: OperationalFetchMode) => {
+      if (mode === "initial") setLoading(true);
+      else setRefreshing(true);
+      setError(null);
+      try {
+        const next = await fetchListRef.current({ force: mode === "refresh" });
+        setItems(next);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : errorMessage);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [errorMessage],
+  );
 
   const queryKeySerialized = JSON.stringify(queryKey);
 
@@ -65,7 +68,6 @@ export function useOperationalList<T>({
     if (!enabled) return;
     void run("initial");
     // queryKeySerialized mirrors queryKey for stable dep comparison
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional key serialization
   }, [enabled, run, queryKeySerialized]);
 
   const reload = React.useCallback(() => run("initial"), [run]);

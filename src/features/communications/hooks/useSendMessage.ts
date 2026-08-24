@@ -4,20 +4,11 @@ import { useIntegration } from "@/features/integrations";
 
 import { consentGuard } from "../lib/consentGuard";
 import { getCommsAuthHeaders } from "../lib/authHeaders";
-import {
-  appendAuditEvent,
-  type CommunicationsWorkspaceData,
-} from "../lib/communications-store";
+import { appendAuditEvent, type CommunicationsWorkspaceData } from "../lib/communications-store";
 import { keywordEngine } from "../lib/keywordEngine";
 import { canTransition, transitionStatus } from "../lib/statusMachine";
 import { getSmsTransport } from "../transport";
-import type {
-  ChannelId,
-  GuardResult,
-  Message,
-  MessageLink,
-  TranslationRecord,
-} from "../types";
+import type { ChannelId, GuardResult, Message, MessageLink, TranslationRecord } from "../types";
 import { useCommunicationsData } from "./useCommunicationsData";
 import { useCommsAccess } from "./useCommsAccess";
 
@@ -223,8 +214,7 @@ export function useSendMessage() {
             message = {
               ...message,
               status: "failed",
-              failureReason:
-                error instanceof Error ? error.message : "SMS send failed.",
+              failureReason: error instanceof Error ? error.message : "SMS send failed.",
               updatedAt: new Date().toISOString(),
             };
           }
@@ -246,9 +236,11 @@ export function useSendMessage() {
                 link: input.link,
               }),
             });
-            const payload = (await response.json().catch(() => null)) as
-              | { providerMessageId?: string; status?: Message["status"]; error?: string }
-              | null;
+            const payload = (await response.json().catch(() => null)) as {
+              providerMessageId?: string;
+              status?: Message["status"];
+              error?: string;
+            } | null;
             if (!response.ok) {
               throw new Error(payload?.error ?? "Email send failed.");
             }
@@ -262,8 +254,7 @@ export function useSendMessage() {
             message = {
               ...message,
               status: "failed",
-              failureReason:
-                error instanceof Error ? error.message : "Email send failed.",
+              failureReason: error instanceof Error ? error.message : "Email send failed.",
               updatedAt: new Date().toISOString(),
             };
           }

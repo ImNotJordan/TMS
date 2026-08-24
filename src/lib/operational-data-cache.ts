@@ -11,7 +11,9 @@ export type OperationalListKind =
   | "crmActivities"
   | "crmCampaigns"
   | "crmProspecting"
-  | "riskModels";
+  | "riskModels"
+  | "inventoryItems"
+  | "inventoryMovements";
 
 type VersionedRecord = { updatedAt: string };
 
@@ -42,6 +44,8 @@ const ALL_KINDS: OperationalListKind[] = [
   "crmCampaigns",
   "crmProspecting",
   "riskModels",
+  "inventoryItems",
+  "inventoryMovements",
 ];
 
 function emptyKindMaps(): Record<
@@ -80,6 +84,8 @@ const STORAGE_PREFIX: Record<OperationalListKind, string> = {
   crmCampaigns: "titan-freight:crm-campaigns-list:",
   crmProspecting: "titan-freight:crm-prospecting-list:",
   riskModels: "titan-freight:risk-models-list:",
+  inventoryItems: "titan-freight:inventory-items-list:",
+  inventoryMovements: "titan-freight:inventory-movements-list:",
 };
 
 const LIST_ID_GETTERS: Record<OperationalListKind, (item: VersionedRecord) => string> = {
@@ -96,6 +102,8 @@ const LIST_ID_GETTERS: Record<OperationalListKind, (item: VersionedRecord) => st
   crmCampaigns: (item) => (item as unknown as { campaignId: string }).campaignId,
   crmProspecting: (item) => (item as unknown as { runId: string }).runId,
   riskModels: (item) => (item as unknown as { id: string }).id,
+  inventoryItems: (item) => (item as unknown as { itemId: string }).itemId,
+  inventoryMovements: (item) => (item as unknown as { movementId: string }).movementId,
 };
 
 let cacheScope = "_";
@@ -319,6 +327,20 @@ export function upsertOperationalListItem<T extends VersionedRecord>(
   if (index >= 0) items[index] = item;
   else items.push(item);
   writeListCache(kind, scope, items, getId);
+}
+
+export function invalidateOperationalList(kind: OperationalListKind, scope?: string) {
+  const target = scope ?? getOperationalCacheScope();
+  memoryLists[kind].delete(target);
+  memoryItems[kind].delete(target);
+  if (canUseSessionStorage()) {
+    try {
+      sessionStorage.removeItem(listStorageKey(kind, target));
+    } catch {
+      // ignore
+    }
+  }
+  inflightLists.delete(inflightKey(kind, target));
 }
 
 export function clearOperationalDataCache(scope?: string) {

@@ -65,7 +65,12 @@ const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region, credentials
 
 /** Mirrors TENANT_EXEMPT_ROLES. */
 const DRIVER_KEYS = new Set(["driver"]);
-const isDriver = (role) => DRIVER_KEYS.has(String(role ?? "").trim().toLowerCase());
+const isDriver = (role) =>
+  DRIVER_KEYS.has(
+    String(role ?? "")
+      .trim()
+      .toLowerCase(),
+  );
 
 /** Mirrors isVisibleInDirectory for a non-platform-admin viewer. */
 function visibleTo(subject, viewerCompany) {
@@ -104,7 +109,9 @@ async function loadProfiles(subs) {
     let keys = subs.slice(i, i + 100).map((userId) => ({ userId, section: "permissions" }));
     let attempts = 0;
     while (keys.length && attempts < 4) {
-      const out = await ddb.send(new BatchGetCommand({ RequestItems: { [table]: { Keys: keys } } }));
+      const out = await ddb.send(
+        new BatchGetCommand({ RequestItems: { [table]: { Keys: keys } } }),
+      );
       for (const row of out.Responses?.[table] ?? []) {
         if (row.userId) byUser.set(row.userId, row.data ?? {});
       }
@@ -178,14 +185,20 @@ async function main() {
     problems += 1;
     console.log(`  ${orphans.length} driver(s) with no employer recorded — visible to nobody:`);
     for (const o of orphans) console.log(`     ${o.email}  (${o.sub})`);
-    console.log(`  Fix: node scripts/backfill-driver-employer.mjs --company-id <id> --company-name "<name>" --apply\n`);
+    console.log(
+      `  Fix: node scripts/backfill-driver-employer.mjs --company-id <id> --company-name "<name>" --apply\n`,
+    );
   }
 
   if (ruleBViolations.length) {
     problems += 1;
-    console.log(`  RULE B VIOLATION — ${ruleBViolations.length} driver(s) carry a custom:companyId claim:`);
+    console.log(
+      `  RULE B VIOLATION — ${ruleBViolations.length} driver(s) carry a custom:companyId claim:`,
+    );
     for (const v of ruleBViolations) console.log(`     ${v.email}  claim=${v.claimCompanyId}`);
-    console.log(`  These drivers can read that company's data. Clear the claim in the Admin screen.\n`);
+    console.log(
+      `  These drivers can read that company's data. Clear the claim in the Admin screen.\n`,
+    );
   }
 
   const crossCompany = [...companies.keys()].some((c) =>

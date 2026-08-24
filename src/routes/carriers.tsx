@@ -51,19 +51,19 @@ import {
   toneStat,
   type Tone,
 } from "@/lib/carriers-display";
-import {
-  deleteCarrier,
-  listAllCarriersCached,
-  type CarrierRecord,
-} from "@/lib/carriers-store";
+import { deleteCarrier, listAllCarriersCached, type CarrierRecord } from "@/lib/carriers-store";
 import { useProfileSection } from "@/hooks/use-profile-section";
 import { useOperationalList } from "@/hooks/use-operational-list";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/carriers")({
   head: () => ({
     meta: [
       { title: "Carriers / Brokers — Logistics Software" },
-      { name: "description", content: "Carrier and broker network with scorecards, contracts, and contacts." },
+      {
+        name: "description",
+        content: "Carrier and broker network with scorecards, contracts, and contacts.",
+      },
     ],
   }),
   component: Page,
@@ -127,10 +127,34 @@ function Page() {
     const blacklisted = list.filter((c) => c.blacklisted).length;
     const topTier = list.filter((c) => c.tier === "core" || c.tier === "strategic").length;
     return [
-      { label: "Active Carriers", value: active.toString(), delta: `${list.length} total`, tone: "info" as Tone, icon: Building2 },
-      { label: "Insurance Expiring", value: insuranceExpiring.toString(), delta: "≤30 days or expired", tone: "warning" as Tone, icon: ShieldAlert },
-      { label: "Blacklisted", value: blacklisted.toString(), delta: "Blocked from tenders", tone: "destructive" as Tone, icon: Ban },
-      { label: "Top Tier", value: topTier.toString(), delta: "Core + Strategic", tone: "success" as Tone, icon: Building2 },
+      {
+        label: "Active Carriers",
+        value: active.toString(),
+        delta: `${list.length} total`,
+        tone: "info" as Tone,
+        icon: Building2,
+      },
+      {
+        label: "Insurance Expiring",
+        value: insuranceExpiring.toString(),
+        delta: "≤30 days or expired",
+        tone: "warning" as Tone,
+        icon: ShieldAlert,
+      },
+      {
+        label: "Blacklisted",
+        value: blacklisted.toString(),
+        delta: "Blocked from tenders",
+        tone: "destructive" as Tone,
+        icon: Ban,
+      },
+      {
+        label: "Top Tier",
+        value: topTier.toString(),
+        delta: "Core + Strategic",
+        tone: "success" as Tone,
+        icon: Building2,
+      },
     ];
   }, [carriers]);
 
@@ -140,7 +164,9 @@ function Page() {
     setError(null);
     try {
       await deleteCarrier(carrierToDelete.carrierId);
-      setCarriers((prev) => prev?.filter((row) => row.carrierId !== carrierToDelete.carrierId) ?? null);
+      setCarriers(
+        (prev) => prev?.filter((row) => row.carrierId !== carrierToDelete.carrierId) ?? null,
+      );
       setCarrierToDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete carrier.");
@@ -162,15 +188,15 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="Carriers / Brokers"
-        description="Carrier and broker network with scorecards, contracts, and contacts."
+        title={t("Carriers / Brokers")}
+        description={t("Carrier and broker network with scorecards, contracts, and contacts.")}
         actions={
           <>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Filter className="h-4 w-4" /> Filters
+              <Filter className="h-4 w-4" /> {t("Filters")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" /> Export
+              <Download className="h-4 w-4" /> {t("Export")}
             </Button>
             <Button
               variant="outline"
@@ -179,7 +205,11 @@ function Page() {
               onClick={() => void refreshCarriers()}
               disabled={refreshing || loading}
             >
-              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
               Refresh
             </Button>
             <Button
@@ -187,7 +217,7 @@ function Page() {
               className="gap-1.5 bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
               onClick={() => setCreateOpen(true)}
             >
-              <Plus className="h-4 w-4" /> New Carrier
+              <Plus className="h-4 w-4" /> {t("New Carrier")}
             </Button>
             <CreateCarrierDialog
               open={createOpen}
@@ -208,7 +238,9 @@ function Page() {
                     <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {s.label}
                     </div>
-                    <span className={`flex h-7 w-7 items-center justify-center rounded-md ${toneStat[s.tone]}`}>
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-md ${toneStat[s.tone]}`}
+                    >
                       <Icon className="h-3.5 w-3.5" />
                     </span>
                   </div>
@@ -237,7 +269,7 @@ function Page() {
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="pl-8"
-                  placeholder="Search carriers, MC/DOT, city..."
+                  placeholder={t("Search carriers, MC/DOT, city...")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
@@ -251,7 +283,7 @@ function Page() {
               <div className="flex items-start gap-3 border-b border-destructive/30 bg-destructive/8 px-6 py-3 text-sm text-destructive">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div className="flex-1">
-                  <div className="font-semibold">Couldn't load from DynamoDB</div>
+                  <div className="font-semibold">{t("Couldn't load from DynamoDB")}</div>
                   <div className="mt-0.5 text-xs text-destructive/90">{error}</div>
                 </div>
                 <Button
@@ -260,7 +292,7 @@ function Page() {
                   onClick={() => void refreshCarriers()}
                   className="border-destructive/30 text-destructive hover:bg-destructive/10"
                 >
-                  Retry
+                  {t("Retry")}
                 </Button>
               </div>
             )}
@@ -269,14 +301,14 @@ function Page() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/70">
-                    <TableHead className="pl-6">Company</TableHead>
-                    <TableHead>Tier</TableHead>
-                    <TableHead>Equipment</TableHead>
-                    <TableHead>Lanes</TableHead>
+                    <TableHead className="pl-6">{t("Company")}</TableHead>
+                    <TableHead>{t("Tier")}</TableHead>
+                    <TableHead>{t("Equipment")}</TableHead>
+                    <TableHead>{t("Lanes")}</TableHead>
                     <TableHead>OTD</TableHead>
-                    <TableHead>Insurance</TableHead>
-                    <TableHead>Portal</TableHead>
-                    <TableHead className="pr-6 text-right">Actions</TableHead>
+                    <TableHead>{t("Insurance")}</TableHead>
+                    <TableHead>{t("Portal")}</TableHead>
+                    <TableHead className="pr-6 text-right">{t("Actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -284,7 +316,10 @@ function Page() {
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={`skel-${i}`} className="border-border/60">
                         {Array.from({ length: 8 }).map((__, j) => (
-                          <TableCell key={j} className={j === 0 ? "pl-6" : j === 7 ? "pr-6 text-right" : ""}>
+                          <TableCell
+                            key={j}
+                            className={j === 0 ? "pl-6" : j === 7 ? "pr-6 text-right" : ""}
+                          >
                             <span className="inline-block h-4 w-full max-w-[120px] animate-pulse rounded bg-muted" />
                           </TableCell>
                         ))}
@@ -298,7 +333,9 @@ function Page() {
                             <Inbox className="h-5 w-5" />
                           </span>
                           <div className="font-medium text-foreground">
-                            {carriers && carriers.length > 0 ? "No carriers match your search" : "No carriers yet"}
+                            {carriers && carriers.length > 0
+                              ? "No carriers match your search"
+                              : "No carriers yet"}
                           </div>
                           <div className="text-xs">
                             {carriers && carriers.length > 0
@@ -327,8 +364,11 @@ function Page() {
                             <div className="text-xs text-muted-foreground">
                               {c.carrierKind === "broker" ? "Broker" : "Carrier"} · {c.carrierId}
                               {c.blacklisted ? (
-                                <Badge variant="outline" className={`ml-2 ${toneBadge.destructive}`}>
-                                  Blacklisted
+                                <Badge
+                                  variant="outline"
+                                  className={`ml-2 ${toneBadge.destructive}`}
+                                >
+                                  {t("Blacklisted")}
                                 </Badge>
                               ) : null}
                             </div>
@@ -359,7 +399,11 @@ function Page() {
                           </TableCell>
                           <TableCell className="pr-6 text-right">
                             <div className="flex items-center justify-end gap-1">
-                              <CarrierActionsMenu carrier={c} role={role} onChanged={applyUpdated} />
+                              <CarrierActionsMenu
+                                carrier={c}
+                                role={role}
+                                onChanged={applyUpdated}
+                              />
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -391,24 +435,24 @@ function Page() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete carrier?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Delete carrier?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {carrierToDelete ? (
                 <>
                   This will permanently remove{" "}
-                  <span className="font-medium text-foreground">{carrierToDelete.companyName}</span> (
-                  {carrierToDelete.carrierId}). This cannot be undone.
+                  <span className="font-medium text-foreground">{carrierToDelete.companyName}</span>{" "}
+                  ({carrierToDelete.carrierId}). This cannot be undone.
                 </>
               ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>{t("Cancel")}</AlertDialogCancel>
             <Button variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
               {deleting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting…
+                  {t("Deleting…")}
                 </>
               ) : (
                 "Delete carrier"

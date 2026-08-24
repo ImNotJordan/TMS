@@ -9,16 +9,12 @@ import {
 } from "@/components/logistics-ai/ai-chat-utils";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/lib/auth";
 import { INTEGRATIONS_CONFIG_CHANGED } from "@/lib/integrations-config";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 const AiTriggerButton = React.forwardRef<
   HTMLButtonElement,
@@ -38,7 +34,7 @@ const AiTriggerButton = React.forwardRef<
         "hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         className,
       )}
-      aria-label="Open Logistics AI"
+      aria-label={t("Open Logistics AI")}
       aria-haspopup="dialog"
       aria-expanded={open}
       {...props}
@@ -56,9 +52,7 @@ const AiTriggerButton = React.forwardRef<
         )}
         aria-hidden
       />
-      <span className="sr-only">
-        {connected ? "OpenAI connected" : "OpenAI not connected"}
-      </span>
+      <span className="sr-only">{connected ? "OpenAI connected" : "OpenAI not connected"}</span>
     </Button>
   );
 });
@@ -69,14 +63,17 @@ export function AiHeaderButton() {
   const [open, setOpen] = React.useState(false);
   const [status, setStatus] = React.useState<LogisticsAiStatus | null>(null);
 
-  const refreshStatus = React.useCallback(async (force = false) => {
-    if (authStatus !== "authenticated") {
-      setStatus({ connected: false, code: "not_authenticated" });
-      return;
-    }
-    const next = await fetchLogisticsAiStatus({ force });
-    setStatus(next);
-  }, [authStatus]);
+  const refreshStatus = React.useCallback(
+    async (force = false) => {
+      if (authStatus !== "authenticated") {
+        setStatus({ connected: false, code: "not_authenticated" });
+        return;
+      }
+      const next = await fetchLogisticsAiStatus({ force });
+      setStatus(next);
+    },
+    [authStatus],
+  );
 
   React.useEffect(() => {
     void refreshStatus(false);
@@ -115,18 +112,14 @@ export function AiHeaderButton() {
   if (isMobile) {
     return (
       <>
-        <AiTriggerButton
-          open={open}
-          connected={connected}
-          onClick={() => setOpen(true)}
-        />
+        <AiTriggerButton open={open} connected={connected} onClick={() => setOpen(true)} />
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetContent
             side="bottom"
             className="flex h-[min(92dvh,720px)] flex-col gap-0 overflow-hidden p-0"
           >
             <SheetHeader className="sr-only">
-              <SheetTitle>Logistics AI</SheetTitle>
+              <SheetTitle>{t("Logistics AI")}</SheetTitle>
             </SheetHeader>
             {panel}
           </SheetContent>

@@ -36,6 +36,7 @@ import {
   type CrmContactRecord,
   type CrmLeadRecord,
 } from "@/lib/crm-store";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/crm")({
   head: () => ({
@@ -102,16 +103,28 @@ function Page() {
       .filter((l) => l.stage !== "Lost")
       .reduce((sum, l) => sum + crmLeadRevenueForecast(l), 0);
     const today = new Date().toISOString().slice(0, 7);
-    const wonMtd = rows.filter((l) => l.stage === "Won" && (l.updatedAt ?? "").slice(0, 7) === today).length;
+    const wonMtd = rows.filter(
+      (l) => l.stage === "Won" && (l.updatedAt ?? "").slice(0, 7) === today,
+    ).length;
     const atRisk = rows.filter((l) => {
       const margin = crmLeadMarginPct(l);
       return margin != null && l.marginFloorPct != null && margin < l.marginFloorPct;
     }).length;
     return [
       { label: "Open Opps", value: open.toString(), tone: "info" as const, icon: TrendingUp },
-      { label: "Pipeline Value", value: formatCurrency(pipelineValue), tone: "success" as const, icon: Briefcase },
+      {
+        label: "Pipeline Value",
+        value: formatCurrency(pipelineValue),
+        tone: "success" as const,
+        icon: Briefcase,
+      },
       { label: "Won (MTD)", value: wonMtd.toString(), tone: "success" as const, icon: TrendingUp },
-      { label: "Below Margin Floor", value: atRisk.toString(), tone: "warning" as const, icon: AlertTriangle },
+      {
+        label: "Below Margin Floor",
+        value: atRisk.toString(),
+        tone: "warning" as const,
+        icon: AlertTriangle,
+      },
     ];
   }, [leads]);
 
@@ -127,8 +140,10 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="CRM & Sales"
-        description="Leads, accounts, contacts, pipeline, a DAT prospecting bot, and campaigns — backed by DynamoDB."
+        title={t("CRM & Sales")}
+        description={t(
+          "Leads, accounts, contacts, pipeline, a DAT prospecting bot, and campaigns — backed by DynamoDB.",
+        )}
         actions={
           <Button
             variant="outline"
@@ -137,7 +152,11 @@ function Page() {
             onClick={() => void load({ force: true })}
             disabled={refreshing || loading}
           >
-            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
             Refresh
           </Button>
         }
@@ -154,7 +173,9 @@ function Page() {
                     <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {s.label}
                     </div>
-                    <span className={`flex h-7 w-7 items-center justify-center rounded-md ${toneStat[s.tone]}`}>
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-md ${toneStat[s.tone]}`}
+                    >
                       <Icon className="h-3.5 w-3.5" />
                     </span>
                   </div>
@@ -167,7 +188,7 @@ function Page() {
                       )}
                     </div>
                     <Badge variant="secondary" className={toneStat[s.tone]}>
-                      Live
+                      {t("Live")}
                     </Badge>
                   </div>
                 </CardContent>
@@ -180,7 +201,7 @@ function Page() {
           <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div className="flex-1">
-              <div className="font-semibold">Couldn't load from DynamoDB</div>
+              <div className="font-semibold">{t("Couldn't load from DynamoDB")}</div>
               <div className="mt-0.5 text-xs text-destructive/90">{error}</div>
             </div>
             <Button
@@ -189,7 +210,7 @@ function Page() {
               onClick={() => void load({ force: true })}
               className="border-destructive/30 text-destructive hover:bg-destructive/10"
             >
-              Retry
+              {t("Retry")}
             </Button>
           </div>
         )}
@@ -198,37 +219,56 @@ function Page() {
           <CardContent className="p-4 sm:p-6">
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="overview">{t("Overview")}</TabsTrigger>
                 <TabsTrigger value="pipeline" className="gap-1.5">
-                  <TrendingUp className="hidden h-3.5 w-3.5 sm:block" /> Pipeline
+                  <TrendingUp className="hidden h-3.5 w-3.5 sm:block" /> {t("Pipeline")}
                 </TabsTrigger>
                 <TabsTrigger value="accounts" className="gap-1.5">
-                  <Building2 className="hidden h-3.5 w-3.5 sm:block" /> Accounts
+                  <Building2 className="hidden h-3.5 w-3.5 sm:block" /> {t("Accounts")}
                 </TabsTrigger>
                 <TabsTrigger value="contacts" className="gap-1.5">
-                  <Users className="hidden h-3.5 w-3.5 sm:block" /> Contacts
+                  <Users className="hidden h-3.5 w-3.5 sm:block" /> {t("Contacts")}
                 </TabsTrigger>
                 <TabsTrigger value="prospecting" className="gap-1.5">
-                  <Radar className="hidden h-3.5 w-3.5 sm:block" /> Prospecting Bot
+                  <Radar className="hidden h-3.5 w-3.5 sm:block" /> {t("Prospecting Bot")}
                 </TabsTrigger>
                 <TabsTrigger value="campaigns" className="gap-1.5">
-                  <Megaphone className="hidden h-3.5 w-3.5 sm:block" /> Campaigns
+                  <Megaphone className="hidden h-3.5 w-3.5 sm:block" /> {t("Campaigns")}
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="mt-5 space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Leads, accounts, and contacts each carry a full activity timeline. Use the Pipeline
-                  tab to move opportunities across Prospect → Quoted → Won → Lost, the Prospecting Bot
-                  to source and qualify new broker relationships from DAT, and Campaigns to run
-                  outbound sequences.
+                  {t(
+                    "Leads, accounts, and contacts each carry a full activity timeline. Use the Pipeline\r\n                  tab to move opportunities across Prospect → Quoted → Won → Lost, the Prospecting Bot\r\n                  to source and qualify new broker relationships from DAT, and Campaigns to run\r\n                  outbound sequences.",
+                  )}
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {[
-                    { label: "Pipeline", desc: "Stages, revenue forecast vs. margin target", tab: "pipeline", icon: TrendingUp },
-                    { label: "Accounts", desc: "Companies you sell to or buy capacity from", tab: "accounts", icon: Building2 },
-                    { label: "Contacts", desc: "People, linked to accounts", tab: "contacts", icon: Users },
-                    { label: "Prospecting Bot", desc: "DAT scan → call → guardrail → log", tab: "prospecting", icon: Radar },
+                    {
+                      label: "Pipeline",
+                      desc: "Stages, revenue forecast vs. margin target",
+                      tab: "pipeline",
+                      icon: TrendingUp,
+                    },
+                    {
+                      label: "Accounts",
+                      desc: "Companies you sell to or buy capacity from",
+                      tab: "accounts",
+                      icon: Building2,
+                    },
+                    {
+                      label: "Contacts",
+                      desc: "People, linked to accounts",
+                      tab: "contacts",
+                      icon: Users,
+                    },
+                    {
+                      label: "Prospecting Bot",
+                      desc: "DAT scan → call → guardrail → log",
+                      tab: "prospecting",
+                      icon: Radar,
+                    },
                   ].map((s) => (
                     <button
                       key={s.tab}

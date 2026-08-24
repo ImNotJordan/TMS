@@ -13,6 +13,7 @@ import {
   type RouteWaypoint,
 } from "@/lib/google-maps-route";
 import type { TrackingSession } from "@/lib/tracking-workflow-store";
+import { t } from "@/lib/i18n/t";
 
 type MapPoint = {
   lat: number;
@@ -53,7 +54,7 @@ function MapSkeleton({ providerLabel }: { providerLabel: string }) {
     <div className="relative h-[min(420px,52vh)] overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-muted/40 via-card to-info/5">
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm font-medium text-foreground">Plotting route on map…</p>
+        <p className="text-sm font-medium text-foreground">{t("Plotting route on map…")}</p>
         <p className="text-xs text-muted-foreground">Using integration: {providerLabel}</p>
       </div>
     </div>
@@ -70,19 +71,19 @@ function MapsNotConfigured({
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border/80 bg-muted/20 px-6 py-14 text-center">
       <MapPin className="h-8 w-8 text-muted-foreground" />
-      <p className="text-sm font-medium text-foreground">Google Maps integration required</p>
+      <p className="text-sm font-medium text-foreground">{t("Google Maps integration required")}</p>
       <p className="max-w-sm text-xs text-muted-foreground">
         {!workspaceConfigured ? (
           <>
             Workspace settings are not available. Set{" "}
             <code className="text-[10px]">VITE_WORKSPACE_SETTINGS_TABLE_NAME</code> in{" "}
-            <code className="text-[10px]">.env</code>, then sign in.
+            <code className="text-[10px]">{t(".env")}</code>, then sign in.
           </>
         ) : (
           <>
-            Open <span className="font-medium text-foreground">Settings → Integrations</span>, configure
-            Google Maps (API key + enable geocoding), and save. The tracking map uses that same
-            integration for tiles, pins, and directions.
+            Open <span className="font-medium text-foreground">{t("Settings → Integrations")}</span>
+            , configure Google Maps (API key + enable geocoding), and save. The tracking map uses
+            that same integration for tiles, pins, and directions.
           </>
         )}
       </p>
@@ -223,9 +224,7 @@ export function TrackingRouteMap({ session }: TrackingRouteMapProps) {
   const gps = session.gps.location;
   const gpsSource = session.gps.source ?? "simulated";
   const hasGps =
-    Number.isFinite(gps.lat) &&
-    Number.isFinite(gps.lng) &&
-    (gps.lat !== 0 || gps.lng !== 0);
+    Number.isFinite(gps.lat) && Number.isFinite(gps.lng) && (gps.lat !== 0 || gps.lng !== 0);
   const isLiveDriverGps = hasGps && gpsSource === "driver";
 
   const routingWaypoints: RouteWaypoint[] = React.useMemo(() => {
@@ -296,10 +295,7 @@ export function TrackingRouteMap({ session }: TrackingRouteMapProps) {
 
   if (!mapsActive || !apiKey) {
     return (
-      <MapsNotConfigured
-        workspaceConfigured={workspaceConfigured}
-        loadError={integrationError}
-      />
+      <MapsNotConfigured workspaceConfigured={workspaceConfigured} loadError={integrationError} />
     );
   }
 
@@ -321,7 +317,7 @@ export function TrackingRouteMap({ session }: TrackingRouteMapProps) {
             void loadPoints(controller.signal);
           }}
         >
-          <RefreshCw className="h-3.5 w-3.5" /> Retry
+          <RefreshCw className="h-3.5 w-3.5" /> {t("Retry")}
         </Button>
       </div>
     );
@@ -352,13 +348,7 @@ export function TrackingRouteMap({ session }: TrackingRouteMapProps) {
                     : "gap-1.5 border-success/30 bg-success/15 text-success shadow-sm backdrop-blur-sm"
                 }
               >
-                <span
-                  className={
-                    isLiveDriverGps
-                      ? "relative flex h-2 w-2"
-                      : "hidden"
-                  }
-                >
+                <span className={isLiveDriverGps ? "relative flex h-2 w-2" : "hidden"}>
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
                 </span>
@@ -367,23 +357,26 @@ export function TrackingRouteMap({ session }: TrackingRouteMapProps) {
               </Badge>
             )}
             <Badge variant="outline" className="bg-background/80 text-[10px] backdrop-blur-sm">
-              Google Maps integration
+              {t("Google Maps integration")}
             </Badge>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             {usedFallback && (
               <Badge variant="outline" className="bg-background/80 text-[10px] backdrop-blur-sm">
-                Approximate pins
+                {t("Approximate pins")}
               </Badge>
             )}
             {routingRoads && (
-              <Badge variant="outline" className="gap-1 bg-background/80 text-[10px] backdrop-blur-sm">
-                <Loader2 className="h-3 w-3 animate-spin" /> Routing roads…
+              <Badge
+                variant="outline"
+                className="gap-1 bg-background/80 text-[10px] backdrop-blur-sm"
+              >
+                <Loader2 className="h-3 w-3 animate-spin" /> {t("Routing roads…")}
               </Badge>
             )}
             {usedStraightFallback && !routingRoads && (
               <Badge variant="outline" className="bg-background/80 text-[10px] backdrop-blur-sm">
-                Direct line (directions unavailable)
+                {t("Direct line (directions unavailable)")}
               </Badge>
             )}
           </div>
@@ -394,11 +387,7 @@ export function TrackingRouteMap({ session }: TrackingRouteMapProps) {
           apiKey={apiKey}
           pickup={pickup}
           delivery={delivery}
-          gps={
-            hasGps
-              ? { lat: gps.lat, lng: gps.lng, source: gpsSource }
-              : null
-          }
+          gps={hasGps ? { lat: gps.lat, lng: gps.lng, source: gpsSource } : null}
           routeLine={routeLine}
           boundsPoints={boundsPoints}
           dashedRoute={usedStraightFallback}
@@ -420,7 +409,7 @@ export function TrackingRouteMap({ session }: TrackingRouteMapProps) {
             : `${session.milesTotal} mi route`}{" "}
           · {session.milesRemaining} mi remaining
         </span>
-        <span>Settings → Integrations · Google Maps</span>
+        <span>{t("Settings → Integrations · Google Maps")}</span>
       </div>
     </div>
   );
@@ -458,9 +447,7 @@ function StopCard({
           <p className="truncate text-[10px] text-muted-foreground">
             {point.city}, {point.state}
           </p>
-          {date && (
-            <p className="truncate text-[9px] text-muted-foreground">Scheduled {date}</p>
-          )}
+          {date && <p className="truncate text-[9px] text-muted-foreground">Scheduled {date}</p>}
         </div>
       </div>
     </div>

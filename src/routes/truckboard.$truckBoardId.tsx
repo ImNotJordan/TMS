@@ -22,6 +22,7 @@ import {
   type TruckDraft,
 } from "@/components/truckboard/create-truck-dialog";
 import { getTruckByIdCached, updateTruck, type TruckRecord } from "@/lib/trucks-store";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/truckboard/$truckBoardId")({
   head: ({ params }) => ({
@@ -202,7 +203,7 @@ function TruckDetailPage() {
       return (
         <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-          Unsaved edits
+          {t("Unsaved edits")}
         </span>
       );
     }
@@ -216,10 +217,10 @@ function TruckDetailPage() {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
         <div className="rounded-xl border border-destructive/30 bg-destructive/8 p-6 text-sm text-destructive">
-          <div className="font-semibold">Could not load this truck</div>
+          <div className="font-semibold">{t("Could not load this truck")}</div>
           <p className="mt-2 text-xs opacity-90">{fetchError}</p>
           <Button className="mt-4" variant="outline" asChild>
-            <Link to="/truckboard">Back to TruckBoard</Link>
+            <Link to="/truckboard">{t("Back to TruckBoard")}</Link>
           </Button>
         </div>
       </div>
@@ -231,13 +232,13 @@ function TruckDetailPage() {
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-20 text-center">
         <Truck className="h-12 w-12 text-muted-foreground" />
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Truck not found</h1>
+          <h1 className="text-lg font-semibold text-foreground">{t("Truck not found")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             No DynamoDB item for <span className="font-mono">{truckBoardId}</span>.
           </p>
         </div>
         <Button variant="outline" asChild>
-          <Link to="/truckboard">Back to TruckBoard</Link>
+          <Link to="/truckboard">{t("Back to TruckBoard")}</Link>
         </Button>
       </div>
     );
@@ -252,7 +253,7 @@ function TruckDetailPage() {
         <div className="sticky top-0 z-20 -mx-px mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-background/95 px-1 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex min-w-0 items-center gap-3">
             <Button variant="ghost" size="icon" className="shrink-0" asChild>
-              <Link to="/truckboard" aria-label="Back to TruckBoard">
+              <Link to="/truckboard" aria-label={t("Back to TruckBoard")}>
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
@@ -262,7 +263,7 @@ function TruckDetailPage() {
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-lg font-semibold tracking-tight text-foreground">
-                  Edit truck
+                  {t("Edit truck")}
                 </h1>
                 <p className="truncate text-xs text-muted-foreground">
                   {draft.truckBoardId}
@@ -273,12 +274,18 @@ function TruckDetailPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {dirty && (
-              <Button type="button" variant="ghost" size="sm" onClick={handleDiscard} className="text-muted-foreground">
-                <X className="mr-1 h-4 w-4" /> Discard
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleDiscard}
+                className="text-muted-foreground"
+              >
+                <X className="mr-1 h-4 w-4" /> {t("Discard")}
               </Button>
             )}
             <Button type="button" variant="outline" size="sm" asChild>
-              <Link to="/truckboard">Close</Link>
+              <Link to="/truckboard">{t("Close")}</Link>
             </Button>
             <Button
               type="button"
@@ -289,11 +296,11 @@ function TruckDetailPage() {
             >
               {saving ? (
                 <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Saving…
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("Saving…")}
                 </>
               ) : (
                 <>
-                  <Save className="mr-1 h-4 w-4" /> Save changes
+                  <Save className="mr-1 h-4 w-4" /> {t("Save changes")}
                 </>
               )}
             </Button>
@@ -312,8 +319,12 @@ function TruckDetailPage() {
                 <ReviewIcon className="h-4 w-4" />
               </span>
               <div className="min-w-0 pt-px">
-                <h2 className="text-sm font-semibold tracking-tight text-foreground">{reviewMeta.label}</h2>
-                <p className="text-xs leading-snug text-muted-foreground">{reviewMeta.description}</p>
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  {reviewMeta.label}
+                </h2>
+                <p className="text-xs leading-snug text-muted-foreground">
+                  {reviewMeta.description}
+                </p>
               </div>
             </div>
             <StepReview
@@ -345,15 +356,30 @@ function TruckDetailPage() {
               sectionRefs={sectionRefs}
               className="lg:col-span-2"
             >
-              <StepLocation draft={draft} update={update} touched={showValidationErrors} errors={stepErrors[2]} />
+              <StepLocation
+                draft={draft}
+                update={update}
+                touched={showValidationErrors}
+                errors={stepErrors[2]}
+              />
             </EditTruckSection>
 
             <EditTruckSection stepNum={3} meta={TRUCK_FORM_STEPS[2]} sectionRefs={sectionRefs}>
-              <StepEquipment draft={draft} update={update} touched={showValidationErrors} errors={stepErrors[3]} />
+              <StepEquipment
+                draft={draft}
+                update={update}
+                touched={showValidationErrors}
+                errors={stepErrors[3]}
+              />
             </EditTruckSection>
 
             <EditTruckSection stepNum={5} meta={TRUCK_FORM_STEPS[4]} sectionRefs={sectionRefs}>
-              <StepCarrier draft={draft} update={update} touched={showValidationErrors} errors={stepErrors[5]} />
+              <StepCarrier
+                draft={draft}
+                update={update}
+                touched={showValidationErrors}
+                errors={stepErrors[5]}
+              />
             </EditTruckSection>
 
             <EditTruckSection
@@ -382,7 +408,9 @@ function TruckDetailPage() {
         </div>
 
         <div className="sticky bottom-0 z-10 mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 bg-background/95 px-1 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">{footerStatus}</div>
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
+            {footerStatus}
+          </div>
         </div>
       </div>
     </div>

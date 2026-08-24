@@ -22,6 +22,7 @@ import {
   type CrmLeadStage,
 } from "@/lib/crm-store";
 import { Card, FieldShell, GridSection, SectionTitle, generateCrmId } from "./crm-shared";
+import { t } from "@/lib/i18n/t";
 
 const STAGE_OPTIONS: FancySelectOption[] = CRM_LEAD_STAGES.map((s) => ({ value: s, label: s }));
 
@@ -46,7 +47,8 @@ export function CreateLeadDialog({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
-  const setOpen = (next: boolean) => (isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next));
+  const setOpen = (next: boolean) =>
+    isControlled ? onOpenChange?.(next) : setUncontrolledOpen(next);
 
   const [title, setTitle] = React.useState("");
   const [stage, setStage] = React.useState<CrmLeadStage>(defaultStage ?? "Prospect");
@@ -88,7 +90,10 @@ export function CreateLeadDialog({
     }
   }, [open, reset]);
 
-  const accountOptions: FancySelectOption[] = accounts.map((a) => ({ value: a.accountId, label: a.name }));
+  const accountOptions: FancySelectOption[] = accounts.map((a) => ({
+    value: a.accountId,
+    label: a.name,
+  }));
   const contactOptions: FancySelectOption[] = contacts
     .filter((c) => !accountId || c.accountId === accountId)
     .map((c) => ({ value: c.contactId, label: `${c.firstName} ${c.lastName}` }));
@@ -131,62 +136,111 @@ export function CreateLeadDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="!max-w-2xl w-[94vw] gap-0 overflow-hidden border-border/70 p-0 sm:rounded-2xl">
-        <DialogTitle className="sr-only">Add Lead</DialogTitle>
-        <DialogDescription className="sr-only">Create a pipeline opportunity.</DialogDescription>
+        <DialogTitle className="sr-only">{t("Add Lead")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {t("Create a pipeline opportunity.")}
+        </DialogDescription>
         <div className="border-b border-border/70 px-6 py-4">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Add Lead</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">{t("Add Lead")}</h2>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
           <Card>
-            <SectionTitle title="Opportunity" icon={TrendingUp} />
+            <SectionTitle title={t("Opportunity")} icon={TrendingUp} />
             <GridSection cols={2}>
-              <FieldShell label="Title" required error={hasError}>
+              <FieldShell label={t("Title")} required error={hasError}>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Acme — weekly DFW to ATL lane"
+                  placeholder={t("Acme — weekly DFW to ATL lane")}
                   className={cn(hasError && "border-destructive/60")}
                 />
               </FieldShell>
-              <FieldShell label="Stage">
-                <FancySelect value={stage} onChange={(v) => setStage(v as CrmLeadStage)} options={STAGE_OPTIONS} searchable={false} />
+              <FieldShell label={t("Stage")}>
+                <FancySelect
+                  value={stage}
+                  onChange={(v) => setStage(v as CrmLeadStage)}
+                  options={STAGE_OPTIONS}
+                  searchable={false}
+                />
               </FieldShell>
             </GridSection>
             <GridSection cols={2} className="mt-4">
-              <FieldShell label="Account" hint="Optional">
-                <FancySelect value={accountId} onChange={setAccountId} options={accountOptions} placeholder="Link account" emptyMessage="No accounts yet" />
+              <FieldShell label={t("Account")} hint={t("Optional")}>
+                <FancySelect
+                  value={accountId}
+                  onChange={setAccountId}
+                  options={accountOptions}
+                  placeholder={t("Link account")}
+                  emptyMessage={t("No accounts yet")}
+                />
               </FieldShell>
-              <FieldShell label="Contact" hint="Optional">
-                <FancySelect value={contactId} onChange={setContactId} options={contactOptions} placeholder="Link contact" emptyMessage="No contacts yet" />
+              <FieldShell label={t("Contact")} hint={t("Optional")}>
+                <FancySelect
+                  value={contactId}
+                  onChange={setContactId}
+                  options={contactOptions}
+                  placeholder={t("Link contact")}
+                  emptyMessage={t("No contacts yet")}
+                />
               </FieldShell>
             </GridSection>
             <GridSection cols={3} className="mt-4">
-              <FieldShell label="Origin">
-                <Input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="Dallas, TX" />
+              <FieldShell label={t("Origin")}>
+                <Input
+                  value={origin}
+                  onChange={(e) => setOrigin(e.target.value)}
+                  placeholder={t("Dallas, TX")}
+                />
               </FieldShell>
-              <FieldShell label="Destination">
-                <Input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="Atlanta, GA" />
+              <FieldShell label={t("Destination")}>
+                <Input
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  placeholder={t("Atlanta, GA")}
+                />
               </FieldShell>
-              <FieldShell label="Equipment">
-                <Input value={equipmentType} onChange={(e) => setEquipmentType(e.target.value)} placeholder="Dry Van" />
+              <FieldShell label={t("Equipment")}>
+                <Input
+                  value={equipmentType}
+                  onChange={(e) => setEquipmentType(e.target.value)}
+                  placeholder={t("Dry Van")}
+                />
               </FieldShell>
             </GridSection>
             <GridSection cols={4} className="mt-4">
-              <FieldShell label="Quoted Rate ($)">
-                <Input type="number" value={quotedRate} onChange={(e) => setQuotedRate(e.target.value)} placeholder="1850" />
+              <FieldShell label={t("Quoted Rate ($)")}>
+                <Input
+                  type="number"
+                  value={quotedRate}
+                  onChange={(e) => setQuotedRate(e.target.value)}
+                  placeholder="1850"
+                />
               </FieldShell>
-              <FieldShell label="Est. Cost ($)">
-                <Input type="number" value={estimatedCost} onChange={(e) => setEstimatedCost(e.target.value)} placeholder="1500" />
+              <FieldShell label={t("Est. Cost ($)")}>
+                <Input
+                  type="number"
+                  value={estimatedCost}
+                  onChange={(e) => setEstimatedCost(e.target.value)}
+                  placeholder="1500"
+                />
               </FieldShell>
-              <FieldShell label="Margin Floor %" hint="Guardrail">
-                <Input type="number" value={marginFloorPct} onChange={(e) => setMarginFloorPct(e.target.value)} />
+              <FieldShell label={t("Margin Floor %")} hint={t("Guardrail")}>
+                <Input
+                  type="number"
+                  value={marginFloorPct}
+                  onChange={(e) => setMarginFloorPct(e.target.value)}
+                />
               </FieldShell>
-              <FieldShell label="Win Probability %">
-                <Input type="number" value={probabilityPct} onChange={(e) => setProbabilityPct(e.target.value)} />
+              <FieldShell label={t("Win Probability %")}>
+                <Input
+                  type="number"
+                  value={probabilityPct}
+                  onChange={(e) => setProbabilityPct(e.target.value)}
+                />
               </FieldShell>
             </GridSection>
             <div className="mt-4">
-              <FieldShell label="Notes">
+              <FieldShell label={t("Notes")}>
                 <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
               </FieldShell>
             </div>
@@ -203,10 +257,20 @@ export function CreateLeadDialog({
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
-            <Button type="button" size="sm" disabled={submitting} onClick={handleSubmit} className="gap-1.5">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            <Button
+              type="button"
+              size="sm"
+              disabled={submitting}
+              onClick={handleSubmit}
+              className="gap-1.5"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
               Save Lead
             </Button>
           </div>

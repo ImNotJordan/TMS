@@ -236,12 +236,30 @@ export async function handleAdminCredentialsRequest(request: Request): Promise<R
 
     // Cognito's own validation messages are safe to surface — they describe the
     // request, not another tenant's data — and an admin needs them to act.
-    if (name === "UsernameExistsException") {
+    if (name === "UsernameExistsException" || name === "AliasExistsException") {
       return jsonError("An account with that email already exists.", 409, "already_exists");
     }
     if (name === "InvalidPasswordException" || name === "InvalidParameterException") {
       return jsonError(message, 400, "invalid_payload");
     }
-    return jsonError("Could not complete that request.", 502, "error");
+    if (
+      name === "AccessDeniedException" ||
+      name === "NotAuthorizedException" ||
+      name === "UnauthorizedException"
+    ) {
+      return jsonError(
+        "Server is not permitted to create or recover Cognito accounts. Re-render titan-server-settings and attach it to the titan-worker IAM user.",
+        503,
+        "missing_cognito_permissions",
+      );
+    }
+    if (name === "CodeDeliveryFailureException") {
+      return jsonError(
+        "Cognito could not send the invite email. Check the user pool email settings, or create the account with send invite turned off.",
+        502,
+        "invite_delivery_failed",
+      );
+    }
+    return jsonError(message || "Could not complete that request.", 502, "error");
   }
 }

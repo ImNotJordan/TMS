@@ -9,13 +9,14 @@ import {
 } from "recharts";
 
 import type { RevenuePoint } from "@/lib/dashboard-data";
+import { t } from "@/lib/i18n/t";
 
 export function RevenueChart({ data }: { data: RevenuePoint[] }) {
   const hasRevenue = data.some((d) => d.revenue > 0 || d.cost > 0);
   if (!hasRevenue) {
     return (
       <div className="flex h-[260px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-        No load revenue in the last 8 weeks — book a load to see this trend.
+        {t("No load revenue in the last 8 weeks — book a load to see this trend.")}
       </div>
     );
   }
@@ -33,7 +34,13 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-        <XAxis dataKey="week" stroke="var(--color-muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+        <XAxis
+          dataKey="week"
+          stroke="var(--color-muted-foreground)"
+          fontSize={11}
+          tickLine={false}
+          axisLine={false}
+        />
         <YAxis
           stroke="var(--color-muted-foreground)"
           fontSize={11}
@@ -53,8 +60,21 @@ export function RevenueChart({ data }: { data: RevenuePoint[] }) {
             name === "revenue" ? "Revenue" : "Carrier cost",
           ]}
         />
-        <Area type="monotone" dataKey="cost" stroke="var(--color-info)" strokeDasharray="4 4" fill="url(#tgt)" strokeWidth={1.5} />
-        <Area type="monotone" dataKey="revenue" stroke="var(--color-primary)" fill="url(#rev)" strokeWidth={2} />
+        <Area
+          type="monotone"
+          dataKey="cost"
+          stroke="var(--color-info)"
+          strokeDasharray="4 4"
+          fill="url(#tgt)"
+          strokeWidth={1.5}
+        />
+        <Area
+          type="monotone"
+          dataKey="revenue"
+          stroke="var(--color-primary)"
+          fill="url(#rev)"
+          strokeWidth={2}
+        />
       </AreaChart>
     </ResponsiveContainer>
   );

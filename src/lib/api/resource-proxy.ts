@@ -24,6 +24,7 @@ import {
 } from "@/lib/server/tenant-repository";
 import { ServerDataPrincipalMissingError } from "@/lib/server/server-dynamo";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
+import { refuseClientOnOpsApi } from "@/lib/tenant/client-scope";
 import { logTenantDenial, tenantErrorResponse } from "@/lib/tenant/server-tenant-context";
 import {
   COMPANY_INDEX,
@@ -113,6 +114,9 @@ export async function handleResourceApiRequest(request: Request): Promise<Respon
   } catch (err) {
     return tenantErrorResponse(err) ?? jsonError("Sign in required.", 401, "not_authenticated");
   }
+
+  const refused = refuseClientOnOpsApi(ctx, url.pathname);
+  if (refused) return refused;
 
   try {
     switch (request.method) {

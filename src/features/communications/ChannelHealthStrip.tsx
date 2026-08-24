@@ -7,12 +7,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { integrationStatusBadgeClass } from "@/features/integrations";
 
-import {
-  type ChannelAvailability,
-  useChannelAvailability,
-} from "./hooks/useChannelAvailability";
+import { type ChannelAvailability, useChannelAvailability } from "./hooks/useChannelAvailability";
 import { CHANNEL_LABELS } from "./lib/formatters";
 import type { ChannelId } from "./types";
+import { t } from "@/lib/i18n/t";
 
 const ICONS: Record<ChannelId, typeof Mail> = {
   email: Mail,
@@ -51,19 +49,23 @@ export function ChannelHealthStrip() {
       <CardContent className="p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold text-foreground">Channel health</p>
+            <p className="text-sm font-semibold text-foreground">{t("Channel health")}</p>
             <p className="text-xs text-muted-foreground">
-              Connection status and last sync for each outbound channel
+              {t("Connection status and last sync for each outbound channel")}
             </p>
           </div>
           <Button variant="outline" size="sm" className="h-8 gap-1.5" asChild>
             <Link to="/settings" search={{ category: "integrations" } as never}>
               <Plug className="h-3.5 w-3.5" />
-              Integrations
+              {t("Integrations")}
             </Link>
           </Button>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" role="list" aria-label="Channel health">
+        <div
+          className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
+          role="list"
+          aria-label={t("Channel health")}
+        >
           {channels.map((ch) => (
             <ChannelChip key={ch.channel} availability={ch} />
           ))}
@@ -115,9 +117,12 @@ function ChannelChip({ availability }: { availability: ChannelAvailability }) {
               : availability.connectionLabel}
           </Badge>
         </div>
-        <p className="mt-0.5 truncate text-[11px] text-muted-foreground" title={availability.reason}>
+        <p
+          className="mt-0.5 truncate text-[11px] text-muted-foreground"
+          title={availability.reason}
+        >
           {disconnected
-            ? availability.reason ?? "Connect in Settings → Integrations"
+            ? (availability.reason ?? "Connect in Settings → Integrations")
             : `Last sync: ${availability.lastSyncLabel}`}
         </p>
       </div>

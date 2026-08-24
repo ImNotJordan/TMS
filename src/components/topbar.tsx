@@ -57,6 +57,7 @@ import {
   type GlobalSearchResult,
   type GlobalSearchResultType,
 } from "@/lib/global-search";
+import { t } from "@/lib/i18n/t";
 
 const CreateLoadDialog = lazy(() =>
   import("@/components/loads/create-load-dialog").then((m) => ({
@@ -75,6 +76,7 @@ const ROLE_LABELS: Record<string, string> = {
   dispatch: "Dispatcher",
   broker: "Broker",
   driver: "Driver",
+  client: "Client",
 };
 
 const QUICK_CREATE = [
@@ -120,12 +122,13 @@ export function Topbar() {
     attrs?.["custom:job_title"] ||
     attrs?.["custom:department"] ||
     (status === "loading" || permissions.loading ? "" : "Signed in");
-  const initials = (displayName === "Account" ? "U" : displayName)
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("") || "U";
+  const initials =
+    (displayName === "Account" ? "U" : displayName)
+      .split(/[\s@.]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() ?? "")
+      .join("") || "U";
 
   const performSignOut = async () => {
     setSignOutBusy(true);
@@ -260,181 +263,194 @@ export function Topbar() {
   return (
     <>
       <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur-md sm:px-4">
-      <SidebarTrigger />
-      <Separator orientation="vertical" className="h-6" />
+        <SidebarTrigger />
+        <Separator orientation="vertical" className="h-6" />
 
-      <div ref={searchWrapRef} className="relative ml-1 hidden max-w-md flex-1 md:block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          ref={searchInputRef}
-          aria-label="Global search"
-          placeholder="Search loads, carriers, lanes, contacts, documents..."
-          className="h-9 rounded-lg border-border bg-muted/40 pl-9 pr-16 text-sm focus-visible:ring-1"
-          value={globalSearchQuery}
-          onChange={(event) => {
-            const nextQuery = event.target.value;
-            setGlobalSearchQuery(nextQuery);
-            const show = nextQuery.trim().length > 0;
-            setGlobalSearchOpen(show);
-            if (show) void ensureGlobalSearchIndex();
-          }}
-          onFocus={openSearch}
-        />
-        <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 select-none rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-block">
-          Ctrl/Cmd+K
-        </kbd>
-        {globalSearchOpen && globalSearchQuery.trim().length > 0 ? (
-          <div className="absolute left-0 right-0 top-[calc(100%+0.45rem)] z-50 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
-            {globalSearchLoading ? (
-              <div className="px-3 py-3 text-sm text-muted-foreground">Building global search index...</div>
-            ) : null}
-            {globalSearchError ? (
-              <div className="px-3 py-3 text-sm text-destructive">
-                {globalSearchError}{" "}
-                <button
-                  type="button"
-                  className="font-medium underline underline-offset-2"
-                  onClick={() => void ensureGlobalSearchIndex(true)}
-                >
-                  Retry
-                </button>
-              </div>
-            ) : null}
-            {!globalSearchLoading && !globalSearchError ? (
-              <div className="max-h-[22rem] overflow-y-auto py-1">
-                {visibleSearchResults.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-muted-foreground">No matches found.</div>
-                ) : (
-                  orderedTypes.map((type) => {
-                    const rows = groupedSearchResults[type];
-                    if (rows.length === 0) return null;
-                    return (
-                      <div key={type}>
-                        <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          {typeLabels[type]}
+        <div ref={searchWrapRef} className="relative ml-1 hidden max-w-md flex-1 md:block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            ref={searchInputRef}
+            aria-label={t("Global search")}
+            placeholder={t("Search loads, carriers, lanes, contacts, documents...")}
+            className="h-9 rounded-lg border-border bg-muted/40 pl-9 pr-16 text-sm focus-visible:ring-1"
+            value={globalSearchQuery}
+            onChange={(event) => {
+              const nextQuery = event.target.value;
+              setGlobalSearchQuery(nextQuery);
+              const show = nextQuery.trim().length > 0;
+              setGlobalSearchOpen(show);
+              if (show) void ensureGlobalSearchIndex();
+            }}
+            onFocus={openSearch}
+          />
+          <kbd className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 select-none rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-block">
+            {t("Ctrl/Cmd+K")}
+          </kbd>
+          {globalSearchOpen && globalSearchQuery.trim().length > 0 ? (
+            <div className="absolute left-0 right-0 top-[calc(100%+0.45rem)] z-50 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+              {globalSearchLoading ? (
+                <div className="px-3 py-3 text-sm text-muted-foreground">
+                  {t("Building global search index...")}
+                </div>
+              ) : null}
+              {globalSearchError ? (
+                <div className="px-3 py-3 text-sm text-destructive">
+                  {globalSearchError}{" "}
+                  <button
+                    type="button"
+                    className="font-medium underline underline-offset-2"
+                    onClick={() => void ensureGlobalSearchIndex(true)}
+                  >
+                    {t("Retry")}
+                  </button>
+                </div>
+              ) : null}
+              {!globalSearchLoading && !globalSearchError ? (
+                <div className="max-h-[22rem] overflow-y-auto py-1">
+                  {visibleSearchResults.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-muted-foreground">
+                      {t("No matches found.")}
+                    </div>
+                  ) : (
+                    orderedTypes.map((type) => {
+                      const rows = groupedSearchResults[type];
+                      if (rows.length === 0) return null;
+                      return (
+                        <div key={type}>
+                          <div className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {typeLabels[type]}
+                          </div>
+                          {rows.map((row) => (
+                            <button
+                              key={row.id}
+                              type="button"
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => selectSearchResult(row)}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm">{row.title}</div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {row.subtitle}
+                                </div>
+                              </div>
+                              <span className="shrink-0 text-[10px] text-muted-foreground">
+                                {typeLabels[row.type]}
+                              </span>
+                            </button>
+                          ))}
                         </div>
-                        {rows.map((row) => (
-                          <button
-                            key={row.id}
-                            type="button"
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => selectSearchResult(row)}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm">{row.title}</div>
-                              <div className="truncate text-xs text-muted-foreground">{row.subtitle}</div>
-                            </div>
-                            <span className="shrink-0 text-[10px] text-muted-foreground">{typeLabels[row.type]}</span>
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
-      <div className="ml-auto flex items-center gap-1">
-        <AiHeaderButton />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" className="h-9 gap-1.5 rounded-lg shadow-sm">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Create</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuLabel>Quick create</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {QUICK_CREATE.map((q) => {
-              const Icon = q.icon;
-              return (
-                <DropdownMenuItem
-                  key={q.label}
-                  className="gap-2"
-                  onSelect={() => {
-                    if (q.label === "New Load") {
-                      setCreateLoadOpen(true);
-                      return;
-                    }
-                    toast.info("Coming soon", { description: `${q.label} isn't available yet.` });
-                  }}
-                >
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                  {q.label}
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="ml-auto flex items-center gap-1">
+          <AiHeaderButton />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="h-9 gap-1.5 rounded-lg shadow-sm">
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">{t("Create")}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel>{t("Quick create")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {QUICK_CREATE.map((q) => {
+                const Icon = q.icon;
+                return (
+                  <DropdownMenuItem
+                    key={q.label}
+                    className="gap-2"
+                    onSelect={() => {
+                      if (q.label === "New Load") {
+                        setCreateLoadOpen(true);
+                        return;
+                      }
+                      toast.info("Coming soon", { description: `${q.label} isn't available yet.` });
+                    }}
+                  >
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    {q.label}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 rounded-lg"
-          onClick={() => setDark((d) => !d)}
-          aria-label="Toggle theme"
-        >
-          {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-lg"
+            onClick={() => setDark((d) => !d)}
+            aria-label={t("Toggle theme")}
+          >
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
 
-        <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-lg" aria-label="Messages">
-          <MessageSquare className="h-4 w-4" />
-          <Badge className="absolute -right-0.5 -top-0.5 h-4 min-w-4 justify-center rounded-full bg-info px-1 text-[10px] text-info-foreground">
-            4
-          </Badge>
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative h-9 w-9 rounded-lg"
+            aria-label={t("Messages")}
+          >
+            <MessageSquare className="h-4 w-4" />
+            <Badge className="absolute -right-0.5 -top-0.5 h-4 min-w-4 justify-center rounded-full bg-info px-1 text-[10px] text-info-foreground">
+              4
+            </Badge>
+          </Button>
 
-        <NotificationsPopover />
+          <NotificationsPopover />
 
-        <Separator orientation="vertical" className="mx-1 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-6" />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-9 gap-2 rounded-lg pl-1 pr-2">
-              <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="hidden flex-col items-start leading-tight md:flex">
-                <span className="text-xs font-medium">{displayName}</span>
-                {roleLine && (
-                  <span className="text-[10px] text-muted-foreground">{roleLine}</span>
-                )}
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuLabel>My account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => navigate({ to: "/profile" })}>
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>Preferences</DropdownMenuItem>
-            <DropdownMenuItem>Switch organization</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="gap-2"
-              onSelect={() => window.open(DRIVER_APP_URL, "_blank", "noopener,noreferrer")}
-            >
-              <ExternalLink className="h-4 w-4 text-muted-foreground" />
-              Driver app
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-destructive"
-              onSelect={() => setSignOutDialogOpen(true)}
-            >
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-9 gap-2 rounded-lg pl-1 pr-2">
+                <Avatar className="h-7 w-7">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden flex-col items-start leading-tight md:flex">
+                  <span className="text-xs font-medium">{displayName}</span>
+                  {roleLine && (
+                    <span className="text-[10px] text-muted-foreground">{roleLine}</span>
+                  )}
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel>{t("My account")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => navigate({ to: "/profile" })}>
+                {t("Profile")}
+              </DropdownMenuItem>
+              <DropdownMenuItem>{t("Preferences")}</DropdownMenuItem>
+              <DropdownMenuItem>{t("Switch organization")}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="gap-2"
+                onSelect={() => window.open(DRIVER_APP_URL, "_blank", "noopener,noreferrer")}
+              >
+                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                {t("Driver app")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive"
+                onSelect={() => setSignOutDialogOpen(true)}
+              >
+                {t("Sign out")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
 
       {createLoadOpen ? (
@@ -460,13 +476,13 @@ export function Topbar() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Sign out?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              You will need to sign in again to use Titan Freight.
+              {t("You will need to sign in again to use Titan Freight.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={signOutBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={signOutBusy}>{t("Cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={signOutBusy}
@@ -476,7 +492,7 @@ export function Topbar() {
               {signOutBusy ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing out...
+                  {t("Signing out...")}
                 </>
               ) : (
                 "Sign out"
@@ -488,7 +504,3 @@ export function Topbar() {
     </>
   );
 }
-
-
-
-

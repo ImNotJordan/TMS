@@ -37,9 +37,11 @@ import {
   ensureAiConnectionStatus,
   ensureIntegrationsConfigLoaded,
 } from "./integrations-config";
+import { clearAppSettingsCache } from "./app-settings-store";
 import { clearProfileSectionCache } from "./profile-section-cache";
 import { clearTrackingSyncVersions } from "./tracking-workflow-store";
 import { clearBiddingWorkspaceCache } from "./bidding-workspace-store";
+import { clearAllBiddingPageCaches } from "./bidding-page-cache";
 import { resolveAppAudience } from "./auth-roles";
 import {
   clearCompanyContext,
@@ -58,7 +60,7 @@ export type AuthUser = {
   /** Epoch seconds of token issuance (from Cognito idToken `iat`). */
   issuedAt?: number;
   /** Soft app audience from Cognito attributes (driver | ops | unknown). */
-  audience: "driver" | "ops" | "unknown";
+  audience: "driver" | "ops" | "client" | "unknown";
 };
 
 type AuthContextValue = {
@@ -105,6 +107,7 @@ function clearLocalAuthCaches(previousUserId?: string, queryClient?: QueryClient
   clearCognitoIdpClientCache();
   clearProfileSectionCache(previousUserId);
   clearIntegrationsConfigCache();
+  clearAppSettingsCache();
   clearOperationalDataCache(previousUserId);
   clearAdminDirectoryCache(previousUserId);
   clearAdminAuditLogsCache();
@@ -113,6 +116,9 @@ function clearLocalAuthCaches(previousUserId?: string, queryClient?: QueryClient
   // dropping these leaves one user's commercial data readable by the next
   // person to sign in on the same browser.
   clearBiddingWorkspaceCache();
+  // The search cache is a second copy of the same commercial data — lane
+  // pricing, buy rates, margins — under its own storage prefix.
+  clearAllBiddingPageCaches();
   setOperationalCacheScope(null);
 }
 

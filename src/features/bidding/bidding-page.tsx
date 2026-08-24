@@ -1,5 +1,4 @@
 import * as React from "react";
-import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   AlertCircle,
@@ -58,22 +57,22 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { DAT_DISABLED_IN_SETTINGS_MESSAGE, useDatFeatureFlags } from "@/lib/dat-feature-flags";
 import {
   AI_NOT_CONNECTED_MESSAGE,
   DAT_NOT_CONNECTED_MESSAGE,
   DEFAULT_SEARCH_OPTIONS,
-  buildBackhaulCandidatesFromAws,
-  buildHistoricalRowsFromLoads,
-  buildLeverageLoadsFromAws,
   createEmptySearchCriteria,
-  deriveLoadFieldOptions,
-  fetchBiddingLoads,
+  fetchBiddingFieldOptions,
   fetchBiddingRiskModels,
-  getBiddingLoadsFingerprint,
   getDatSnapshotForBidding,
+  hasSearchableLane,
   isAiBidConnected,
   isDatApiConnected,
+  searchBiddingLanes,
   type BackhaulCandidate,
+  type BiddingFieldOptions,
+  type BiddingSearchResponse,
   type DatSnapshot,
   type DatStatus,
   type HistoricalResultRow,
@@ -83,8 +82,17 @@ import {
   type SearchCriteria,
   type SearchOptions,
 } from "@/lib/bidding-data";
+import {
+  buildAiSuggestion,
+  clamp,
+  evaluateRiskDeterministic,
+  hash32,
+  titleCase,
+  type AiSuggestion,
+  type RiskEvaluation,
+  type RiskLevel,
+} from "@/lib/bidding-suggestion";
 import { enrichBidNarrativesWithAi } from "@/lib/workspace-ai";
-import type { LoadRecord } from "@/lib/loads-store";
 import { createLoad } from "@/lib/loads-store";
 import { useAuth } from "@/lib/auth";
 import { isBiddingWorkspaceConfigured } from "@/lib/dynamodb";
@@ -101,57 +109,22 @@ import {
   deleteBiddingSavedSearch,
   fetchBiddingWorkspaceSnapshotCached,
   getBiddingWorkspaceTableMissingMessage,
+  getWorkspaceTruncation,
   isBiddingWorkspaceAvailable,
+  isWorkspaceCachePersisted,
   listBidQuotes,
   readBiddingWorkspaceCacheSnapshot,
   updateBidQuote,
   upsertBiddingSavedSearch,
+  type BiddingAuditInput,
   type BiddingWorkspaceSnapshot,
 } from "@/lib/bidding-workspace-store";
+import { t } from "@/lib/i18n/t";
 
-type RiskLevel = "Low Risk" | "Medium Risk" | "High Risk" | "Critical Risk";
-type ConfidenceLevel = "Low Confidence" | "Medium Confidence" | "High Confidence";
 type SearchPipelineStep =
-  | "Searching internal historicals"
-  | "Aggregating historical rates"
-  | "Fetching DAT market data"
-  | "Calculating risk score"
-  | "Generating AI bid suggestion";
-
-type RiskEvaluation = {
-  outputRiskPct: number;
-  riskLevel: RiskLevel;
-  reasonCodes: string[];
-  topContributingFactors: Array<{
-    name: string;
-    value: number;
-    weight: number;
-    contribution: number;
-    direction: "Positive" | "Negative";
-  }>;
-  modelVersion: string;
-  evaluationTimestamp: string;
-  inputValues: Record<string, number>;
-  deterministicSignature: string;
-};
-
-type AiSuggestion = {
-  suggestedBidLow: number;
-  suggestedBidHigh: number;
-  recommendedSellRate: number;
-  recommendedBuyRate: number;
-  targetMargin: number;
-  marginPercentage: number;
-  confidenceScore: number;
-  confidenceLevel: ConfidenceLevel;
-  guardrails: string[];
-  notes: string;
-  keyDrivers: string[];
-  suggestedStrategy: string;
-  customerFacingNote: string;
-  internalPricingNote: string;
-  whySuggestionRows: Array<{ label: string; value: string }>;
-};
+  | "Querying internal historicals"
+  | "Aggregating lane rates"
+  | "Scoring risk and leverage";
 
 type AuditLogEntry = {
   searchId: string;
@@ -173,20 +146,16 @@ type AuditLogEntry = {
   attachedRfpId: string;
 };
 
-const SEARCH_PIPELINE: SearchPipelineStep[] = [
-  "Searching internal historicals",
-  "Aggregating historical rates",
-  "Fetching DAT market data",
-  "Calculating risk score",
-  "Generating AI bid suggestion",
-];
-
 const DAT_STATUS_TONE: Record<DatStatus, string> = {
   Live: "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  Refreshing: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
-  Stale: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
-  Unavailable: "border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
-  "API Error": "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
+  Refreshing:
+    "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
+  Stale:
+    "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+  Unavailable:
+    "border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+  "API Error":
+    "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
 };
 
 const MARGIN_TONE: Record<MarginBand, string> = {
@@ -214,16 +183,40 @@ type BiddingMobileTabId = (typeof BIDDING_MOBILE_TABS)[number]["value"];
 
 const BIDDING_DESKTOP_TABS = [
   { value: "results", label: "Bid Results", title: "Bid Intelligence Results", icon: Table2 },
-  { value: "market", label: "DAT & Leverage", title: "DAT RateView and Leverage Panel", icon: Database },
-  { value: "risk", label: "Risk & AI Bid", title: "Risk Model and AI Bid Suggestion", icon: ShieldAlert },
-  { value: "actions", label: "Actions & Quotes", title: "Bid Actions and Saved Quotes", icon: ClipboardList },
+  {
+    value: "market",
+    label: "DAT & Leverage",
+    title: "DAT RateView and Leverage Panel",
+    icon: Database,
+  },
+  {
+    value: "risk",
+    label: "Risk & AI Bid",
+    title: "Risk Model and AI Bid Suggestion",
+    icon: ShieldAlert,
+  },
+  {
+    value: "actions",
+    label: "Actions & Quotes",
+    title: "Bid Actions and Saved Quotes",
+    icon: ClipboardList,
+  },
   { value: "audit", label: "Audit Log", title: "Audit / Calculation Log", icon: Calculator },
 ] as const;
 
 type BiddingDesktopTabId = (typeof BIDDING_DESKTOP_TABS)[number]["value"];
 
+const EMPTY_FIELD_OPTIONS: BiddingFieldOptions = {
+  customers: [],
+  brokers: [],
+  states: [],
+  equipmentTypes: [],
+};
+
 export function BiddingPage() {
   const { user } = useAuth();
+  // Only ever a cache key in this tab. The server takes the real workspace id
+  // from the token; nothing here is sent.
   const workspaceId = user?.userId ?? "_";
   const workspaceUser =
     user?.name?.trim() ||
@@ -231,27 +224,52 @@ export function BiddingPage() {
     user?.email?.split("@")[0] ||
     "Current User";
 
-  const [searchCriteria, setSearchCriteria] = React.useState<SearchCriteria>(createEmptySearchCriteria);
+  const [searchCriteria, setSearchCriteria] =
+    React.useState<SearchCriteria>(createEmptySearchCriteria);
   const [searchOptions, setSearchOptions] = React.useState<SearchOptions>(DEFAULT_SEARCH_OPTIONS);
-  const [savedSearches, setSavedSearches] = React.useState<Array<{ name: string; criteria: SearchCriteria }>>(
-    [],
-  );
+  const datFlags = useDatFeatureFlags();
+  const datApiLive = isDatApiConnected();
+  const datRatesEnabled = datApiLive && datFlags.rateData;
+  const datCapacityEnabled = datApiLive && datFlags.capacityData;
+  const datDataEnabled = datRatesEnabled || datCapacityEnabled;
+  const datBlockedMessage = !datApiLive
+    ? DAT_NOT_CONNECTED_MESSAGE
+    : !datDataEnabled
+      ? DAT_DISABLED_IN_SETTINGS_MESSAGE
+      : null;
+  const [savedSearches, setSavedSearches] = React.useState<
+    Array<{ name: string; criteria: SearchCriteria }>
+  >([]);
   const [selectedSavedSearch, setSelectedSavedSearch] = React.useState<string>("none");
-  const [searchStageIndex, setSearchStageIndex] = React.useState<number>(-1);
+  const [searchStage, setSearchStage] = React.useState<SearchPipelineStep | null>(null);
   const [isSearching, setIsSearching] = React.useState(false);
   const [loadsLoading, setLoadsLoading] = React.useState(true);
-  const [loadsRefreshing, setLoadsRefreshing] = React.useState(false);
   const [loadsError, setLoadsError] = React.useState<string | null>(null);
-  const [awsLoads, setAwsLoads] = React.useState<LoadRecord[]>([]);
+  const [fieldOptions, setFieldOptions] = React.useState<BiddingFieldOptions>(EMPTY_FIELD_OPTIONS);
+  const [loadsConsidered, setLoadsConsidered] = React.useState<number | null>(null);
   const [riskModels, setRiskModels] = React.useState<RiskModelOption[]>([]);
   const [riskModelsLoading, setRiskModelsLoading] = React.useState(true);
 
   usePageReady(loadsLoading || riskModelsLoading);
 
-  const [datSnapshot, setDatSnapshot] = React.useState<DatSnapshot>(() => getDatSnapshotForBidding());
+  const [datSnapshot, setDatSnapshot] = React.useState<DatSnapshot>(() =>
+    getDatSnapshotForBidding(),
+  );
   const [datError, setDatError] = React.useState<string | null>(() =>
     isDatApiConnected() ? null : DAT_NOT_CONNECTED_MESSAGE,
   );
+
+  React.useEffect(() => {
+    if (!datFlags.rateData) {
+      setSearchOptions((prev) =>
+        prev.includeDatMarketData ? { ...prev, includeDatMarketData: false } : prev,
+      );
+    }
+  }, [datFlags.rateData]);
+
+  React.useEffect(() => {
+    setDatError(datBlockedMessage);
+  }, [datBlockedMessage]);
 
   const [results, setResults] = React.useState<HistoricalResultRow[]>([]);
   const [selectedResultId, setSelectedResultId] = React.useState<string>("");
@@ -274,28 +292,51 @@ export function BiddingPage() {
   const [savedQuotes, setSavedQuotes] = React.useState<
     Array<{ id: string; bid: number; margin: number; timestamp: string; status?: string }>
   >([]);
+  const [selectedQuoteId, setSelectedQuoteId] = React.useState<string>("");
   const [workspaceSyncError, setWorkspaceSyncError] = React.useState<string | null>(null);
   const [workspaceTableMissing, setWorkspaceTableMissing] = React.useState(false);
   const [workspaceActionPending, setWorkspaceActionPending] = React.useState(false);
+  const [workspaceNotice, setWorkspaceNotice] = React.useState<string | null>(null);
   const runCounter = React.useRef(0);
-  const lastRiskSignatureRef = React.useRef<string>("");
+
+  /**
+   * Whether the bid field holds a number the user typed.
+   *
+   * The suggestion effect below re-runs whenever the risk inputs move — a
+   * leverage exclusion, a background refresh — and it used to call
+   * `setFinalBid` every time, wiping a considered number the user had entered
+   * seconds earlier with no warning.
+   */
+  const finalBidEditedRef = React.useRef(false);
 
   const selectedRiskModel = React.useMemo(
     () => riskModels.find((model) => model.id === selectedRiskModelId) ?? riskModels[0] ?? null,
     [riskModels, selectedRiskModelId],
   );
 
-  const loadFieldOptions = React.useMemo(() => deriveLoadFieldOptions(awsLoads), [awsLoads]);
+  const loadFieldOptions = fieldOptions;
+
+  const activeLeverageCount = React.useMemo(
+    () => similarActiveLoads.filter((row) => !excludedLeverageIds.includes(row.loadNumber)).length,
+    [similarActiveLoads, excludedLeverageIds],
+  );
 
   const applyWorkspaceSnapshot = React.useCallback((snapshot: BiddingWorkspaceSnapshot) => {
     setSavedQuotes(snapshot.quotes.map(bidQuoteToSummary));
+    setSelectedQuoteId((prev) =>
+      prev && snapshot.quotes.some((quote) => quote.quoteId === prev)
+        ? prev
+        : (snapshot.quotes[0]?.quoteId ?? ""),
+    );
+    // No slice here any more: capping the list at 8 left the rest on the server
+    // where they could be neither loaded nor deleted.
     setSavedSearches(
-      snapshot.searches.map((item) => ({ name: item.searchName, criteria: item.criteria })).slice(0, 8),
+      snapshot.searches.map((item) => ({ name: item.searchName, criteria: item.criteria })),
     );
     setLogs(
       snapshot.audit.map((entry) => ({
         searchId: entry.searchId,
-        user: entry.user,
+        user: entry.userDisplayName || entry.user,
         origin: entry.origin,
         destination: entry.destination,
         equipment: entry.equipment,
@@ -317,51 +358,42 @@ export function BiddingPage() {
 
   const persistSearchSession = React.useCallback(
     (
-      loads: LoadRecord[],
       criteria: SearchCriteria,
       options: SearchOptions,
-      nextResults: HistoricalResultRow[],
-      nextSimilar: LeverageLoad[],
-      nextBackhaul: BackhaulCandidate[],
+      response: BiddingSearchResponse,
       selectedId: string,
     ) => {
       writeBiddingSearchSessionCache(workspaceId, {
         searchCriteria: criteria,
         searchOptions: options,
         selectedResultId: selectedId,
-        results: nextResults,
-        similarActiveLoads: nextSimilar,
-        backhaulCandidates: nextBackhaul,
-        loadsFingerprint: getBiddingLoadsFingerprint(loads),
+        results: response.results,
+        similarActiveLoads: response.similarActiveLoads,
+        backhaulCandidates: response.backhaulCandidates,
+        loadsConsidered: response.loadsConsidered,
         cachedAt: new Date().toISOString(),
       });
     },
     [workspaceId],
   );
 
-  const applySearchResults = React.useCallback(
-    (
-      loads: LoadRecord[],
-      criteria: SearchCriteria,
-      options: SearchOptions,
-    ) => {
+  const applySearchResponse = React.useCallback(
+    (criteria: SearchCriteria, options: SearchOptions, response: BiddingSearchResponse) => {
       const dat = getDatSnapshotForBidding();
-      const nextResults = buildHistoricalRowsFromLoads(loads, criteria, options, dat);
-      const nextSimilar = buildLeverageLoadsFromAws(loads, criteria, options);
-      const nextBackhaul = buildBackhaulCandidatesFromAws(loads, criteria, options);
-      const nextSelectedId = nextResults[0]?.id ?? "";
+      const nextSelectedId = response.results[0]?.id ?? "";
 
       setDatSnapshot(dat);
-      setDatError(isDatApiConnected() ? null : DAT_NOT_CONNECTED_MESSAGE);
-      setResults(nextResults);
+      setDatError(datBlockedMessage);
+      setResults(response.results);
       setSelectedResultId(nextSelectedId);
-      setSimilarActiveLoads(nextSimilar);
-      setBackhaulCandidates(nextBackhaul);
+      setSimilarActiveLoads(response.similarActiveLoads);
+      setBackhaulCandidates(response.backhaulCandidates);
       setExcludedLeverageIds([]);
-      persistSearchSession(loads, criteria, options, nextResults, nextSimilar, nextBackhaul, nextSelectedId);
-      return nextResults;
+      setLoadsConsidered(response.loadsConsidered);
+      persistSearchSession(criteria, options, response, nextSelectedId);
+      return response.results;
     },
-    [persistSearchSession],
+    [datBlockedMessage, persistSearchSession],
   );
 
   const refreshWorkspaceData = React.useCallback(
@@ -373,8 +405,19 @@ export function BiddingPage() {
         const missingMessage = getBiddingWorkspaceTableMissingMessage();
         setWorkspaceTableMissing(Boolean(missingMessage));
         if (!missingMessage) setWorkspaceSyncError(null);
+
+        // Say when a read was capped, rather than implying the list is complete.
+        const truncation = getWorkspaceTruncation();
+        const notices: string[] = [];
+        if (truncation.audit) notices.push("showing the most recent audit entries only");
+        if (truncation.quotes) notices.push("showing the most recent quotes only");
+        if (!isWorkspaceCachePersisted()) {
+          notices.push("this tab's workspace cache is full, so data is refetched on each visit");
+        }
+        setWorkspaceNotice(notices.length > 0 ? `Workspace: ${notices.join("; ")}.` : null);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Could not sync bidding workspace from AWS";
+        const message =
+          err instanceof Error ? err.message : "Could not sync bidding workspace from AWS";
         setWorkspaceSyncError(message);
       }
     },
@@ -388,89 +431,51 @@ export function BiddingPage() {
     if (cachedWorkspace) applyWorkspaceSnapshot(cachedWorkspace);
 
     const cachedSearch = readBiddingSearchSessionCache(workspaceId);
+    if (cachedSearch) {
+      // Restore what the user was looking at without a round trip. The next
+      // explicit search is what refreshes it.
+      setSearchCriteria(cachedSearch.searchCriteria);
+      setSearchOptions(cachedSearch.searchOptions);
+      setResults(cachedSearch.results);
+      setSelectedResultId(cachedSearch.selectedResultId);
+      setSimilarActiveLoads(cachedSearch.similarActiveLoads);
+      setBackhaulCandidates(cachedSearch.backhaulCandidates);
+      setLoadsConsidered(cachedSearch.loadsConsidered);
+    }
 
     void (async () => {
       setLoadsLoading(true);
       setRiskModelsLoading(true);
       setLoadsError(null);
       try {
-        const [loads, models] = await Promise.all([
-          fetchBiddingLoads(),
+        // Field options and risk models are small. The loads table itself is no
+        // longer fetched here — searching is a server call now.
+        const [options, models] = await Promise.all([
+          fetchBiddingFieldOptions(),
           fetchBiddingRiskModels(),
           refreshWorkspaceData(false),
         ]);
         if (cancelled) return;
 
-        setAwsLoads(loads);
+        setFieldOptions(options);
         setRiskModels(models);
         if (models[0]) setSelectedRiskModelId((prev) => prev || models[0].id);
-
-        const loadsFingerprint = getBiddingLoadsFingerprint(loads);
-        if (
-          cachedSearch &&
-          cachedSearch.loadsFingerprint === loadsFingerprint &&
-          cachedSearch.results.length > 0
-        ) {
-          setSearchCriteria(cachedSearch.searchCriteria);
-          setSearchOptions(cachedSearch.searchOptions);
-          setResults(cachedSearch.results);
-          setSelectedResultId(cachedSearch.selectedResultId);
-          setSimilarActiveLoads(cachedSearch.similarActiveLoads);
-          setBackhaulCandidates(cachedSearch.backhaulCandidates);
-          setDatSnapshot(getDatSnapshotForBidding());
-          setDatError(isDatApiConnected() ? null : DAT_NOT_CONNECTED_MESSAGE);
-        } else {
-          setDatSnapshot(getDatSnapshotForBidding());
-          setDatError(isDatApiConnected() ? null : DAT_NOT_CONNECTED_MESSAGE);
-          setResults([]);
-          setSelectedResultId("");
-          setSimilarActiveLoads([]);
-          setBackhaulCandidates([]);
-        }
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : "Could not load loads from AWS";
+        const message = err instanceof Error ? err.message : "Could not load bidding data from AWS";
         setLoadsError(message);
-        setResults([]);
-        setSimilarActiveLoads([]);
-        setBackhaulCandidates([]);
       } finally {
         if (!cancelled) {
           setLoadsLoading(false);
           setRiskModelsLoading(false);
         }
       }
-
-      if (cancelled) return;
-      setLoadsRefreshing(true);
-      try {
-        const [loads, models] = await Promise.all([
-          fetchBiddingLoads({ force: true }),
-          fetchBiddingRiskModels({ force: true }),
-          refreshWorkspaceData(true),
-        ]);
-        if (cancelled) return;
-
-        setAwsLoads(loads);
-        setRiskModels(models);
-        if (models[0]) setSelectedRiskModelId((prev) => prev || models[0].id);
-
-        const cached = readBiddingSearchSessionCache(workspaceId);
-        const loadsFingerprint = getBiddingLoadsFingerprint(loads);
-        if (cached && cached.loadsFingerprint === loadsFingerprint && cached.results.length > 0) {
-          applySearchResults(loads, cached.searchCriteria, cached.searchOptions);
-        }
-      } catch {
-        // keep cached data visible when background refresh fails
-      } finally {
-        if (!cancelled) setLoadsRefreshing(false);
-      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [applySearchResults, applyWorkspaceSnapshot, refreshWorkspaceData, workspaceId]);
+  }, [applyWorkspaceSnapshot, refreshWorkspaceData, workspaceId]);
 
   const selectedResult = React.useMemo(
     () => results.find((row) => row.id === selectedResultId) ?? results[0] ?? null,
@@ -483,126 +488,124 @@ export function BiddingPage() {
       setAiSuggestion(null);
       return;
     }
+
     const risk = evaluateRiskDeterministic({
       row: selectedResult,
       dat: datSnapshot,
       model: selectedRiskModel,
-      leverageCount: similarActiveLoads.filter((row) => !excludedLeverageIds.includes(row.loadNumber)).length,
+      leverageCount: activeLeverageCount,
     });
     setRiskEvaluation(risk);
-    if (isAiBidConnected()) {
-      const suggestion = buildAiSuggestion({
-        row: selectedResult,
-        risk,
-        dat: datSnapshot,
-        leverageCount: similarActiveLoads.filter((row) => !excludedLeverageIds.includes(row.loadNumber)).length,
-        backhaulCount: backhaulCandidates.length,
-      });
-      setAiSuggestion(suggestion);
-      setFinalBid(String(Math.round(suggestion.recommendedSellRate)));
 
-      let cancelled = false;
-      void enrichBidNarrativesWithAi({
-        origin: selectedResult.lane.split("→")[0]?.trim() || selectedResult.lane,
-        destination: selectedResult.lane.split("→")[1]?.trim() || selectedResult.lane,
-        recommendedSellRate: suggestion.recommendedSellRate,
-        recommendedBuyRate: suggestion.recommendedBuyRate,
-        marginPercentage: suggestion.marginPercentage,
-        confidenceScore: suggestion.confidenceScore,
-        riskLevel: risk.riskLevel,
-        datMarketAverage: datSnapshot.marketAverage,
-        winRate: selectedResult.winRate,
-        loadCount: selectedResult.loadCount,
-        leverageCount: similarActiveLoads.filter((row) => !excludedLeverageIds.includes(row.loadNumber))
-          .length,
-        backhaulCount: backhaulCandidates.length,
-      }).then((enriched) => {
-        if (cancelled || !enriched) return;
-        setAiSuggestion((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            notes: enriched.notes ?? prev.notes,
-            suggestedStrategy: enriched.suggestedStrategy ?? prev.suggestedStrategy,
-            customerFacingNote: enriched.customerFacingNote ?? prev.customerFacingNote,
-          };
-        });
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    } else {
+    if (!isAiBidConnected()) {
       setAiSuggestion(null);
-      setFinalBid(String(Math.round(selectedResult.recommendedBid)));
+      if (!finalBidEditedRef.current) {
+        setFinalBid(String(Math.round(selectedResult.recommendedBid)));
+      }
+      return;
     }
+
+    const suggestion = buildAiSuggestion({
+      row: selectedResult,
+      risk,
+      dat: datSnapshot,
+      leverageCount: activeLeverageCount,
+      backhaulCount: backhaulCandidates.length,
+    });
+    setAiSuggestion(suggestion);
+    if (!finalBidEditedRef.current) {
+      setFinalBid(String(Math.round(suggestion.recommendedSellRate)));
+    }
+
+    let cancelled = false;
+    void enrichBidNarrativesWithAi({
+      origin: selectedResult.lane.split(" to ")[0]?.trim() || selectedResult.lane,
+      destination: selectedResult.lane.split(" to ")[1]?.trim() || selectedResult.lane,
+      recommendedSellRate: suggestion.recommendedSellRate,
+      recommendedBuyRate: suggestion.recommendedBuyRate,
+      marginPercentage: suggestion.marginPercentage,
+      confidenceScore: suggestion.confidenceScore,
+      riskLevel: risk.riskLevel,
+      datMarketAverage: datSnapshot.marketAverage ?? 0,
+      winRate: selectedResult.winRate ?? 0,
+      loadCount: selectedResult.loadCount,
+      leverageCount: activeLeverageCount,
+      backhaulCount: backhaulCandidates.length,
+    }).then((enriched) => {
+      if (cancelled || !enriched || enriched.error) return;
+      setAiSuggestion((prev) =>
+        prev
+          ? {
+              ...prev,
+              notes: enriched.notes ?? prev.notes,
+              suggestedStrategy: enriched.suggestedStrategy ?? prev.suggestedStrategy,
+              customerFacingNote: enriched.customerFacingNote ?? prev.customerFacingNote,
+            }
+          : prev,
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     selectedResult,
     datSnapshot,
     selectedRiskModel,
-    similarActiveLoads,
-    excludedLeverageIds,
+    activeLeverageCount,
     backhaulCandidates.length,
   ]);
-
-  React.useEffect(() => {
-    if (!riskEvaluation) return;
-    if (lastRiskSignatureRef.current === riskEvaluation.deterministicSignature) return;
-    lastRiskSignatureRef.current = riskEvaluation.deterministicSignature;
-    appendLog("Risk Evaluation", "", { risk: riskEvaluation, ai: aiSuggestion });
-  }, [riskEvaluation, aiSuggestion]);
 
   const searchSummary = [
     [searchCriteria.originCity, searchCriteria.originState].filter(Boolean).join(", ") || "Origin",
     searchCriteria.originZip3 ? `(${searchCriteria.originZip3})` : null,
     "to",
-    [searchCriteria.destinationCity, searchCriteria.destinationState].filter(Boolean).join(", ") || "Destination",
+    [searchCriteria.destinationCity, searchCriteria.destinationState].filter(Boolean).join(", ") ||
+      "Destination",
     searchCriteria.destinationZip3 ? `(${searchCriteria.destinationZip3})` : null,
   ]
     .filter(Boolean)
     .join(" ");
-  const hasLaneSearchCriteria = Boolean(
-    searchCriteria.originCity.trim() ||
-      searchCriteria.originState.trim() ||
-      searchCriteria.originZip5.trim() ||
-      searchCriteria.destinationCity.trim() ||
-      searchCriteria.destinationState.trim() ||
-      searchCriteria.destinationZip5.trim(),
-  );
-  const currentSearchStep = searchStageIndex >= 0 ? SEARCH_PIPELINE[searchStageIndex] : null;
+
+  const hasLaneSearchCriteria = hasSearchableLane(searchCriteria);
+  const currentSearchStep = searchStage;
 
   const searchLane = async () => {
+    // Every match rule needs both ends of the lane, so a half-filled form can
+    // only ever come back empty. Say so instead of spending a round trip.
+    if (!hasLaneSearchCriteria) {
+      setActionMessage("Enter an origin and a destination (city or state) before searching.");
+      return;
+    }
+
     const runId = ++runCounter.current;
     setIsSearching(true);
     setActionMessage(null);
-    setSearchStageIndex(0);
-    for (let i = 0; i < SEARCH_PIPELINE.length; i += 1) {
-      setSearchStageIndex(i);
-      await delay(i === 1 ? 700 : 320);
-      if (runId !== runCounter.current) return;
-    }
+    setSearchStage("Querying internal historicals");
 
     try {
-      const loads = await fetchBiddingLoads({ force: true });
+      const response = await searchBiddingLanes(searchCriteria, searchOptions);
       if (runId !== runCounter.current) return;
-      setAwsLoads(loads);
+
+      setSearchStage("Aggregating lane rates");
       setLoadsError(null);
-      const nextResults = applySearchResults(loads, searchCriteria, searchOptions);
+      const nextResults = applySearchResponse(searchCriteria, searchOptions, response);
+      setSearchStage("Scoring risk and leverage");
       setDesktopTab("results");
       setActionMessage(
         nextResults.length > 0
-          ? `Loaded ${nextResults.length} lane aggregate${nextResults.length === 1 ? "" : "s"} from ${loads.length} AWS load${loads.length === 1 ? "" : "s"}.`
-          : `No matching historical loads in AWS for ${searchSummary}.`,
+          ? `${nextResults.length} lane aggregate${nextResults.length === 1 ? "" : "s"} from ${response.matchedLoads} matching load${response.matchedLoads === 1 ? "" : "s"} of ${response.loadsConsidered} searched.`
+          : `No matching historical loads for ${searchSummary}.`,
       );
     } catch (err) {
       if (runId !== runCounter.current) return;
-      const message = err instanceof Error ? err.message : "Could not search AWS loads";
+      const message = err instanceof Error ? err.message : "Could not search loads";
       setLoadsError(message);
       setActionMessage(message);
     } finally {
       if (runId === runCounter.current) {
         setIsSearching(false);
-        setSearchStageIndex(-1);
+        setSearchStage(null);
       }
     }
   };
@@ -617,12 +620,47 @@ export function BiddingPage() {
     setRiskEvaluation(null);
     setAiSuggestion(null);
     setFinalBid("");
+    finalBidEditedRef.current = false;
+    setLoadsConsidered(null);
     clearBiddingSearchSessionCache(workspaceId);
     setActionMessage("Search fields reset.");
   };
 
+  /**
+   * A name for the saved search that distinguishes searches the lane label
+   * cannot.
+   *
+   * The name doubles as the storage key, and it used to be just
+   * `origin-destination-equipment` — so two searches on the same lane with
+   * different dates, customers or radius silently replaced one another.
+   */
+  const savedSearchName = (criteria: SearchCriteria) => {
+    const lane =
+      [
+        criteria.originCity || criteria.originState,
+        criteria.destinationCity || criteria.destinationState,
+      ]
+        .filter(Boolean)
+        .join(" to ") || "Unnamed lane";
+    const equipment = criteria.equipmentType ? ` · ${criteria.equipmentType}` : "";
+    const discriminators = [
+      criteria.customer,
+      criteria.pickupDate,
+      criteria.radiusMiles ? `${criteria.radiusMiles}mi` : "",
+      criteria.weight ? `${criteria.weight}lb` : "",
+    ]
+      .filter(Boolean)
+      .join("|");
+    const suffix = discriminators ? ` #${hash32(discriminators).toString(36).slice(0, 4)}` : "";
+    return `${lane}${equipment}${suffix}`.slice(0, 120);
+  };
+
   const saveSearch = async () => {
-    const name = `${searchCriteria.originCity}-${searchCriteria.destinationCity}-${searchCriteria.equipmentType}`;
+    if (!hasLaneSearchCriteria) {
+      setActionMessage("Enter an origin and a destination before saving this search.");
+      return;
+    }
+    const name = savedSearchName(searchCriteria);
     setWorkspaceActionPending(true);
     try {
       if (isBiddingWorkspaceAvailable()) {
@@ -632,14 +670,16 @@ export function BiddingPage() {
           searchName: name,
           criteria: searchCriteria,
         });
-        await refreshWorkspaceData();
-        setActionMessage(`Saved search "${name}" to AWS.`);
+        await refreshWorkspaceData(true);
+        setActionMessage(`Saved search "${name}".`);
       } else {
-        setSavedSearches((prev) => {
-          const deduped = prev.filter((item) => item.name !== name);
-          return [{ name, criteria: searchCriteria }, ...deduped].slice(0, 8);
-        });
-        setActionMessage(`Saved search "${name}" locally. Configure BiddingWorkspace in AWS to persist.`);
+        setSavedSearches((prev) => [
+          { name, criteria: searchCriteria },
+          ...prev.filter((item) => item.name !== name),
+        ]);
+        setActionMessage(
+          `Saved search "${name}" locally. Configure BiddingWorkspace in AWS to persist.`,
+        );
       }
       setSelectedSavedSearch(name);
     } catch (err) {
@@ -657,7 +697,7 @@ export function BiddingPage() {
     try {
       if (isBiddingWorkspaceAvailable()) {
         await deleteBiddingSavedSearch(workspaceId, name);
-        await refreshWorkspaceData();
+        await refreshWorkspaceData(true);
       } else {
         setSavedSearches((prev) => prev.filter((item) => item.name !== name));
       }
@@ -676,41 +716,54 @@ export function BiddingPage() {
     const match = savedSearches.find((item) => item.name === selectedSavedSearch);
     if (!match) return;
     setSearchCriteria(match.criteria);
-    setActionMessage(`Loaded saved search "${match.name}".`);
+    setActionMessage(`Loaded saved search "${match.name}". Run Search Lane to refresh the rates.`);
   };
 
   const exportResults = (type: "PDF" | "CSV" | "XLSX") => {
-    const note = `${type} export queued with search criteria, historical aggregates, DAT snapshot, leverage candidates, risk output, AI suggestion, and notes.`;
-    setActionMessage(note);
+    if (results.length === 0) {
+      setActionMessage("Run a search before exporting — there is nothing to export yet.");
+      return;
+    }
+    setActionMessage(
+      `${type} export queued with search criteria, historical aggregates, DAT snapshot, leverage candidates, risk output, AI suggestion, and notes.`,
+    );
     appendLog("Export", "");
   };
 
   const refreshDat = async () => {
-    if (!isDatApiConnected()) {
+    if (!datDataEnabled) {
       setDatSnapshot(getDatSnapshotForBidding());
-      setDatError(DAT_NOT_CONNECTED_MESSAGE);
-      setActionMessage(DAT_NOT_CONNECTED_MESSAGE);
+      setDatError(datBlockedMessage ?? DAT_NOT_CONNECTED_MESSAGE);
+      setActionMessage(datBlockedMessage ?? DAT_NOT_CONNECTED_MESSAGE);
       return;
     }
-    setDatSnapshot((prev) => ({ ...prev, status: "Refreshing", sourceStatus: "Refreshing from RateView API..." }));
+    setDatSnapshot((prev) => ({
+      ...prev,
+      status: "Refreshing",
+      sourceStatus: "Refreshing from RateView API...",
+    }));
     setDatError(null);
-    await delay(720);
     setDatSnapshot(getDatSnapshotForBidding());
     setDatError(DAT_NOT_CONNECTED_MESSAGE);
     appendLog("Refresh DAT", "");
   };
 
   const recalculateRisk = () => {
-    if (!selectedResult || !selectedRiskModel) return;
+    if (!selectedResult || !selectedRiskModel) {
+      setActionMessage("Select a lane result before recalculating risk.");
+      return;
+    }
     const risk = evaluateRiskDeterministic({
       row: selectedResult,
       dat: datSnapshot,
       model: selectedRiskModel,
-      leverageCount: similarActiveLoads.filter((row) => !excludedLeverageIds.includes(row.loadNumber)).length,
+      leverageCount: activeLeverageCount,
     });
     setRiskEvaluation(risk);
-    appendLog("Recalculate Risk", "");
-    setActionMessage(`Risk recalculated with ${selectedRiskModel?.name ?? "risk model"} ${selectedRiskModel?.version ?? ""}.`.trim());
+    appendLog("Recalculate Risk", "", { risk });
+    setActionMessage(
+      `Risk recalculated with ${selectedRiskModel.name} ${selectedRiskModel.version}.`.trim(),
+    );
   };
 
   const recalculateSuggestion = () => {
@@ -718,32 +771,37 @@ export function BiddingPage() {
       setActionMessage(AI_NOT_CONNECTED_MESSAGE);
       return;
     }
-    if (!selectedResult || !riskEvaluation) return;
+    if (!selectedResult || !riskEvaluation) {
+      setActionMessage("Select a lane result before recalculating the suggestion.");
+      return;
+    }
     const suggestion = buildAiSuggestion({
       row: selectedResult,
       risk: riskEvaluation,
       dat: datSnapshot,
-      leverageCount: similarActiveLoads.filter((row) => !excludedLeverageIds.includes(row.loadNumber)).length,
+      leverageCount: activeLeverageCount,
       backhaulCount: backhaulCandidates.length,
     });
     setAiSuggestion(suggestion);
+    // An explicit "recalculate" is the one place overwriting a typed bid is
+    // what the user asked for.
     setFinalBid(String(Math.round(suggestion.recommendedSellRate)));
-    appendLog("Recalculate Suggestion", "");
+    finalBidEditedRef.current = false;
+    appendLog("Recalculate Suggestion", "", { ai: suggestion });
     setActionMessage("AI bid suggestion refreshed. Enriching narratives…");
 
     void enrichBidNarrativesWithAi({
-      origin: selectedResult.lane.split("→")[0]?.trim() || selectedResult.lane,
-      destination: selectedResult.lane.split("→")[1]?.trim() || selectedResult.lane,
+      origin: selectedResult.lane.split(" to ")[0]?.trim() || selectedResult.lane,
+      destination: selectedResult.lane.split(" to ")[1]?.trim() || selectedResult.lane,
       recommendedSellRate: suggestion.recommendedSellRate,
       recommendedBuyRate: suggestion.recommendedBuyRate,
       marginPercentage: suggestion.marginPercentage,
       confidenceScore: suggestion.confidenceScore,
       riskLevel: riskEvaluation.riskLevel,
-      datMarketAverage: datSnapshot.marketAverage,
-      winRate: selectedResult.winRate,
+      datMarketAverage: datSnapshot.marketAverage ?? 0,
+      winRate: selectedResult.winRate ?? 0,
       loadCount: selectedResult.loadCount,
-      leverageCount: similarActiveLoads.filter((row) => !excludedLeverageIds.includes(row.loadNumber))
-        .length,
+      leverageCount: activeLeverageCount,
       backhaulCount: backhaulCandidates.length,
     }).then((enriched) => {
       if (!enriched) {
@@ -754,15 +812,16 @@ export function BiddingPage() {
         setActionMessage(`Rates refreshed. Narrative AI unavailable: ${enriched.error}`);
         return;
       }
-      setAiSuggestion((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          notes: enriched.notes ?? prev.notes,
-          suggestedStrategy: enriched.suggestedStrategy ?? prev.suggestedStrategy,
-          customerFacingNote: enriched.customerFacingNote ?? prev.customerFacingNote,
-        };
-      });
+      setAiSuggestion((prev) =>
+        prev
+          ? {
+              ...prev,
+              notes: enriched.notes ?? prev.notes,
+              suggestedStrategy: enriched.suggestedStrategy ?? prev.suggestedStrategy,
+              customerFacingNote: enriched.customerFacingNote ?? prev.customerFacingNote,
+            }
+          : prev,
+      );
       setActionMessage("AI bid suggestion refreshed with OpenAI narratives.");
     });
   };
@@ -778,10 +837,36 @@ export function BiddingPage() {
     }
   };
 
+  /** The bid the user actually intends, or `null` if the field is unusable. */
+  const resolveFinalBid = (): number | null => {
+    const typed = finalBid.trim();
+    if (typed) {
+      const parsed = Number(typed);
+      if (!Number.isFinite(parsed) || parsed <= 0) return null;
+      return Math.round(parsed);
+    }
+    if (selectedResult) return Math.round(selectedResult.recommendedBid);
+    return null;
+  };
+
   const saveAsQuote = async (status: "saved" | "draft" = "saved") => {
-    if (!selectedResult || !riskEvaluation) return;
-    const bid = Number(finalBid) || selectedResult.recommendedBid;
+    if (!selectedResult || !riskEvaluation) {
+      setActionMessage("Run a search and select a lane before saving a quote.");
+      return;
+    }
+    const bid = resolveFinalBid();
+    if (bid == null) {
+      setActionMessage("Enter a bid amount greater than zero before saving.");
+      return;
+    }
     const buy = selectedResult.historicalAvgBuy;
+    if (bid < buy) {
+      // Not blocked — a broker may knowingly bid under cost — but never silent.
+      setActionMessage(
+        `Warning: ${formatCurrency(bid)} is below the historical average buy rate of ${formatCurrency(buy)}.`,
+      );
+    }
+
     setWorkspaceActionPending(true);
     try {
       if (isBiddingWorkspaceAvailable()) {
@@ -805,20 +890,27 @@ export function BiddingPage() {
           riskLevel: riskEvaluation.riskLevel,
           rfpId: searchCriteria.rfpId,
           rfpLane,
-          finalBid,
+          finalBid: String(bid),
           searchCriteria,
         });
-        setSavedQuotes((prev) => [bidQuoteToSummary(quote), ...prev.filter((row) => row.id !== quote.quoteId)]);
+        setSavedQuotes((prev) => [
+          bidQuoteToSummary(quote),
+          ...prev.filter((row) => row.id !== quote.quoteId),
+        ]);
+        setSelectedQuoteId(quote.quoteId);
         appendLog(status === "draft" ? "Save Draft" : "Save as Quote", quote.quoteId);
-        setActionMessage(`Quote ${quote.quoteId} saved to AWS with bid ${formatCurrency(bid)}.`);
+        setActionMessage(`Quote ${quote.quoteId} saved with bid ${formatCurrency(bid)}.`);
       } else {
-        const quoteId = `QT-${Math.floor(100000 + Math.random() * 900000)}`;
+        const quoteId = localQuoteId();
         setSavedQuotes((prev) => [
           { id: quoteId, bid, margin: bid - buy, timestamp: nowStamp(), status },
           ...prev,
         ]);
+        setSelectedQuoteId(quoteId);
         appendLog(status === "draft" ? "Save Draft" : "Save as Quote", quoteId);
-        setActionMessage(`Quote ${quoteId} saved locally. Configure BiddingWorkspace in AWS to persist.`);
+        setActionMessage(
+          `Quote ${quoteId} saved locally. Configure BiddingWorkspace in AWS to persist.`,
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save quote";
@@ -835,6 +927,7 @@ export function BiddingPage() {
         await deleteBidQuote(workspaceId, quoteId);
       }
       setSavedQuotes((prev) => prev.filter((quote) => quote.id !== quoteId));
+      setSelectedQuoteId((prev) => (prev === quoteId ? "" : prev));
       appendLog("Delete Quote", quoteId);
       setActionMessage(`Quote ${quoteId} deleted.`);
     } catch (err) {
@@ -846,14 +939,12 @@ export function BiddingPage() {
   };
 
   const createLoadFromBid = async () => {
-    const loadId =
-      searchCriteria.loadId.trim() || `LD-${Date.now().toString().slice(-6)}`;
-    const bid = Number(finalBid) || selectedResult?.recommendedBid || 0;
+    const bid = resolveFinalBid();
+    const loadId = searchCriteria.loadId.trim() || newLoadId();
     setWorkspaceActionPending(true);
     try {
       await createLoad({
         loadId,
-        createdBy: workspaceId !== "_" ? workspaceId : undefined,
         loadStatus: "draft",
         customer: searchCriteria.customer,
         broker: searchCriteria.broker,
@@ -868,16 +959,19 @@ export function BiddingPage() {
         deliveryDate: searchCriteria.deliveryDate,
         commodityDescription: searchCriteria.commodity,
         weight: String(searchCriteria.weight),
-        customerRate: bid > 0 ? String(bid) : undefined,
+        customerRate: bid != null && bid > 0 ? String(bid) : undefined,
         carrierRate: selectedResult ? String(selectedResult.historicalAvgBuy) : undefined,
         internalNotes: internalNote || undefined,
       });
-      const loads = await fetchBiddingLoads({ force: true });
-      setAwsLoads(loads);
-      applySearchResults(loads, searchCriteria, searchOptions);
+      // The new load changes the lane's history, so re-run the search rather
+      // than re-downloading the table.
+      if (hasLaneSearchCriteria) {
+        const response = await searchBiddingLanes(searchCriteria, searchOptions);
+        applySearchResponse(searchCriteria, searchOptions, response);
+      }
       setSearchCriteria((prev) => ({ ...prev, loadId }));
       appendLog("Create Load", "");
-      setActionMessage(`Load ${loadId} created in AWS Loads table.`);
+      setActionMessage(`Load ${loadId} created in the Loads table.`);
       toast.success(`Load ${loadId} created`, {
         action: {
           label: "Open load",
@@ -887,7 +981,7 @@ export function BiddingPage() {
         },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not create load in AWS";
+      const message = err instanceof Error ? err.message : "Could not create load";
       setActionMessage(message);
       toast.error(message);
     } finally {
@@ -895,28 +989,57 @@ export function BiddingPage() {
     }
   };
 
+  /**
+   * The quote these workflow actions apply to.
+   *
+   * They used to act on `savedQuotes[0]` — the most recent save, not the one on
+   * screen — and to report success even when the lookup found nothing.
+   */
+  const targetQuoteId = selectedQuoteId || savedQuotes[0]?.id || "";
+
   const attachToRfp = async () => {
-    if (!riskEvaluation || !selectedResult) return;
+    if (!targetQuoteId) {
+      setActionMessage("Save a quote first — there is nothing to attach yet.");
+      return;
+    }
+    if (!searchCriteria.rfpId.trim()) {
+      setActionMessage("Enter an RFP ID before attaching.");
+      return;
+    }
+
     setWorkspaceActionPending(true);
     try {
-      if (isBiddingWorkspaceAvailable() && savedQuotes[0]) {
-        const latest = await listBidQuotes(workspaceId);
-        const match = latest.find((quote) => quote.quoteId === savedQuotes[0].id);
-        if (match) {
-          await updateBidQuote({
-            ...match,
-            status: "attached",
-            rfpId: searchCriteria.rfpId,
-            rfpLane,
-            finalBid,
-            internalNote,
-          });
-          await refreshWorkspaceData();
-        }
+      if (!isBiddingWorkspaceAvailable()) {
+        appendLog("Attach to RFP Lane", targetQuoteId);
+        setActionMessage(
+          `Attached quote ${targetQuoteId} to ${searchCriteria.rfpId} locally. Configure BiddingWorkspace in AWS to persist.`,
+        );
+        return;
       }
-      appendLog("Attach to RFP Lane", savedQuotes[0]?.id ?? "");
+
+      // Forced: acting on a cached copy is how a stale quote got "attached"
+      // with nothing written.
+      const latest = await listBidQuotes(workspaceId, { force: true });
+      const match = latest.find((quote) => quote.quoteId === targetQuoteId);
+      if (!match) {
+        setActionMessage(
+          `Quote ${targetQuoteId} is no longer in the workspace. Reload and try again.`,
+        );
+        return;
+      }
+
+      await updateBidQuote({
+        ...match,
+        status: "attached",
+        rfpId: searchCriteria.rfpId,
+        rfpLane,
+        finalBid,
+        internalNote,
+      });
+      await refreshWorkspaceData(true);
+      appendLog("Attach to RFP Lane", targetQuoteId);
       setActionMessage(
-        `Attached bid, internal historicals, risk evaluation (${selectedRiskModel?.version ?? "—"}), and notes to ${searchCriteria.rfpId || "RFP"}${rfpLane ? ` lane ${rfpLane}` : ""}.`,
+        `Quote ${targetQuoteId} attached to ${searchCriteria.rfpId}${rfpLane ? ` lane ${rfpLane}` : ""} with risk evaluation ${selectedRiskModel?.version ?? "—"}.`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not attach to RFP";
@@ -927,18 +1050,34 @@ export function BiddingPage() {
   };
 
   const sendForApproval = async () => {
+    if (!targetQuoteId) {
+      setActionMessage("Save a quote first — there is nothing to send for approval.");
+      return;
+    }
+
     setWorkspaceActionPending(true);
     try {
-      if (isBiddingWorkspaceAvailable() && savedQuotes[0]) {
-        const latest = await listBidQuotes(workspaceId);
-        const match = latest.find((quote) => quote.quoteId === savedQuotes[0].id);
-        if (match) {
-          await updateBidQuote({ ...match, status: "sent" });
-          await refreshWorkspaceData();
-        }
+      if (!isBiddingWorkspaceAvailable()) {
+        appendLog("Send for Approval", targetQuoteId);
+        setActionMessage(
+          `Quote ${targetQuoteId} marked for approval locally. Configure BiddingWorkspace in AWS to persist.`,
+        );
+        return;
       }
-      appendLog("Send for Approval", savedQuotes[0]?.id ?? "");
-      setActionMessage("Bid package routed to pricing manager for approval.");
+
+      const latest = await listBidQuotes(workspaceId, { force: true });
+      const match = latest.find((quote) => quote.quoteId === targetQuoteId);
+      if (!match) {
+        setActionMessage(
+          `Quote ${targetQuoteId} is no longer in the workspace. Reload and try again.`,
+        );
+        return;
+      }
+
+      await updateBidQuote({ ...match, status: "sent" });
+      await refreshWorkspaceData(true);
+      appendLog("Send for Approval", targetQuoteId);
+      setActionMessage(`Quote ${targetQuoteId} routed to the pricing manager for approval.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not send for approval";
       setActionMessage(message);
@@ -953,6 +1092,14 @@ export function BiddingPage() {
     );
   };
 
+  /**
+   * Record an action in the audit trail.
+   *
+   * Only ever called from a real action. A `useEffect` used to fire this on
+   * every risk re-evaluation, which wrote a row on each page visit, each row
+   * selection and each leverage toggle — none of them decisions worth
+   * recording, all of them permanent.
+   */
   const persistAuditLog = async (
     action: string,
     createdQuoteId: string,
@@ -960,9 +1107,9 @@ export function BiddingPage() {
   ) => {
     const risk = overrides?.risk ?? riskEvaluation;
     const ai = overrides?.ai ?? aiSuggestion;
-    const entry: AuditLogEntry = {
-      searchId: `SRCH-${hash32(searchSummary).toString().slice(0, 7)}`,
-      user: workspaceUser,
+    const entry: BiddingAuditInput = {
+      searchId: `SRCH-${hash32(searchSummary).toString(36).toUpperCase().slice(0, 8)}`,
+      userDisplayName: workspaceUser,
       origin: `${searchCriteria.originCity}, ${searchCriteria.originState}`,
       destination: `${searchCriteria.destinationCity}, ${searchCriteria.destinationState}`,
       equipment: searchCriteria.equipmentType,
@@ -980,7 +1127,7 @@ export function BiddingPage() {
       attachedRfpId: action === "Attach to RFP Lane" ? searchCriteria.rfpId : "",
     };
 
-    setLogs((prev) => [entry, ...prev].slice(0, 24));
+    setLogs((prev) => [{ ...entry, user: workspaceUser }, ...prev].slice(0, 24));
 
     if (!isBiddingWorkspaceAvailable()) return;
 
@@ -1003,363 +1150,413 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={Search}
       tone="sky"
-      title="Spot Load Search"
-      description="City/state, 5-digit ZIP, 3-digit ZIP, market area, and radius search."
+      title={t("Spot Load Search")}
+      description={t("City/state, 5-digit ZIP, 3-digit ZIP, market area, and radius search.")}
       sticky
       contentClassName="space-y-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-1"
     >
-        <div className="grid gap-3">
-          <Field label="Origin City">
+      <div className="grid gap-3">
+        <Field label={t("Origin City")}>
+          <Input
+            value={searchCriteria.originCity}
+            onChange={(event) =>
+              setSearchCriteria((prev) => ({ ...prev, originCity: event.target.value }))
+            }
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Origin State")}>
             <Input
-              value={searchCriteria.originCity}
-              onChange={(event) => setSearchCriteria((prev) => ({ ...prev, originCity: event.target.value }))}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Origin State">
-              <Input
-                list={loadFieldOptions.states.length > 0 ? "bidding-origin-states" : undefined}
-                value={searchCriteria.originState}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({ ...prev, originState: event.target.value.toUpperCase() }))
-                }
-                placeholder="State"
-                maxLength={2}
-              />
-              {loadFieldOptions.states.length > 0 ? (
-                <datalist id="bidding-origin-states">
-                  {loadFieldOptions.states.map((state) => (
-                    <option key={state} value={state} />
-                  ))}
-                </datalist>
-              ) : null}
-            </Field>
-            <Field label="Origin 5-Digit ZIP">
-              <Input
-                value={searchCriteria.originZip5}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, originZip5: event.target.value }))}
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Origin 3-Digit ZIP">
-              <Input
-                value={searchCriteria.originZip3}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, originZip3: event.target.value }))}
-              />
-            </Field>
-            <Field label="Market Area">
-              <Input
-                value={searchCriteria.marketArea}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, marketArea: event.target.value }))}
-              />
-            </Field>
-          </div>
-
-          <Separator />
-
-          <Field label="Destination City">
-            <Input
-              value={searchCriteria.destinationCity}
+              list={loadFieldOptions.states.length > 0 ? "bidding-origin-states" : undefined}
+              value={searchCriteria.originState}
               onChange={(event) =>
-                setSearchCriteria((prev) => ({ ...prev, destinationCity: event.target.value }))
+                setSearchCriteria((prev) => ({
+                  ...prev,
+                  originState: event.target.value.toUpperCase(),
+                }))
+              }
+              placeholder={t("State")}
+              maxLength={2}
+            />
+            {loadFieldOptions.states.length > 0 ? (
+              <datalist id="bidding-origin-states">
+                {loadFieldOptions.states.map((state) => (
+                  <option key={state} value={state} />
+                ))}
+              </datalist>
+            ) : null}
+          </Field>
+          <Field label={t("Origin 5-Digit ZIP")}>
+            <Input
+              value={searchCriteria.originZip5}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, originZip5: event.target.value }))
               }
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Destination State">
-              <Input
-                list={loadFieldOptions.states.length > 0 ? "bidding-destination-states" : undefined}
-                value={searchCriteria.destinationState}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({ ...prev, destinationState: event.target.value.toUpperCase() }))
-                }
-                placeholder="State"
-                maxLength={2}
-              />
-              {loadFieldOptions.states.length > 0 ? (
-                <datalist id="bidding-destination-states">
-                  {loadFieldOptions.states.map((state) => (
-                    <option key={state} value={state} />
-                  ))}
-                </datalist>
-              ) : null}
-            </Field>
-            <Field label="Destination 5-Digit ZIP">
-              <Input
-                value={searchCriteria.destinationZip5}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({ ...prev, destinationZip5: event.target.value }))
-                }
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Destination 3-Digit ZIP">
-              <Input
-                value={searchCriteria.destinationZip3}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({ ...prev, destinationZip3: event.target.value }))
-                }
-              />
-            </Field>
-            <Field label="Radius (Miles)">
-              <Input
-                type="number"
-                value={searchCriteria.radiusMiles}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({
-                    ...prev,
-                    radiusMiles: Number(event.target.value) || 0,
-                  }))
-                }
-              />
-            </Field>
-          </div>
-
-          <Separator />
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Equipment Type">
-              <Input
-                list={loadFieldOptions.equipmentTypes.length > 0 ? "bidding-equipment-types" : undefined}
-                value={searchCriteria.equipmentType}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({ ...prev, equipmentType: event.target.value }))
-                }
-                placeholder="From AWS loads or enter manually"
-              />
-              {loadFieldOptions.equipmentTypes.length > 0 ? (
-                <datalist id="bidding-equipment-types">
-                  {loadFieldOptions.equipmentTypes.map((equipment) => (
-                    <option key={equipment} value={equipment} />
-                  ))}
-                </datalist>
-              ) : null}
-            </Field>
-            <Field label="Weight">
-              <Input
-                type="number"
-                value={searchCriteria.weight || ""}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({ ...prev, weight: Number(event.target.value) || 0 }))
-                }
-                placeholder="lbs"
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Pickup Date">
-              <Input
-                type="date"
-                value={searchCriteria.pickupDate}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, pickupDate: event.target.value }))}
-              />
-            </Field>
-            <Field label="Delivery Date">
-              <Input
-                type="date"
-                value={searchCriteria.deliveryDate}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, deliveryDate: event.target.value }))}
-              />
-            </Field>
-          </div>
-
-          <Field label="Commodity">
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Origin 3-Digit ZIP")}>
             <Input
-              value={searchCriteria.commodity}
-              onChange={(event) => setSearchCriteria((prev) => ({ ...prev, commodity: event.target.value }))}
+              value={searchCriteria.originZip3}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, originZip3: event.target.value }))
+              }
             />
           </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Customer">
-              <Input
-                list={loadFieldOptions.customers.length > 0 ? "bidding-customers" : undefined}
-                value={searchCriteria.customer}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, customer: event.target.value }))}
-                placeholder="From AWS loads or enter manually"
-              />
-              {loadFieldOptions.customers.length > 0 ? (
-                <datalist id="bidding-customers">
-                  {loadFieldOptions.customers.map((customer) => (
-                    <option key={customer} value={customer} />
-                  ))}
-                </datalist>
-              ) : null}
-            </Field>
-            <Field label="Broker">
-              <Input
-                list={loadFieldOptions.brokers.length > 0 ? "bidding-brokers" : undefined}
-                value={searchCriteria.broker}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, broker: event.target.value }))}
-                placeholder="From AWS loads or enter manually"
-              />
-              {loadFieldOptions.brokers.length > 0 ? (
-                <datalist id="bidding-brokers">
-                  {loadFieldOptions.brokers.map((broker) => (
-                    <option key={broker} value={broker} />
-                  ))}
-                </datalist>
-              ) : null}
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Reference ID">
-              <Input
-                value={searchCriteria.referenceId}
-                onChange={(event) =>
-                  setSearchCriteria((prev) => ({ ...prev, referenceId: event.target.value }))
-                }
-              />
-            </Field>
-            <Field label="RFP ID">
-              <Input
-                value={searchCriteria.rfpId}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, rfpId: event.target.value }))}
-              />
-            </Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Quote ID">
-              <Input
-                value={searchCriteria.quoteId}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, quoteId: event.target.value }))}
-              />
-            </Field>
-            <Field label="Load ID">
-              <Input
-                value={searchCriteria.loadId}
-                onChange={(event) => setSearchCriteria((prev) => ({ ...prev, loadId: event.target.value }))}
-              />
-            </Field>
-          </div>
+          <Field label={t("Market Area")}>
+            <Input
+              value={searchCriteria.marketArea}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, marketArea: event.target.value }))
+              }
+            />
+          </Field>
         </div>
 
         <Separator />
 
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Search Options</p>
-          <OptionsGrid
-            options={[
-              {
-                id: "exactLaneMatch",
-                label: "Exact lane match",
-                checked: searchOptions.exactLaneMatch,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, exactLaneMatch: checked === true })),
-              },
-              {
-                id: "similarLaneMatch",
-                label: "Similar lane match",
-                checked: searchOptions.similarLaneMatch,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, similarLaneMatch: checked === true })),
-              },
-              {
-                id: "adjacentMarketSearch",
-                label: "Adjacent market search",
-                checked: searchOptions.adjacentMarketSearch,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, adjacentMarketSearch: checked === true })),
-              },
-              {
-                id: "includeBackhaulCandidates",
-                label: "Include backhaul candidates",
-                checked: searchOptions.includeBackhaulCandidates,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({
-                    ...prev,
-                    includeBackhaulCandidates: checked === true,
-                  })),
-              },
-              {
-                id: "includeActiveLoads",
-                label: "Include active loads",
-                checked: searchOptions.includeActiveLoads,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, includeActiveLoads: checked === true })),
-              },
-              {
-                id: "includeDatMarketData",
-                label: "Include DAT market data",
-                checked: searchOptions.includeDatMarketData,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, includeDatMarketData: checked === true })),
-              },
-              {
-                id: "includeLast30Days",
-                label: "Include last 30 days",
-                checked: searchOptions.includeLast30Days,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, includeLast30Days: checked === true })),
-              },
-              {
-                id: "includeLast60Days",
-                label: "Include last 60 days",
-                checked: searchOptions.includeLast60Days,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, includeLast60Days: checked === true })),
-              },
-              {
-                id: "includeLast90Days",
-                label: "Include last 90 days",
-                checked: searchOptions.includeLast90Days,
-                onCheckedChange: (checked) =>
-                  setSearchOptions((prev) => ({ ...prev, includeLast90Days: checked === true })),
-              },
-            ]}
+        <Field label={t("Destination City")}>
+          <Input
+            value={searchCriteria.destinationCity}
+            onChange={(event) =>
+              setSearchCriteria((prev) => ({ ...prev, destinationCity: event.target.value }))
+            }
           />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Destination State")}>
+            <Input
+              list={loadFieldOptions.states.length > 0 ? "bidding-destination-states" : undefined}
+              value={searchCriteria.destinationState}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({
+                  ...prev,
+                  destinationState: event.target.value.toUpperCase(),
+                }))
+              }
+              placeholder={t("State")}
+              maxLength={2}
+            />
+            {loadFieldOptions.states.length > 0 ? (
+              <datalist id="bidding-destination-states">
+                {loadFieldOptions.states.map((state) => (
+                  <option key={state} value={state} />
+                ))}
+              </datalist>
+            ) : null}
+          </Field>
+          <Field label={t("Destination 5-Digit ZIP")}>
+            <Input
+              value={searchCriteria.destinationZip5}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, destinationZip5: event.target.value }))
+              }
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Destination 3-Digit ZIP")}>
+            <Input
+              value={searchCriteria.destinationZip3}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, destinationZip3: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label={t("Radius (Miles)")}>
+            <Input
+              type="number"
+              value={searchCriteria.radiusMiles}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({
+                  ...prev,
+                  radiusMiles: Number(event.target.value) || 0,
+                }))
+              }
+            />
+          </Field>
         </div>
 
         <Separator />
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button className="gap-1.5" onClick={searchLane} disabled={isSearching}>
-            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            Search Lane
-          </Button>
-          <Button variant="outline" className="gap-1.5" onClick={clearSearch}>
-            Clear Search
-          </Button>
-          <Button variant="outline" className="gap-1.5" onClick={() => void saveSearch()} disabled={workspaceActionPending}>
-            <Save className="h-4 w-4" />
-            Save Search
-          </Button>
-          <Button variant="outline" className="gap-1.5" onClick={loadSavedSearch}>
-            Load Saved
-          </Button>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Equipment Type")}>
+            <Input
+              list={
+                loadFieldOptions.equipmentTypes.length > 0 ? "bidding-equipment-types" : undefined
+              }
+              value={searchCriteria.equipmentType}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, equipmentType: event.target.value }))
+              }
+              placeholder={t("From AWS loads or enter manually")}
+            />
+            {loadFieldOptions.equipmentTypes.length > 0 ? (
+              <datalist id="bidding-equipment-types">
+                {loadFieldOptions.equipmentTypes.map((equipment) => (
+                  <option key={equipment} value={equipment} />
+                ))}
+              </datalist>
+            ) : null}
+          </Field>
+          <Field label={t("Weight")}>
+            <Input
+              type="number"
+              value={searchCriteria.weight || ""}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, weight: Number(event.target.value) || 0 }))
+              }
+              placeholder="lbs"
+            />
+          </Field>
         </div>
-        <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-          <Select value={selectedSavedSearch} onValueChange={setSelectedSavedSearch}>
-            <SelectTrigger>
-              <SelectValue placeholder="Saved searches" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Saved searches</SelectItem>
-              {savedSearches.map((item) => (
-                <SelectItem key={item.name} value={item.name}>
-                  {item.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            className="shrink-0"
-            disabled={selectedSavedSearch === "none" || workspaceActionPending}
-            onClick={() => void removeSavedSearch()}
-            title="Delete saved search"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" className="gap-1.5" onClick={() => exportResults("CSV")}>
-            <FileDown className="h-4 w-4" />
-            Export
-          </Button>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Pickup Date")}>
+            <Input
+              type="date"
+              value={searchCriteria.pickupDate}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, pickupDate: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label={t("Delivery Date")}>
+            <Input
+              type="date"
+              value={searchCriteria.deliveryDate}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, deliveryDate: event.target.value }))
+              }
+            />
+          </Field>
         </div>
+
+        <Field label={t("Commodity")}>
+          <Input
+            value={searchCriteria.commodity}
+            onChange={(event) =>
+              setSearchCriteria((prev) => ({ ...prev, commodity: event.target.value }))
+            }
+          />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Customer")}>
+            <Input
+              list={loadFieldOptions.customers.length > 0 ? "bidding-customers" : undefined}
+              value={searchCriteria.customer}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, customer: event.target.value }))
+              }
+              placeholder={t("From AWS loads or enter manually")}
+            />
+            {loadFieldOptions.customers.length > 0 ? (
+              <datalist id="bidding-customers">
+                {loadFieldOptions.customers.map((customer) => (
+                  <option key={customer} value={customer} />
+                ))}
+              </datalist>
+            ) : null}
+          </Field>
+          <Field label={t("Broker")}>
+            <Input
+              list={loadFieldOptions.brokers.length > 0 ? "bidding-brokers" : undefined}
+              value={searchCriteria.broker}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, broker: event.target.value }))
+              }
+              placeholder={t("From AWS loads or enter manually")}
+            />
+            {loadFieldOptions.brokers.length > 0 ? (
+              <datalist id="bidding-brokers">
+                {loadFieldOptions.brokers.map((broker) => (
+                  <option key={broker} value={broker} />
+                ))}
+              </datalist>
+            ) : null}
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Reference ID")}>
+            <Input
+              value={searchCriteria.referenceId}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, referenceId: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label={t("RFP ID")}>
+            <Input
+              value={searchCriteria.rfpId}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, rfpId: event.target.value }))
+              }
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t("Quote ID")}>
+            <Input
+              value={searchCriteria.quoteId}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, quoteId: event.target.value }))
+              }
+            />
+          </Field>
+          <Field label={t("Load ID")}>
+            <Input
+              value={searchCriteria.loadId}
+              onChange={(event) =>
+                setSearchCriteria((prev) => ({ ...prev, loadId: event.target.value }))
+              }
+            />
+          </Field>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("Search Options")}
+        </p>
+        <OptionsGrid
+          options={[
+            {
+              id: "exactLaneMatch",
+              label: "Exact lane match",
+              checked: searchOptions.exactLaneMatch,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({ ...prev, exactLaneMatch: checked === true })),
+            },
+            {
+              id: "similarLaneMatch",
+              label: "Similar lane match",
+              checked: searchOptions.similarLaneMatch,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({ ...prev, similarLaneMatch: checked === true })),
+            },
+            {
+              id: "adjacentMarketSearch",
+              label: "Adjacent market search",
+              checked: searchOptions.adjacentMarketSearch,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({ ...prev, adjacentMarketSearch: checked === true })),
+            },
+            {
+              id: "includeBackhaulCandidates",
+              label: "Include backhaul candidates",
+              checked: searchOptions.includeBackhaulCandidates,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({
+                  ...prev,
+                  includeBackhaulCandidates: checked === true,
+                })),
+            },
+            {
+              id: "includeActiveLoads",
+              label: "Include active loads",
+              checked: searchOptions.includeActiveLoads,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({ ...prev, includeActiveLoads: checked === true })),
+            },
+            ...(datFlags.rateData
+              ? [
+                  {
+                    id: "includeDatMarketData",
+                    label: "Include DAT market data",
+                    checked: searchOptions.includeDatMarketData,
+                    onCheckedChange: (checked: boolean | string) =>
+                      setSearchOptions((prev) => ({
+                        ...prev,
+                        includeDatMarketData: checked === true,
+                      })),
+                  },
+                ]
+              : []),
+            {
+              id: "includeLast30Days",
+              label: "Include last 30 days",
+              checked: searchOptions.includeLast30Days,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({ ...prev, includeLast30Days: checked === true })),
+            },
+            {
+              id: "includeLast60Days",
+              label: "Include last 60 days",
+              checked: searchOptions.includeLast60Days,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({ ...prev, includeLast60Days: checked === true })),
+            },
+            {
+              id: "includeLast90Days",
+              label: "Include last 90 days",
+              checked: searchOptions.includeLast90Days,
+              onCheckedChange: (checked) =>
+                setSearchOptions((prev) => ({ ...prev, includeLast90Days: checked === true })),
+            },
+          ]}
+        />
+      </div>
+
+      <Separator />
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button className="gap-1.5" onClick={searchLane} disabled={isSearching}>
+          {isSearching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Search className="h-4 w-4" />
+          )}
+          Search Lane
+        </Button>
+        <Button variant="outline" className="gap-1.5" onClick={clearSearch}>
+          {t("Clear Search")}
+        </Button>
+        <Button
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => void saveSearch()}
+          disabled={workspaceActionPending}
+        >
+          <Save className="h-4 w-4" />
+          {t("Save Search")}
+        </Button>
+        <Button variant="outline" className="gap-1.5" onClick={loadSavedSearch}>
+          {t("Load Saved")}
+        </Button>
+      </div>
+      <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+        <Select value={selectedSavedSearch} onValueChange={setSelectedSavedSearch}>
+          <SelectTrigger>
+            <SelectValue placeholder={t("Saved searches")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">{t("Saved searches")}</SelectItem>
+            {savedSearches.map((item) => (
+              <SelectItem key={item.name} value={item.name}>
+                {item.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          disabled={selectedSavedSearch === "none" || workspaceActionPending}
+          onClick={() => void removeSavedSearch()}
+          title={t("Delete saved search")}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" className="gap-1.5" onClick={() => exportResults("CSV")}>
+          <FileDown className="h-4 w-4" />
+          {t("Export")}
+        </Button>
+      </div>
     </WorkspacePanel>
   );
 
@@ -1367,73 +1564,95 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={Database}
       tone="blue"
-      title="DAT RateView"
-      description="Market benchmark data for the searched lane. Admin DAT refresh rules configurable in Settings."
+      title={t("DAT RateView")}
+      description={t(
+        "Market benchmark data for the searched lane. Admin DAT refresh rules configurable in Settings.",
+      )}
       badge={
         <Badge variant="outline" className={cn("font-medium", DAT_STATUS_TONE[datSnapshot.status])}>
           {datSnapshot.status}
         </Badge>
       }
     >
-        {datError || !isDatApiConnected() ? (
-          <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-warning-foreground">
-            {datError ?? DAT_NOT_CONNECTED_MESSAGE}
-          </div>
-        ) : null}
-        {!isDatApiConnected() ? (
-          <p className="text-xs text-muted-foreground">
-            Market benchmark fields below stay empty until DAT RateView is connected. Internal AWS load
-            history is still used for bidding.
-          </p>
-        ) : null}
-        <div className="grid grid-cols-2 gap-3">
-          <InsightStat
-            label="DAT Market Minimum"
-            value={isDatApiConnected() ? formatCurrency(datSnapshot.marketMinimum) : "—"}
-          />
-          <InsightStat
-            label="DAT Market Average"
-            value={isDatApiConnected() ? formatCurrency(datSnapshot.marketAverage) : "—"}
-            highlight
-          />
-          <InsightStat
-            label="DAT Market Maximum"
-            value={isDatApiConnected() ? formatCurrency(datSnapshot.marketMaximum) : "—"}
-          />
-          <InsightStat
-            label="DAT Rate Per Mile"
-            value={isDatApiConnected() ? `$${datSnapshot.ratePerMile.toFixed(2)}` : "—"}
-          />
-          <InsightStat
-            label="DAT Fuel Estimate"
-            value={isDatApiConnected() ? `$${datSnapshot.fuelEstimate.toFixed(2)}/mi` : "—"}
-          />
-          <InsightStat
-            label="DAT Capacity Indicator"
-            value={isDatApiConnected() ? `${datSnapshot.capacityIndicator}/100` : "—"}
-          />
-          <InsightStat
-            label="DAT Confidence"
-            value={isDatApiConnected() ? `${datSnapshot.confidence}%` : "—"}
-          />
-          <InsightStat label="DAT Data Window" value={isDatApiConnected() ? datSnapshot.dataWindow : "—"} />
-          <InsightStat label="DAT Last Refreshed" value={isDatApiConnected() ? datSnapshot.lastRefreshed : "—"} />
-          <InsightStat label="DAT Source Status" value={datSnapshot.sourceStatus} className="col-span-2" />
+      {datBlockedMessage ? (
+        <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-warning-foreground">
+          {datError ?? datBlockedMessage}
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="outline" className="gap-1.5" onClick={refreshDat}>
-            <RefreshCw className="h-4 w-4" />
-            Refresh DAT
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => setActionMessage("Navigate to Settings > Integrations > DAT Refresh Rules.")}
-          >
-            <Filter className="h-4 w-4" />
-            Refresh Rules
-          </Button>
+      ) : datError ? (
+        <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-warning-foreground">
+          {datError}
         </div>
+      ) : null}
+      {datBlockedMessage ? (
+        <p className="text-xs text-muted-foreground">
+          {t(
+            "Market benchmark fields below stay empty until DAT RateView is connected. Internal AWS\r\n          load history is still used for bidding.",
+          )}
+        </p>
+      ) : null}
+      <div className="grid grid-cols-2 gap-3">
+        {datFlags.rateData ? (
+          <>
+            <InsightStat label={t("DAT Market Minimum")} value={money(datSnapshot.marketMinimum)} />
+            <InsightStat
+              label={t("DAT Market Average")}
+              value={money(datSnapshot.marketAverage)}
+              highlight
+            />
+            <InsightStat label={t("DAT Market Maximum")} value={money(datSnapshot.marketMaximum)} />
+            <InsightStat label={t("DAT Rate Per Mile")} value={perMile(datSnapshot.ratePerMile)} />
+            <InsightStat
+              label={t("DAT Fuel Estimate")}
+              value={
+                datSnapshot.fuelEstimate == null
+                  ? "—"
+                  : `$${datSnapshot.fuelEstimate.toFixed(2)}/mi`
+              }
+            />
+          </>
+        ) : null}
+        {datFlags.capacityData ? (
+          <InsightStat
+            label={t("DAT Capacity Indicator")}
+            value={
+              datSnapshot.capacityIndicator == null ? "—" : `${datSnapshot.capacityIndicator}/100`
+            }
+          />
+        ) : null}
+        {datFlags.rateData || datFlags.capacityData ? (
+          <>
+            <InsightStat label={t("DAT Confidence")} value={percent(datSnapshot.confidence, 0)} />
+            <InsightStat label={t("DAT Data Window")} value={datFlags.dataWindow} />
+            <InsightStat label={t("DAT Last Refreshed")} value={datSnapshot.lastRefreshed} />
+            <InsightStat
+              label={t("DAT Source Status")}
+              value={datSnapshot.sourceStatus}
+              className="col-span-2"
+            />
+          </>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant="outline"
+          className="gap-1.5"
+          onClick={refreshDat}
+          disabled={!datDataEnabled}
+        >
+          <RefreshCw className="h-4 w-4" />
+          {t("Refresh DAT")}
+        </Button>
+        <Button
+          variant="outline"
+          className="gap-1.5"
+          onClick={() =>
+            setActionMessage("Navigate to Settings > Integrations > DAT Refresh Rules.")
+          }
+        >
+          <Filter className="h-4 w-4" />
+          {t("Refresh Rules")}
+        </Button>
+      </div>
     </WorkspacePanel>
   );
 
@@ -1441,87 +1660,98 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={Table2}
       tone="emerald"
-      title="Bid Intelligence Results"
-      description="Combined internal historicals, DAT market data, margin intelligence, and risk scoring."
+      title={t("Bid Intelligence Results")}
+      description={t(
+        "Combined internal historicals, DAT market data, margin intelligence, and risk scoring.",
+      )}
     >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <InsightStat label="Historical Loads" value={selectedResult ? String(selectedResult.loadCount) : "0"} />
-          <InsightStat
-            label="Win Rate"
-            value={selectedResult ? `${selectedResult.winRate.toFixed(1)}%` : "0%"}
-          />
-          <InsightStat
-            label="Avg Margin"
-            value={selectedResult ? formatCurrency(selectedResult.historicalMargin) : "$0"}
-          />
-          <InsightStat
-            label="Recommended Bid"
-            value={selectedResult ? formatCurrency(selectedResult.recommendedBid) : "$0"}
-            highlight
-          />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <InsightStat
+          label={t("Historical Loads")}
+          value={
+            selectedResult
+              ? selectedResult.droppedForMissingRates > 0
+                ? `${selectedResult.loadCount} (${selectedResult.droppedForMissingRates} skipped)`
+                : String(selectedResult.loadCount)
+              : "—"
+          }
+        />
+        <InsightStat
+          label={t("Win Rate")}
+          value={selectedResult ? percent(selectedResult.winRate) : "—"}
+        />
+        <InsightStat
+          label={t("Avg Margin")}
+          value={selectedResult ? formatCurrency(selectedResult.historicalMargin) : "—"}
+        />
+        <InsightStat
+          label={t("Recommended Bid")}
+          value={selectedResult ? formatCurrency(selectedResult.recommendedBid) : "—"}
+          highlight
+        />
+      </div>
+
+      {isSearching && currentSearchStep ? (
+        <div className="flex items-center gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2.5 text-xs text-info">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          {currentSearchStep}
         </div>
+      ) : null}
 
-        {isSearching && currentSearchStep ? (
-          <div className="flex items-center gap-2 rounded-lg border border-info/30 bg-info/10 px-3 py-2.5 text-xs text-info">
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            {currentSearchStep}
-          </div>
-        ) : null}
-
-        <div className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border border-border/70 bg-muted/10">
-          <Table className="min-w-[1860px] text-xs">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Lane</TableHead>
-                <TableHead>Equipment</TableHead>
-                <TableHead>Historical Avg Buy</TableHead>
-                <TableHead>Historical Avg Sell</TableHead>
-                <TableHead>Historical Margin</TableHead>
-                <TableHead>Historical Margin %</TableHead>
-                <TableHead>Standard Deviation</TableHead>
-                <TableHead>Win Rate</TableHead>
-                <TableHead>Last 30-Day Avg Buy</TableHead>
-                <TableHead>Last 30-Day Avg Sell</TableHead>
-                <TableHead>Last 60-Day Avg Buy</TableHead>
-                <TableHead>Last 60-Day Avg Sell</TableHead>
-                <TableHead>Last 90-Day Avg Buy</TableHead>
-                <TableHead>Last 90-Day Avg Sell</TableHead>
-                <TableHead>DAT Market Min</TableHead>
-                <TableHead>DAT Market Avg</TableHead>
-                <TableHead>DAT Market Max</TableHead>
-                <TableHead>DAT Rate Per Mile</TableHead>
-                <TableHead>Margin Band</TableHead>
-                <TableHead>Risk Score</TableHead>
-                <TableHead>Similar Active Loads</TableHead>
-                <TableHead>Confidence</TableHead>
-                <TableHead>Recommended Bid</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loadsLoading && results.length === 0 ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={`skel-${i}`}>
-                    {Array.from({ length: 24 }).map((__, j) => (
-                      <TableCell key={j}>
-                        <Skeleton className="h-4 w-16" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : results.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={24} className="py-8 text-center text-muted-foreground">
-                    {loadsLoading
-                      ? "Loading historical loads from AWS..."
-                      : loadsError
-                        ? loadsError
-                        : !hasLaneSearchCriteria
-                          ? "Enter lane details and click Search Lane to pull historicals from AWS."
-                          : "No matching loads in AWS for this lane. Adjust search filters or create loads with customer and carrier rates."}
-                  </TableCell>
+      <div className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border border-border/70 bg-muted/10">
+        <Table className="min-w-[1860px] text-xs">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("Lane")}</TableHead>
+              <TableHead>{t("Equipment")}</TableHead>
+              <TableHead>{t("Historical Avg Buy")}</TableHead>
+              <TableHead>{t("Historical Avg Sell")}</TableHead>
+              <TableHead>{t("Historical Margin")}</TableHead>
+              <TableHead>{t("Historical Margin %")}</TableHead>
+              <TableHead>{t("Standard Deviation")}</TableHead>
+              <TableHead>{t("Win Rate")}</TableHead>
+              <TableHead>{t("Last 30-Day Avg Buy")}</TableHead>
+              <TableHead>{t("Last 30-Day Avg Sell")}</TableHead>
+              <TableHead>{t("Last 60-Day Avg Buy")}</TableHead>
+              <TableHead>{t("Last 60-Day Avg Sell")}</TableHead>
+              <TableHead>{t("Last 90-Day Avg Buy")}</TableHead>
+              <TableHead>{t("Last 90-Day Avg Sell")}</TableHead>
+              <TableHead>{t("DAT Market Min")}</TableHead>
+              <TableHead>{t("DAT Market Avg")}</TableHead>
+              <TableHead>{t("DAT Market Max")}</TableHead>
+              <TableHead>{t("DAT Rate Per Mile")}</TableHead>
+              <TableHead>{t("Margin Band")}</TableHead>
+              <TableHead>{t("Risk Score")}</TableHead>
+              <TableHead>{t("Similar Active Loads")}</TableHead>
+              <TableHead>{t("Confidence")}</TableHead>
+              <TableHead>{t("Recommended Bid")}</TableHead>
+              <TableHead>{t("Actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loadsLoading && results.length === 0 ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={`skel-${i}`}>
+                  {Array.from({ length: 24 }).map((__, j) => (
+                    <TableCell key={j}>
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                  ))}
                 </TableRow>
-              ) : (
+              ))
+            ) : results.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={24} className="py-8 text-center text-muted-foreground">
+                  {loadsLoading
+                    ? "Loading historical loads from AWS..."
+                    : loadsError
+                      ? loadsError
+                      : !hasLaneSearchCriteria
+                        ? "Enter lane details and click Search Lane to pull historicals from AWS."
+                        : "No matching loads in AWS for this lane. Adjust search filters or create loads with customer and carrier rates."}
+                </TableCell>
+              </TableRow>
+            ) : (
               results.map((row) => {
                 const isActive = row.id === selectedResultId;
                 return (
@@ -1540,17 +1770,17 @@ export function BiddingPage() {
                     <TableCell>{formatCurrency(row.historicalMargin)}</TableCell>
                     <TableCell>{row.historicalMarginPct.toFixed(1)}%</TableCell>
                     <TableCell>{formatCurrency(row.standardDeviation)}</TableCell>
-                    <TableCell>{row.winRate.toFixed(1)}%</TableCell>
-                    <TableCell>{formatCurrency(row.last30AvgBuy)}</TableCell>
-                    <TableCell>{formatCurrency(row.last30AvgSell)}</TableCell>
-                    <TableCell>{formatCurrency(row.last60AvgBuy)}</TableCell>
-                    <TableCell>{formatCurrency(row.last60AvgSell)}</TableCell>
-                    <TableCell>{formatCurrency(row.last90AvgBuy)}</TableCell>
-                    <TableCell>{formatCurrency(row.last90AvgSell)}</TableCell>
-                    <TableCell>{formatCurrency(row.datMarketMin)}</TableCell>
-                    <TableCell>{formatCurrency(row.datMarketAvg)}</TableCell>
-                    <TableCell>{formatCurrency(row.datMarketMax)}</TableCell>
-                    <TableCell>${row.datRatePerMile.toFixed(2)}</TableCell>
+                    <TableCell>{percent(row.winRate)}</TableCell>
+                    <TableCell>{money(row.last30AvgBuy)}</TableCell>
+                    <TableCell>{money(row.last30AvgSell)}</TableCell>
+                    <TableCell>{money(row.last60AvgBuy)}</TableCell>
+                    <TableCell>{money(row.last60AvgSell)}</TableCell>
+                    <TableCell>{money(row.last90AvgBuy)}</TableCell>
+                    <TableCell>{money(row.last90AvgSell)}</TableCell>
+                    <TableCell>{money(row.datMarketMin)}</TableCell>
+                    <TableCell>{money(row.datMarketAvg)}</TableCell>
+                    <TableCell>{money(row.datMarketMax)}</TableCell>
+                    <TableCell>{perMile(row.datRatePerMile)}</TableCell>
                     <TableCell className={cn("font-medium", MARGIN_TONE[row.marginBand])}>
                       {row.marginBand}
                     </TableCell>
@@ -1569,16 +1799,16 @@ export function BiddingPage() {
                           setActionMessage(`Selected ${row.lane} for bidding review.`);
                         }}
                       >
-                        Select
+                        {t("Select")}
                       </Button>
                     </TableCell>
                   </TableRow>
                 );
               })
-              )}
-            </TableBody>
-          </Table>
-        </div>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </WorkspacePanel>
   );
 
@@ -1586,153 +1816,161 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={Truck}
       tone="indigo"
-      title="Leverage Panel"
-      description="Similar active loads, adjacent lanes, backhaul candidates, capacity opportunities, and leverage context."
+      title={t("Leverage Panel")}
+      description={t(
+        "Similar active loads, adjacent lanes, backhaul candidates, capacity opportunities, and leverage context.",
+      )}
     >
-        <Tabs defaultValue="similar" className="w-full">
-          <div className="rounded-xl border border-border/70 bg-muted/20 p-1.5">
-            <TabsList className="inline-flex h-auto w-full gap-0.5 bg-transparent p-0">
-              <TabsTrigger
-                value="similar"
-                className="flex-1 rounded-lg px-2 py-2 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm sm:text-sm"
+      <Tabs defaultValue="similar" className="w-full">
+        <div className="rounded-xl border border-border/70 bg-muted/20 p-1.5">
+          <TabsList className="inline-flex h-auto w-full gap-0.5 bg-transparent p-0">
+            <TabsTrigger
+              value="similar"
+              className="flex-1 rounded-lg px-2 py-2 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm sm:text-sm"
+            >
+              {t("Similar Loads")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="backhaul"
+              className="flex-1 rounded-lg px-2 py-2 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm sm:text-sm"
+            >
+              {t("Backhaul")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="leverage"
+              className="flex-1 rounded-lg px-2 py-2 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm sm:text-sm"
+            >
+              {t("Leverage")}
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="similar" className="mt-3 space-y-3">
+          {similarActiveLoads.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("No similar active loads in AWS for this lane.")}
+            </p>
+          ) : null}
+          {similarActiveLoads.map((load) => {
+            const excluded = excludedLeverageIds.includes(load.loadNumber);
+            return (
+              <div
+                key={load.loadNumber}
+                className="rounded-xl border border-border/70 bg-card p-3.5 shadow-sm transition-shadow hover:shadow-md"
               >
-                Similar Loads
-              </TabsTrigger>
-              <TabsTrigger
-                value="backhaul"
-                className="flex-1 rounded-lg px-2 py-2 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm sm:text-sm"
-              >
-                Backhaul
-              </TabsTrigger>
-              <TabsTrigger
-                value="leverage"
-                className="flex-1 rounded-lg px-2 py-2 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm sm:text-sm"
-              >
-                Leverage
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value="similar" className="mt-3 space-y-3">
-            {similarActiveLoads.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No similar active loads in AWS for this lane.
-              </p>
-            ) : null}
-            {similarActiveLoads.map((load) => {
-              const excluded = excludedLeverageIds.includes(load.loadNumber);
-              return (
-                <div key={load.loadNumber} className="rounded-xl border border-border/70 bg-card p-3.5 shadow-sm transition-shadow hover:shadow-md">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold">{load.loadNumber}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {load.origin} to {load.destination} · {load.equipment}
-                      </p>
-                    </div>
-                    <Badge variant="outline">{load.similarityPct}% similar</Badge>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <span>Customer: {load.customer}</span>
-                    <span>Status: {load.currentStatus}</span>
-                    <span>Buy: {formatCurrency(load.buyRate)}</span>
-                    <span>Sell: {formatCurrency(load.sellRate)}</span>
-                    <span>Margin: {formatCurrency(load.margin)}</span>
-                    <span>Carrier: {load.assignedCarrier}</span>
-                    <span>Pickup: {load.pickupDate}</span>
-                    <span>Distance: {load.distanceFromLane} mi</span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Button size="sm" variant="outline" className="h-8 text-[11px]">
-                      View Load
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-8 text-[11px]">
-                      Attach as Leverage
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-8 text-[11px]">
-                      Contact Carrier
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={excluded ? "default" : "outline"}
-                      className="h-8 text-[11px]"
-                      onClick={() => toggleExcludeLeverage(load.loadNumber)}
-                    >
-                      {excluded ? "Re-include" : "Exclude"}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </TabsContent>
-          <TabsContent value="backhaul" className="mt-3 space-y-3">
-            {backhaulCandidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No backhaul candidates in AWS for this lane.
-              </p>
-            ) : null}
-            {backhaulCandidates.map((candidate) => (
-              <div key={candidate.loadNumber} className="rounded-xl border border-border/70 bg-card p-3.5 shadow-sm transition-shadow hover:shadow-md">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-semibold">{candidate.loadNumber}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {candidate.currentDeliveryMarket} to {candidate.destination}
-                      </p>
+                    <p className="text-sm font-semibold">{load.loadNumber}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {load.origin} to {load.destination} · {load.equipment}
+                    </p>
                   </div>
-                  <Badge variant="outline">Rank {candidate.rankScore}</Badge>
+                  <Badge variant="outline">{load.similarityPct}% similar</Badge>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <span>Candidate Pickup: {candidate.candidatePickupMarket}</span>
-                  <span>Equipment: {candidate.equipment}</span>
-                  <span>Available: {candidate.availableDate}</span>
-                  <span>Deadhead: {candidate.deadheadMiles} mi</span>
-                  <span>Similarity: {candidate.similarityPct}%</span>
-                  <span>Backhaul Value: {formatCurrency(candidate.estimatedBackhaulValue)}</span>
-                  <span>Carrier: {candidate.suggestedCarrier}</span>
+                  <span>Customer: {load.customer}</span>
+                  <span>Status: {load.currentStatus}</span>
+                  <span>Buy: {money(load.buyRate)}</span>
+                  <span>Sell: {money(load.sellRate)}</span>
+                  <span>Margin: {money(load.margin)}</span>
+                  <span>Carrier: {load.assignedCarrier}</span>
+                  <span>Pickup: {load.pickupDate}</span>
+                  <span>Match: {load.matchType}</span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <Button size="sm" variant="outline" className="h-8 text-[11px]">
-                    Use as Backhaul
+                    {t("View Load")}
                   </Button>
                   <Button size="sm" variant="outline" className="h-8 text-[11px]">
-                    Add to Bid Notes
+                    {t("Attach as Leverage")}
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-[11px]">
+                    {t("Contact Carrier")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={excluded ? "default" : "outline"}
+                    className="h-8 text-[11px]"
+                    onClick={() => toggleExcludeLeverage(load.loadNumber)}
+                  >
+                    {excluded ? "Re-include" : "Exclude"}
                   </Button>
                 </div>
               </div>
-            ))}
-          </TabsContent>
-          <TabsContent value="leverage" className="mt-3 grid gap-2 sm:grid-cols-2">
-            <InsightStat
-              label="Capacity Opportunities"
-              value={`${Math.max(2, similarActiveLoads.length - 1)} carrier clusters`}
-            />
-            <InsightStat
-              label="Customer Leverage"
-              value={
-                similarActiveLoads.length > 0
-                  ? `${searchCriteria.customer} has ${similarActiveLoads.length} similar active load${similarActiveLoads.length === 1 ? "" : "s"} in AWS.`
-                  : "No similar active loads in AWS for this lane."
-              }
-            />
-            <InsightStat
-              label="Carrier Leverage"
-              value={
-                similarActiveLoads.length > 0
-                  ? `${new Set(similarActiveLoads.map((load) => load.assignedCarrier)).size} carriers overlapping on this lane.`
-                  : "No carrier overlap detected in AWS."
-              }
-            />
-            <InsightStat
-              label="Backhaul Ranking Logic"
-              value="Lane similarity, equipment match, date compatibility, deadhead, carrier availability, win rate, margin opportunity, risk."
-            />
-            <InsightStat
-              label="Similarity Factors"
-              value="Origin and destination market, equipment, date proximity, weight, customer history, carrier overlap, lane overlap."
-              className="sm:col-span-2"
-            />
-          </TabsContent>
-        </Tabs>
+            );
+          })}
+        </TabsContent>
+        <TabsContent value="backhaul" className="mt-3 space-y-3">
+          {backhaulCandidates.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("No backhaul candidates in AWS for this lane.")}
+            </p>
+          ) : null}
+          {backhaulCandidates.map((candidate) => (
+            <div
+              key={candidate.loadNumber}
+              className="rounded-xl border border-border/70 bg-card p-3.5 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold">{candidate.loadNumber}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {candidate.currentDeliveryMarket} to {candidate.destination}
+                  </p>
+                </div>
+                <Badge variant="outline">Rank {candidate.rankScore}</Badge>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <span>Repositions from: {candidate.currentDeliveryMarket}</span>
+                <span>Equipment: {candidate.equipment}</span>
+                <span>Available: {candidate.availableDate}</span>
+                <span>Returns to: {candidate.destination}</span>
+                <span>Similarity: {candidate.similarityPct}%</span>
+                <span>Backhaul Value: {money(candidate.estimatedBackhaulValue)}</span>
+                <span>Carrier: {candidate.suggestedCarrier}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button size="sm" variant="outline" className="h-8 text-[11px]">
+                  {t("Use as Backhaul")}
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 text-[11px]">
+                  {t("Add to Bid Notes")}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </TabsContent>
+        <TabsContent value="leverage" className="mt-3 grid gap-2 sm:grid-cols-2">
+          <InsightStat
+            label={t("Capacity Opportunities")}
+            value={`${Math.max(2, similarActiveLoads.length - 1)} carrier clusters`}
+          />
+          <InsightStat
+            label={t("Customer Leverage")}
+            value={
+              similarActiveLoads.length > 0
+                ? `${searchCriteria.customer} has ${similarActiveLoads.length} similar active load${similarActiveLoads.length === 1 ? "" : "s"} in AWS.`
+                : "No similar active loads in AWS for this lane."
+            }
+          />
+          <InsightStat
+            label={t("Carrier Leverage")}
+            value={
+              similarActiveLoads.length > 0
+                ? `${new Set(similarActiveLoads.map((load) => load.assignedCarrier)).size} carriers overlapping on this lane.`
+                : "No carrier overlap detected in AWS."
+            }
+          />
+          <InsightStat
+            label={t("Backhaul Ranking Logic")}
+            value="Lane similarity, equipment match, date compatibility, deadhead, carrier availability, win rate, margin opportunity, risk."
+          />
+          <InsightStat
+            label={t("Similarity Factors")}
+            value="Origin and destination market, equipment, date proximity, weight, customer history, carrier overlap, lane overlap."
+            className="sm:col-span-2"
+          />
+        </TabsContent>
+      </Tabs>
     </WorkspacePanel>
   );
 
@@ -1740,24 +1978,26 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={ShieldAlert}
       tone="amber"
-      title="Risk Model Slot"
-      description="Published admin-curated model evaluation with deterministic output and reproducible inputs."
+      title={t("Risk Model Slot")}
+      description={t(
+        "Published admin-curated model evaluation with deterministic output and reproducible inputs.",
+      )}
     >
-        {riskModelsLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-3.5 w-28" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-3 w-3/4" />
-          </div>
-        ) : (
-        <Field label="Select Risk Model">
+      {riskModelsLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-3.5 w-28" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-3 w-3/4" />
+        </div>
+      ) : (
+        <Field label={t("Select Risk Model")}>
           <Select
             value={selectedRiskModelId || undefined}
             onValueChange={setSelectedRiskModelId}
             disabled={riskModels.length === 0}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select a risk model" />
+              <SelectValue placeholder={t("Select a risk model")} />
             </SelectTrigger>
             <SelectContent>
               {riskModels.map((model) => (
@@ -1768,94 +2008,107 @@ export function BiddingPage() {
             </SelectContent>
           </Select>
         </Field>
-        )}
-        {selectedRiskModel ? (
+      )}
+      {selectedRiskModel ? (
         <div className="grid grid-cols-2 gap-3">
-          <InsightStat label="Model Version" value={selectedRiskModel.version} />
-          <InsightStat label="Model Owner" value={selectedRiskModel.owner} />
-          <InsightStat label="Last Published" value={selectedRiskModel.lastPublished} />
-          <InsightStat label="Risk Type" value={selectedRiskModel.riskType} />
-          <InsightStat label="Inputs Required" value={String(selectedRiskModel.inputsRequired.length)} />
-          <InsightStat label="Output Risk %" value={riskEvaluation ? `${riskEvaluation.outputRiskPct}%` : "-"} highlight />
+          <InsightStat label={t("Model Version")} value={selectedRiskModel.version} />
+          <InsightStat label={t("Model Owner")} value={selectedRiskModel.owner} />
+          <InsightStat label={t("Last Published")} value={selectedRiskModel.lastPublished} />
+          <InsightStat label={t("Risk Type")} value={selectedRiskModel.riskType} />
+          <InsightStat
+            label={t("Inputs Required")}
+            value={String(selectedRiskModel.inputsRequired.length)}
+          />
+          <InsightStat
+            label={t("Output Risk %")}
+            value={riskEvaluation ? `${riskEvaluation.outputRiskPct}%` : "-"}
+            highlight
+          />
         </div>
-        ) : null}
-        <Separator />
-        {riskEvaluation ? (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Risk Output
-              </p>
-              <div className="mt-2 flex items-center justify-between">
-                <p className="text-2xl font-semibold">{riskEvaluation.outputRiskPct}%</p>
-                <Badge variant="outline" className={riskTone(riskEvaluation.riskLevel)}>
-                  {riskEvaluation.riskLevel}
-                </Badge>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Deterministic signature: {riskEvaluation.deterministicSignature}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Evaluation timestamp: {riskEvaluation.evaluationTimestamp}
-              </p>
+      ) : null}
+      <Separator />
+      {riskEvaluation ? (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Risk Output")}
+            </p>
+            <div className="mt-2 flex items-center justify-between">
+              <p className="text-2xl font-semibold">{riskEvaluation.outputRiskPct}%</p>
+              <Badge variant="outline" className={riskTone(riskEvaluation.riskLevel)}>
+                {riskEvaluation.riskLevel}
+              </Badge>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Input Values Used
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {Object.entries(riskEvaluation.inputValues).map(([key, value]) => (
-                  <div key={key} className="rounded-md border border-border/70 px-2.5 py-2">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{titleCase(key)}</p>
-                    <p className="font-medium">{value.toFixed(2)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Reason Codes
-              </p>
-              {riskEvaluation.reasonCodes.map((code) => (
-                <Badge key={code} variant="outline" className="mr-1 mb-1">
-                  {code}
-                </Badge>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Deterministic signature: {riskEvaluation.deterministicSignature}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Evaluation timestamp: {riskEvaluation.evaluationTimestamp}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Input Values Used")}
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {Object.entries(riskEvaluation.inputValues).map(([key, value]) => (
+                <div key={key} className="rounded-md border border-border/70 px-2.5 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {titleCase(key)}
+                  </p>
+                  <p className="font-medium">{value.toFixed(2)}</p>
+                </div>
               ))}
             </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Top Contributing Factors
-              </p>
-              {riskEvaluation.topContributingFactors.map((factor) => {
-                const width = clamp(Math.abs(factor.contribution), 4, 100);
-                return (
-                  <div key={factor.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span>{factor.name}</span>
-                      <span className={factor.direction === "Positive" ? "text-rose-600" : "text-emerald-600"}>
-                        {factor.contribution > 0 ? "+" : ""}
-                        {factor.contribution.toFixed(1)}
-                      </span>
-                    </div>
-                    <div className="h-2 rounded bg-muted">
-                      <div
-                        className={cn(
-                          "h-2 rounded",
-                          factor.direction === "Positive" ? "bg-rose-500/70" : "bg-emerald-500/70",
-                        )}
-                        style={{ width: `${width}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <Button variant="outline" className="w-full gap-1.5" onClick={recalculateRisk}>
-              <Calculator className="h-4 w-4" />
-              Recalculate Risk
-            </Button>
           </div>
-        ) : null}
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Reason Codes")}
+            </p>
+            {riskEvaluation.reasonCodes.map((code) => (
+              <Badge key={code} variant="outline" className="mr-1 mb-1">
+                {code}
+              </Badge>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Top Contributing Factors")}
+            </p>
+            {riskEvaluation.topContributingFactors.map((factor) => {
+              const width = clamp(Math.abs(factor.contribution), 4, 100);
+              return (
+                <div key={factor.name} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span>{factor.name}</span>
+                    <span
+                      className={
+                        factor.direction === "Positive" ? "text-rose-600" : "text-emerald-600"
+                      }
+                    >
+                      {factor.contribution > 0 ? "+" : ""}
+                      {factor.contribution.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded bg-muted">
+                    <div
+                      className={cn(
+                        "h-2 rounded",
+                        factor.direction === "Positive" ? "bg-rose-500/70" : "bg-emerald-500/70",
+                      )}
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Button variant="outline" className="w-full gap-1.5" onClick={recalculateRisk}>
+            <Calculator className="h-4 w-4" />
+            {t("Recalculate Risk")}
+          </Button>
+        </div>
+      ) : null}
     </WorkspacePanel>
   );
 
@@ -1863,119 +2116,141 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={Bot}
       tone="violet"
-      title="AI Bid Suggestion"
-      description="Suggested bid range using internal historicals, DAT market data, leverage, margin targets, and risk output."
+      title={t("AI Bid Suggestion")}
+      description={t(
+        "Suggested bid range using internal historicals, DAT market data, leverage, margin targets, and risk output.",
+      )}
     >
-        {!isAiBidConnected() ? (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning-foreground">
-              {AI_NOT_CONNECTED_MESSAGE}
+      {!isAiBidConnected() ? (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning-foreground">
+            {AI_NOT_CONNECTED_MESSAGE}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Use internal AWS historical pricing and the selected bid amount in Actions until the AI
+            Bidding Copilot is connected. Recommended bid from internal history:{" "}
+            {selectedResult ? formatCurrency(selectedResult.recommendedBid) : "—"}
+          </p>
+        </div>
+      ) : aiSuggestion ? (
+        <>
+          <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Suggested Bid Range")}
+            </p>
+            <p className="mt-1 text-xl font-semibold">
+              {formatCurrency(aiSuggestion.suggestedBidLow)} to{" "}
+              {formatCurrency(aiSuggestion.suggestedBidHigh)}
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <span>Recommended Sell: {formatCurrency(aiSuggestion.recommendedSellRate)}</span>
+              <span>Recommended Buy: {formatCurrency(aiSuggestion.recommendedBuyRate)}</span>
+              <span>Target Margin: {formatCurrency(aiSuggestion.targetMargin)}</span>
+              <span>Margin %: {aiSuggestion.marginPercentage.toFixed(1)}%</span>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Use internal AWS historical pricing and the selected bid amount in Actions until the AI
-              Bidding Copilot is connected. Recommended bid from internal history:{" "}
-              {selectedResult ? formatCurrency(selectedResult.recommendedBid) : "—"}
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("Confidence")}
+              </p>
+              <p className="text-sm font-medium">{aiSuggestion.confidenceLevel}</p>
+            </div>
+            <Badge variant="outline">{aiSuggestion.confidenceScore}%</Badge>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Guardrails")}
+            </p>
+            {aiSuggestion.guardrails.map((guardrail) => (
+              <div
+                key={guardrail}
+                className="rounded-lg border border-border/70 bg-muted/10 px-3 py-2 text-xs text-muted-foreground"
+              >
+                {guardrail}
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Notes")}
+            </p>
+            <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
+              {aiSuggestion.notes}
             </p>
           </div>
-        ) : aiSuggestion ? (
-          <>
-            <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Suggested Bid Range
-              </p>
-              <p className="mt-1 text-xl font-semibold">
-                {formatCurrency(aiSuggestion.suggestedBidLow)} to {formatCurrency(aiSuggestion.suggestedBidHigh)}
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                <span>Recommended Sell: {formatCurrency(aiSuggestion.recommendedSellRate)}</span>
-                <span>Recommended Buy: {formatCurrency(aiSuggestion.recommendedBuyRate)}</span>
-                <span>Target Margin: {formatCurrency(aiSuggestion.targetMargin)}</span>
-                <span>Margin %: {aiSuggestion.marginPercentage.toFixed(1)}%</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Confidence
-                </p>
-                <p className="text-sm font-medium">{aiSuggestion.confidenceLevel}</p>
-              </div>
-              <Badge variant="outline">{aiSuggestion.confidenceScore}%</Badge>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Guardrails</p>
-              {aiSuggestion.guardrails.map((guardrail) => (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("Key Drivers")}
+            </p>
+            {aiSuggestion.keyDrivers.map((driver) => (
+              <Badge key={driver} variant="outline" className="mr-1 mb-1">
+                {driver}
+              </Badge>
+            ))}
+          </div>
+          <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
+            Suggested strategy: {aiSuggestion.suggestedStrategy}
+          </p>
+          <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
+            Customer-facing note: {aiSuggestion.customerFacingNote}
+          </p>
+          <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
+            Internal pricing note: {aiSuggestion.internalPricingNote}
+          </p>
+          <Collapsible open={showWhySuggestion} onOpenChange={setShowWhySuggestion}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="h-8 w-full justify-between text-xs">
+                {t("Why this suggestion?")}
+                <ArrowUpRight
+                  className={cn("h-3.5 w-3.5 transition", showWhySuggestion && "rotate-45")}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-1 pt-2">
+              {aiSuggestion.whySuggestionRows.map((item) => (
                 <div
-                  key={guardrail}
-                  className="rounded-lg border border-border/70 bg-muted/10 px-3 py-2 text-xs text-muted-foreground"
+                  key={item.label}
+                  className="flex items-center justify-between rounded-md border border-border/70 px-3 py-2 text-xs"
                 >
-                  {guardrail}
+                  <span className="text-muted-foreground">{item.label}</span>
+                  <span className="font-medium">{item.value}</span>
                 </div>
               ))}
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</p>
-              <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
-                {aiSuggestion.notes}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Key Drivers</p>
-              {aiSuggestion.keyDrivers.map((driver) => (
-                <Badge key={driver} variant="outline" className="mr-1 mb-1">
-                  {driver}
-                </Badge>
-              ))}
-            </div>
-            <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
-              Suggested strategy: {aiSuggestion.suggestedStrategy}
-            </p>
-            <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
-              Customer-facing note: {aiSuggestion.customerFacingNote}
-            </p>
-            <p className="rounded-md border border-border/70 px-3 py-2 text-xs text-muted-foreground">
-              Internal pricing note: {aiSuggestion.internalPricingNote}
-            </p>
-            <Collapsible open={showWhySuggestion} onOpenChange={setShowWhySuggestion}>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" className="h-8 w-full justify-between text-xs">
-                  Why this suggestion?
-                  <ArrowUpRight className={cn("h-3.5 w-3.5 transition", showWhySuggestion && "rotate-45")} />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-1 pt-2">
-                {aiSuggestion.whySuggestionRows.map((item) => (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between rounded-md border border-border/70 px-3 py-2 text-xs"
-                  >
-                    <span className="text-muted-foreground">{item.label}</span>
-                    <span className="font-medium">{item.value}</span>
-                  </div>
-                ))}
-              </CollapsibleContent>
-            </Collapsible>
-            <div className="grid grid-cols-2 gap-2">
-              <Button className="gap-1.5" onClick={() => void saveAsQuote()} disabled={workspaceActionPending}>
-                <Save className="h-4 w-4" />
-                Save as Quote
-              </Button>
-              <Button variant="outline" className="gap-1.5" onClick={() => void attachToRfp()} disabled={workspaceActionPending}>
-                Attach to RFP
-              </Button>
-              <Button variant="outline" className="gap-1.5" onClick={copyBid}>
-                <Copy className="h-4 w-4" />
-                Copy Bid
-              </Button>
-              <Button variant="outline" className="gap-1.5" onClick={recalculateSuggestion}>
-                <WandSparkles className="h-4 w-4" />
-                Recalculate
-              </Button>
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">Run a lane search to generate AI bid suggestions.</p>
-        )}
+            </CollapsibleContent>
+          </Collapsible>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              className="gap-1.5"
+              onClick={() => void saveAsQuote()}
+              disabled={workspaceActionPending}
+            >
+              <Save className="h-4 w-4" />
+              {t("Save as Quote")}
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => void attachToRfp()}
+              disabled={workspaceActionPending}
+            >
+              {t("Attach to RFP")}
+            </Button>
+            <Button variant="outline" className="gap-1.5" onClick={copyBid}>
+              <Copy className="h-4 w-4" />
+              {t("Copy Bid")}
+            </Button>
+            <Button variant="outline" className="gap-1.5" onClick={recalculateSuggestion}>
+              <WandSparkles className="h-4 w-4" />
+              {t("Recalculate")}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {t("Run a lane search to generate AI bid suggestions.")}
+        </p>
+      )}
     </WorkspacePanel>
   );
 
@@ -1983,94 +2258,147 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={ClipboardList}
       tone="cyan"
-      title="Actions"
-      description="Save as quote, attach to RFP lane, export, approvals, notes, and load creation workflow."
+      title={t("Actions")}
+      description={t(
+        "Save as quote, attach to RFP lane, export, approvals, notes, and load creation workflow.",
+      )}
       contentClassName="space-y-4"
     >
-        <Field label="Selected Bid Amount">
-          <Input value={finalBid} onChange={(event) => setFinalBid(event.target.value)} />
-        </Field>
-        <Field label="Attach to RFP Lane">
-          <Input
-            value={rfpLane}
-            onChange={(event) => setRfpLane(event.target.value)}
-            placeholder="Lane identifier or description"
-          />
-        </Field>
-        <Field label="Internal Pricing Note">
-          <Textarea
-            rows={3}
-            value={internalNote}
-            onChange={(event) => setInternalNote(event.target.value)}
-            placeholder="Capture pricing rationale, exceptions, or manager notes..."
-          />
-        </Field>
-        <Separator />
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Primary</p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button className="gap-1.5" onClick={() => void saveAsQuote()} disabled={workspaceActionPending}>
-              <Save className="h-4 w-4" />
-              Save as Quote
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={() => void attachToRfp()} disabled={workspaceActionPending}>
-              Attach to RFP Lane
-            </Button>
-          </div>
+      <Field
+        label={t("Selected Bid Amount")}
+        hint={
+          finalBidEditedRef.current && aiSuggestion
+            ? `Your figure. The suggestion was ${formatCurrency(aiSuggestion.recommendedSellRate)} — "Recalculate" restores it.`
+            : undefined
+        }
+      >
+        <Input
+          inputMode="decimal"
+          value={finalBid}
+          onChange={(event) => {
+            // Arms the guard in the suggestion effect: once the desk has typed a
+            // number, a leverage toggle or a background refresh must not silently
+            // replace it.
+            finalBidEditedRef.current = true;
+            setFinalBid(event.target.value);
+          }}
+        />
+      </Field>
+      <Field label={t("Attach to RFP Lane")}>
+        <Input
+          value={rfpLane}
+          onChange={(event) => setRfpLane(event.target.value)}
+          placeholder={t("Lane identifier or description")}
+        />
+      </Field>
+      <Field label={t("Internal Pricing Note")}>
+        <Textarea
+          rows={3}
+          value={internalNote}
+          onChange={(event) => setInternalNote(event.target.value)}
+          placeholder={t("Capture pricing rationale, exceptions, or manager notes...")}
+        />
+      </Field>
+      <Separator />
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("Primary")}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            className="gap-1.5"
+            onClick={() => void saveAsQuote()}
+            disabled={workspaceActionPending}
+          >
+            <Save className="h-4 w-4" />
+            {t("Save as Quote")}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => void attachToRfp()}
+            disabled={workspaceActionPending}
+          >
+            {t("Attach to RFP Lane")}
+          </Button>
         </div>
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Export</p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="gap-1.5" onClick={() => exportResults("PDF")}>
-              <Download className="h-4 w-4" />
-              Export PDF
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={() => exportResults("CSV")}>
-              Export CSV
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={() => exportResults("XLSX")}>
-              Export XLSX
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={() => void sendForApproval()} disabled={workspaceActionPending}>
-              Send for Approval
-            </Button>
-          </div>
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("Export")}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" className="gap-1.5" onClick={() => exportResults("PDF")}>
+            <Download className="h-4 w-4" />
+            {t("Export PDF")}
+          </Button>
+          <Button variant="outline" className="gap-1.5" onClick={() => exportResults("CSV")}>
+            {t("Export CSV")}
+          </Button>
+          <Button variant="outline" className="gap-1.5" onClick={() => exportResults("XLSX")}>
+            {t("Export XLSX")}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => void sendForApproval()}
+            disabled={workspaceActionPending}
+          >
+            {t("Send for Approval")}
+          </Button>
         </div>
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workflow</p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="gap-1.5" onClick={() => void saveAsQuote("draft")} disabled={workspaceActionPending}>
-              Save Draft
-            </Button>
-            <Button
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => setActionMessage("Internal note added to bid package.")}
-            >
-              Add Internal Note
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={() => setActionMessage("Sales team notified.")}>
-              Share with Sales
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={refreshDat}>
-              Refresh DAT
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={recalculateRisk}>
-              Recalculate Risk
-            </Button>
-            <Button variant="outline" className="gap-1.5" onClick={recalculateSuggestion}>
-              Recalculate Suggestion
-            </Button>
-            <Button
-              variant="outline"
-              className="col-span-2 gap-1.5"
-              disabled={workspaceActionPending}
-              onClick={() => void createLoadFromBid()}
-            >
-              Create Load in AWS
-            </Button>
-          </div>
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("Workflow")}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => void saveAsQuote("draft")}
+            disabled={workspaceActionPending}
+          >
+            {t("Save Draft")}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setActionMessage("Internal note added to bid package.")}
+          >
+            {t("Add Internal Note")}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setActionMessage("Sales team notified.")}
+          >
+            {t("Share with Sales")}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={refreshDat}
+            disabled={!datDataEnabled}
+          >
+            {t("Refresh DAT")}
+          </Button>
+          <Button variant="outline" className="gap-1.5" onClick={recalculateRisk}>
+            {t("Recalculate Risk")}
+          </Button>
+          <Button variant="outline" className="gap-1.5" onClick={recalculateSuggestion}>
+            {t("Recalculate Suggestion")}
+          </Button>
+          <Button
+            variant="outline"
+            className="col-span-2 gap-1.5"
+            disabled={workspaceActionPending}
+            onClick={() => void createLoadFromBid()}
+          >
+            {t("Create Load in AWS")}
+          </Button>
         </div>
+      </div>
     </WorkspacePanel>
   );
 
@@ -2078,12 +2406,12 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={CheckCircle2}
       tone="emerald"
-      title="Saved Quote Actions"
-      description="Latest quote saves with margin snapshots for reproducibility and handoff."
+      title={t("Saved Quote Actions")}
+      description={t("Latest quote saves with margin snapshots for reproducibility and handoff.")}
     >
       {savedQuotes.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No quotes saved yet. Use "Save as Quote" to capture this workspace output.
+          {t('No quotes saved yet. Use "Save as Quote" to capture this workspace output.')}
         </p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -2106,7 +2434,7 @@ export function BiddingPage() {
               <p className="text-xs text-muted-foreground">{quote.timestamp}</p>
               <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
                 <Button size="sm" variant="outline" className="h-8 text-[11px]">
-                  Open Quote
+                  {t("Open Quote")}
                 </Button>
                 <Button
                   size="sm"
@@ -2126,11 +2454,11 @@ export function BiddingPage() {
       <div className="grid grid-cols-2 gap-2">
         <Button variant="outline" className="gap-1.5" onClick={() => exportResults("PDF")}>
           <Download className="h-4 w-4" />
-          Export PDF
+          {t("Export PDF")}
         </Button>
         <Button variant="outline" className="gap-1.5" onClick={() => exportResults("XLSX")}>
           <FileDown className="h-4 w-4" />
-          Export XLSX
+          {t("Export XLSX")}
         </Button>
       </div>
     </WorkspacePanel>
@@ -2140,38 +2468,42 @@ export function BiddingPage() {
     <WorkspacePanel
       icon={ClipboardList}
       tone="default"
-      title="Audit / Calculation Log"
-      description="Search, DAT snapshot, risk model version + inputs, AI suggestion timestamp, selected bid, and final action."
+      title={t("Audit / Calculation Log")}
+      description={t(
+        "Search, DAT snapshot, risk model version + inputs, AI suggestion timestamp, selected bid, and final action.",
+      )}
       contentClassName="p-0 pt-0"
     >
       <div className="w-full min-w-0 max-w-full overflow-x-auto rounded-xl border border-border/70 bg-muted/10">
         <Table className="min-w-[1420px] text-xs">
           <TableHeader>
             <TableRow>
-              <TableHead>Search ID</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Origin</TableHead>
-              <TableHead>Destination</TableHead>
-              <TableHead>Equipment</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Historical Timestamp</TableHead>
-              <TableHead>DAT Timestamp</TableHead>
-              <TableHead>Risk Model ID</TableHead>
-              <TableHead>Risk Model Version</TableHead>
-              <TableHead>Risk Input Values</TableHead>
-              <TableHead>Risk Output</TableHead>
-              <TableHead>AI Suggestion Timestamp</TableHead>
-              <TableHead>Final Selected Bid</TableHead>
-              <TableHead>Action Taken</TableHead>
-              <TableHead>Created Quote ID</TableHead>
-              <TableHead>Attached RFP ID</TableHead>
+              <TableHead>{t("Search ID")}</TableHead>
+              <TableHead>{t("User")}</TableHead>
+              <TableHead>{t("Origin")}</TableHead>
+              <TableHead>{t("Destination")}</TableHead>
+              <TableHead>{t("Equipment")}</TableHead>
+              <TableHead>{t("Date")}</TableHead>
+              <TableHead>{t("Historical Timestamp")}</TableHead>
+              <TableHead>{t("DAT Timestamp")}</TableHead>
+              <TableHead>{t("Risk Model ID")}</TableHead>
+              <TableHead>{t("Risk Model Version")}</TableHead>
+              <TableHead>{t("Risk Input Values")}</TableHead>
+              <TableHead>{t("Risk Output")}</TableHead>
+              <TableHead>{t("AI Suggestion Timestamp")}</TableHead>
+              <TableHead>{t("Final Selected Bid")}</TableHead>
+              <TableHead>{t("Action Taken")}</TableHead>
+              <TableHead>{t("Created Quote ID")}</TableHead>
+              <TableHead>{t("Attached RFP ID")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={17} className="text-center text-muted-foreground">
-                  No audit entries yet. Run search, risk, AI, or quote actions to populate logs.
+                  {t(
+                    "No audit entries yet. Run search, risk, AI, or quote actions to populate logs.",
+                  )}
                 </TableCell>
               </TableRow>
             ) : (
@@ -2213,21 +2545,32 @@ export function BiddingPage() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] min-w-0 flex-col overflow-x-clip bg-background">
       <PageHeader
-        title="Bidding Workspace"
-        description="Spot-load pricing command center with internal historicals, DAT intelligence, leverage context, deterministic risk scoring, and AI-powered bid suggestions."
+        title={t("Bidding Workspace")}
+        description={t(
+          "Spot-load pricing command center with internal historicals, DAT intelligence, leverage context, deterministic risk scoring, and AI-powered bid suggestions.",
+        )}
         actions={
           <>
-            <Button variant="outline" className="gap-1.5" onClick={refreshDat}>
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              onClick={refreshDat}
+              disabled={!datDataEnabled}
+            >
               <RefreshCw className="h-4 w-4" />
-              Refresh DAT
+              {t("Refresh DAT")}
             </Button>
             <Button variant="outline" className="gap-1.5" onClick={recalculateRisk}>
               <Gauge className="h-4 w-4" />
-              Recalculate Risk
+              {t("Recalculate Risk")}
             </Button>
-            <Button className="gap-1.5" onClick={() => void saveAsQuote()} disabled={workspaceActionPending}>
+            <Button
+              className="gap-1.5"
+              onClick={() => void saveAsQuote()}
+              disabled={workspaceActionPending}
+            >
               <Save className="h-4 w-4" />
-              Save as Quote
+              {t("Save as Quote")}
             </Button>
           </>
         }
@@ -2237,14 +2580,19 @@ export function BiddingPage() {
         <div className="sticky top-2 z-[1] rounded-xl border border-border/70 bg-card/95 p-4 shadow-sm backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Active Lane</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("Active Lane")}
+              </p>
               <p className="truncate text-sm font-semibold">{searchSummary}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {searchCriteria.equipmentType} · {searchCriteria.pickupDate} ·{" "}
                 {searchCriteria.weight.toLocaleString()} lb
               </p>
             </div>
-            <Badge variant="outline" className={cn("shrink-0 font-medium", DAT_STATUS_TONE[datSnapshot.status])}>
+            <Badge
+              variant="outline"
+              className={cn("shrink-0 font-medium", DAT_STATUS_TONE[datSnapshot.status])}
+            >
               DAT {datSnapshot.status}
             </Badge>
           </div>
@@ -2263,15 +2611,22 @@ export function BiddingPage() {
             </div>
           ) : (
             <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 text-sm text-muted-foreground">
-              AWS loads synced: {awsLoads.length} record{awsLoads.length === 1 ? "" : "s"} · Quotes:{" "}
-              {savedQuotes.length} · Searches: {savedSearches.length}
-              {isBiddingWorkspaceAvailable() ? " · Workspace CRUD enabled" : " · Workspace CRUD local-only"}
-              {loadsRefreshing ? " · Refreshing…" : ""}
+              Loads searched: {loadsConsidered ?? "—"} · Quotes: {savedQuotes.length} · Searches:{" "}
+              {savedSearches.length}
+              {isBiddingWorkspaceAvailable()
+                ? " · Workspace CRUD enabled"
+                : " · Workspace CRUD local-only"}
+              {isSearching ? " · Searching…" : ""}
             </div>
           )}
           {workspaceSyncError ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive sm:col-span-2 xl:col-span-3">
               {workspaceSyncError}
+            </div>
+          ) : null}
+          {workspaceNotice ? (
+            <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 text-sm text-muted-foreground sm:col-span-2 xl:col-span-3">
+              {workspaceNotice}
             </div>
           ) : null}
           {workspaceTableMissing ? (
@@ -2281,14 +2636,15 @@ export function BiddingPage() {
           ) : !isBiddingWorkspaceConfigured() ? (
             <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning-foreground sm:col-span-2 xl:col-span-3">
               Bidding workspace CRUD is local-only. Create DynamoDB table{" "}
-              <span className="font-medium">BiddingWorkspace</span> with keys{" "}
-              <span className="font-medium">workspaceId</span> + <span className="font-medium">itemKey</span> to
-              persist quotes, saved searches, and audit logs.
+              <span className="font-medium">{t("BiddingWorkspace")}</span> with keys{" "}
+              <span className="font-medium">workspaceId</span> +{" "}
+              <span className="font-medium">itemKey</span> to persist quotes, saved searches, and
+              audit logs.
             </div>
           ) : null}
-          {!isDatApiConnected() ? (
+          {!datDataEnabled ? (
             <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning-foreground">
-              {DAT_NOT_CONNECTED_MESSAGE}
+              {datBlockedMessage}
             </div>
           ) : null}
           {!isAiBidConnected() ? (
@@ -2301,38 +2657,40 @@ export function BiddingPage() {
         <div className="hidden min-w-0 space-y-5 py-5 lg:block">
           <div className="grid min-w-0 grid-cols-2 gap-4 xl:grid-cols-4">
             <MetricCard
-              label="Historical Avg Sell"
+              label={t("Historical Avg Sell")}
               value={selectedResult ? formatCurrency(selectedResult.historicalAvgSell) : "—"}
-              subtitle="Internal 90-day baseline from AWS loads"
+              subtitle={t("Internal 90-day baseline from AWS loads")}
               tone="info"
               state={selectedResult ? "value" : "empty"}
               icon={<TrendingUp className="h-4 w-4" />}
             />
             <MetricCard
-              label="DAT Market Avg"
-              value={isDatApiConnected() ? formatCurrency(datSnapshot.marketAverage) : "—"}
+              label={t("DAT Market Avg")}
+              value={money(datSnapshot.marketAverage)}
               subtitle={
-                isDatApiConnected()
-                  ? `${datSnapshot.dataWindow} RateView window`
-                  : "Connect RateView in Settings → Integrations"
+                datRatesEnabled
+                  ? `${datFlags.dataWindow} RateView window`
+                  : datFlags.rateData
+                    ? "Connect RateView in Settings → Integrations"
+                    : "DAT rate data is disabled in Settings → Integrations"
               }
               tone="warning"
-              state={isDatApiConnected() ? "value" : "disconnected"}
+              state={datRatesEnabled ? "value" : "disconnected"}
               icon={<MapPinned className="h-4 w-4" />}
             />
             <MetricCard
-              label="Risk Score"
+              label={t("Risk Score")}
               value={riskEvaluation ? `${riskEvaluation.outputRiskPct}%` : "—"}
-              subtitle={riskEvaluation ? riskEvaluation.riskLevel : "Select a lane result to evaluate"}
+              subtitle={
+                riskEvaluation ? riskEvaluation.riskLevel : "Select a lane result to evaluate"
+              }
               tone={riskMetricTone}
               state={riskEvaluation ? "value" : "empty"}
               icon={<Target className="h-4 w-4" />}
             />
             <MetricCard
-              label="AI Confidence"
-              value={
-                isAiBidConnected() && aiSuggestion ? `${aiSuggestion.confidenceScore}%` : "—"
-              }
+              label={t("AI Confidence")}
+              value={isAiBidConnected() && aiSuggestion ? `${aiSuggestion.confidenceScore}%` : "—"}
               subtitle={
                 isAiBidConnected() && aiSuggestion
                   ? aiSuggestion.confidenceLevel
@@ -2480,193 +2838,6 @@ export function BiddingPage() {
   );
 }
 
-function evaluateRiskDeterministic(args: {
-  row: HistoricalResultRow;
-  dat: DatSnapshot;
-  model: RiskModelOption;
-  leverageCount: number;
-}): RiskEvaluation {
-  const { row, dat, model, leverageCount } = args;
-  const datSpread = clamp((dat.marketAverage - row.historicalAvgBuy) / 10, -25, 40);
-  const inputValues = {
-    fuelIndex: clamp(dat.fuelEstimate * 100, 20, 95),
-    seasonality: clamp(60 + (hash32(row.lane) % 30), 20, 95),
-    marketVolatility: clamp((row.standardDeviation / row.historicalAvgBuy) * 1000, 10, 95),
-    laneVolatility: clamp((row.standardDeviation / row.historicalAvgSell) * 1000, 8, 90),
-    datSpread: clamp(datSpread + 50, 0, 100),
-    carrierReliability: clamp(row.winRate + 15, 20, 97),
-    weatherRisk: clamp(38 + (hash32(row.id) % 34), 10, 95),
-    dwellAverage: clamp(30 + (hash32(row.equipment) % 40), 8, 90),
-    historicalWinRate: clamp(row.winRate, 5, 96),
-    activeLoadLeverage: clamp(42 + leverageCount * 7, 5, 95),
-    equipmentTightness: clamp(dat.capacityIndicator, 10, 99),
-  };
-
-  const topContributingFactors = Object.entries(model.weights)
-    .map(([name, weight]) => {
-      const value = inputValues[name as keyof typeof inputValues] ?? 0;
-      const centered = value - 50;
-      const contribution = centered * weight;
-      return {
-        name: titleCase(name),
-        value,
-        weight,
-        contribution,
-        direction: contribution >= 0 ? ("Positive" as const) : ("Negative" as const),
-      };
-    })
-    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
-
-  const baseScore = 50 + topContributingFactors.reduce((acc, item) => acc + item.contribution, 0);
-  const outputRiskPct = Math.round(clamp(baseScore, 3, 99));
-  const riskLevel = toRiskLevel(outputRiskPct);
-  const reasonCodes = buildReasonCodes({ outputRiskPct, dat, row, leverageCount });
-  const signature = hash32(
-    JSON.stringify({
-      inputValues,
-      modelId: model.id,
-      modelVersion: model.version,
-      lane: row.lane,
-    }),
-  )
-    .toString(16)
-    .toUpperCase();
-
-  return {
-    outputRiskPct,
-    riskLevel,
-    reasonCodes,
-    topContributingFactors: topContributingFactors.slice(0, 6),
-    modelVersion: model.version,
-    evaluationTimestamp: nowStamp(),
-    inputValues,
-    deterministicSignature: `SIG-${signature}`,
-  };
-}
-
-function buildAiSuggestion(args: {
-  row: HistoricalResultRow;
-  risk: RiskEvaluation;
-  dat: DatSnapshot;
-  leverageCount: number;
-  backhaulCount: number;
-}): AiSuggestion {
-  const { row, risk, dat, leverageCount, backhaulCount } = args;
-  const riskPenalty = (risk.outputRiskPct - 50) * 3.2;
-  const leverageOffset = leverageCount * 22 + backhaulCount * 16;
-  const baseSell = row.historicalAvgSell * 0.45 + dat.marketAverage * 0.4 + row.last30AvgSell * 0.15;
-  const recommendedSellRate = Math.round(clamp(baseSell + riskPenalty - leverageOffset * 0.2, 1800, 5200));
-  const recommendedBuyRate = Math.round(
-    clamp(row.historicalAvgBuy + riskPenalty * 0.4 - leverageOffset * 0.45, 1200, 4700),
-  );
-  const targetMargin = recommendedSellRate - recommendedBuyRate;
-  const marginPercentage = (targetMargin / Math.max(recommendedSellRate, 1)) * 100;
-  const confidenceScore = Math.round(
-    clamp(
-      88 -
-        Math.abs(dat.marketAverage - row.historicalAvgSell) / 30 -
-        Math.max(0, risk.outputRiskPct - 55) * 0.45 +
-        leverageCount * 2.5,
-      34,
-      97,
-    ),
-  );
-  const confidenceLevel: ConfidenceLevel =
-    confidenceScore >= 78 ? "High Confidence" : confidenceScore >= 56 ? "Medium Confidence" : "Low Confidence";
-
-  const suggestedBidLow = Math.round(recommendedSellRate - 110 - Math.max(0, riskPenalty * 0.3));
-  const suggestedBidHigh = Math.round(recommendedSellRate + 75 + Math.max(0, riskPenalty * 0.25));
-
-  const guardrails = [
-    `Do not bid below ${formatCurrency(Math.round(recommendedSellRate - 140))} unless carrier rate is locked.`,
-    `Require manager approval if margin drops below ${Math.max(10, Math.round(marginPercentage - 3))}%.`,
-    dat.status === "Stale"
-      ? "DAT stale data warning: refresh before final quote release."
-      : "Escalate if DAT market average moves above current snapshot by 4%+.",
-    risk.riskLevel === "High Risk" || risk.riskLevel === "Critical Risk"
-      ? "High risk warning: require approval and mitigation notes."
-      : "Proceed with standard approval workflow unless capacity tightens.",
-    `Maximum buy rate allowed ${formatCurrency(Math.round(recommendedBuyRate + 120))}.`,
-  ];
-
-  const notes = `Historical win rate ${row.winRate.toFixed(1)}% with ${row.loadCount} comparable loads. DAT average is ${formatCurrency(dat.marketAverage)} and leverage includes ${leverageCount} similar active loads with ${backhaulCount} backhaul options.`;
-  const keyDrivers = [
-    `Internal historical avg sell ${formatCurrency(row.historicalAvgSell)}`,
-    `DAT market avg ${formatCurrency(dat.marketAverage)}`,
-    `Risk score ${risk.outputRiskPct}% (${risk.riskLevel})`,
-    `Leverage loads ${leverageCount}`,
-    `Backhaul opportunities ${backhaulCount}`,
-    `Win rate ${row.winRate.toFixed(1)}%`,
-  ];
-  const suggestedStrategy =
-    risk.riskLevel === "Critical Risk"
-      ? "Conservative bid posture with pre-approval and tighter buy-side controls."
-      : risk.riskLevel === "High Risk"
-        ? "Balanced bid with guardrails, carrier confirmation, and active DAT monitoring."
-        : "Competitive bid posture leveraging backhaul and customer history.";
-  const customerFacingNote =
-    "We can support this lane with aligned market pricing and secure capacity within your pickup window.";
-  const internalPricingNote = `Model ${risk.modelVersion} used with deterministic signature ${risk.deterministicSignature}.`;
-  const whySuggestionRows = [
-    { label: "Internal historical average", value: formatCurrency(row.historicalAvgSell) },
-    { label: "DAT market average", value: formatCurrency(dat.marketAverage) },
-    {
-      label: "Last 30/60/90 trend",
-      value: `${formatCurrency(row.last30AvgSell)} / ${formatCurrency(row.last60AvgSell)} / ${formatCurrency(row.last90AvgSell)}`,
-    },
-    { label: "Win-rate trend", value: `${row.winRate.toFixed(1)}%` },
-    { label: "Active load leverage", value: `${leverageCount} similar loads` },
-    { label: "Backhaul opportunities", value: `${backhaulCount} candidates` },
-    { label: "Risk score", value: `${risk.outputRiskPct}% (${risk.riskLevel})` },
-    { label: "Margin target", value: `${formatCurrency(targetMargin)} / ${marginPercentage.toFixed(1)}%` },
-    { label: "Confidence drivers", value: `DAT ${dat.confidence}% confidence, sample ${row.loadCount}` },
-  ];
-
-  return {
-    suggestedBidLow,
-    suggestedBidHigh,
-    recommendedSellRate,
-    recommendedBuyRate,
-    targetMargin,
-    marginPercentage,
-    confidenceScore,
-    confidenceLevel,
-    guardrails,
-    notes,
-    keyDrivers,
-    suggestedStrategy,
-    customerFacingNote,
-    internalPricingNote,
-    whySuggestionRows,
-  };
-}
-
-function buildReasonCodes(args: {
-  outputRiskPct: number;
-  dat: DatSnapshot;
-  row: HistoricalResultRow;
-  leverageCount: number;
-}): string[] {
-  const reasons: string[] = [];
-  const { outputRiskPct, dat, row, leverageCount } = args;
-  if (row.standardDeviation > 105) reasons.push("High market volatility");
-  if (row.winRate < 54) reasons.push("Weak historical win rate");
-  if (dat.marketAverage > row.historicalAvgBuy + 240) reasons.push("DAT average above target buy rate");
-  if (dat.capacityIndicator > 72) reasons.push("Tight capacity on origin market");
-  if (dat.fuelEstimate > 0.62) reasons.push("Fuel index trending upward");
-  if (leverageCount < 2) reasons.push("Limited backhaul options");
-  if (row.winRate > 68) reasons.push("Strong carrier reliability offsets risk");
-  if (outputRiskPct > 76) reasons.push("Seasonality increases rate pressure");
-  return reasons.slice(0, 6);
-}
-
-function toRiskLevel(score: number): RiskLevel {
-  if (score < 35) return "Low Risk";
-  if (score < 60) return "Medium Risk";
-  if (score < 80) return "High Risk";
-  return "Critical Risk";
-}
-
 function riskTone(level: RiskLevel) {
   if (level === "Low Risk")
     return "border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300";
@@ -2675,21 +2846,6 @@ function riskTone(level: RiskLevel) {
   if (level === "High Risk")
     return "border-amber-300 text-amber-700 dark:border-amber-800 dark:text-amber-300";
   return "border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-300";
-}
-
-function titleCase(value: string) {
-  return value
-    .replace(/([A-Z])/g, " $1")
-    .replace(/[_-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
-function delay(ms: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(() => resolve(), ms);
-  });
 }
 
 function nowStamp() {
@@ -2709,17 +2865,49 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function hash32(text: string) {
-  let hash = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = (hash << 5) - hash + text.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
+/**
+ * Currency, or an em dash when the engine had nothing to compute from.
+ *
+ * The results table used to print a hard $0 for a disconnected DAT feed while
+ * the DAT panel beside it printed an em dash for the same value.
+ */
+function money(value: number | null | undefined) {
+  return value == null ? "—" : formatCurrency(value);
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
+function percent(value: number | null | undefined, digits = 1) {
+  return value == null ? "—" : `${value.toFixed(digits)}%`;
+}
+
+function perMile(value: number | null | undefined) {
+  return value == null ? "—" : `$${value.toFixed(2)}`;
+}
+
+/** Collision-resistant id for a new load. */
+function newLoadId() {
+  return `LD-${randomSuffix(8)}`;
+}
+
+function localQuoteId() {
+  return `QT-${randomSuffix(6)}`;
+}
+
+/**
+ * Random, not time-derived.
+ *
+ * Ids used to be the last six digits of `Date.now()`, which repeats every 16.7
+ * minutes — and the server's `attribute_not_exists` guard turned each repeat
+ * into a failed create the user had to retry.
+ */
+function randomSuffix(length: number) {
+  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  const bytes = new Uint8Array(length);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
 }
 
 function WorkspacePanel({
@@ -2753,7 +2941,12 @@ function WorkspacePanel({
   };
 
   return (
-    <Card className={cn("min-w-0 border-border/70 shadow-sm", sticky && "lg:sticky lg:top-4 lg:self-start")}>
+    <Card
+      className={cn(
+        "min-w-0 border-border/70 shadow-sm",
+        sticky && "lg:sticky lg:top-4 lg:self-start",
+      )}
+    >
       <CardHeader className="space-y-0 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
@@ -2767,7 +2960,9 @@ function WorkspacePanel({
             </div>
             <div className="min-w-0">
               <CardTitle className="text-base">{title}</CardTitle>
-              {description ? <CardDescription className="mt-1">{description}</CardDescription> : null}
+              {description ? (
+                <CardDescription className="mt-1">{description}</CardDescription>
+              ) : null}
             </div>
           </div>
           {badge}
@@ -2809,7 +3004,12 @@ function MetricCard({
           <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {label}
           </p>
-          <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border", toneClass)}>
+          <span
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
+              toneClass,
+            )}
+          >
             {icon}
           </span>
         </div>
@@ -2817,7 +3017,7 @@ function MetricCard({
         <div className="mt-3 min-h-[2.25rem]">
           {state === "disconnected" ? (
             <span className="inline-flex max-w-full items-center rounded-full border border-warning/30 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning-foreground">
-              Not connected
+              {t("Not connected")}
             </span>
           ) : state === "empty" ? (
             <p className="text-2xl font-semibold leading-none text-muted-foreground/70">—</p>
@@ -2826,7 +3026,9 @@ function MetricCard({
           )}
         </div>
 
-        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{subtitle}</p>
+        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+          {subtitle}
+        </p>
       </CardContent>
     </Card>
   );
@@ -2851,17 +3053,59 @@ function InsightStat({
         className,
       )}
     >
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={cn("mt-1 text-sm font-semibold tracking-tight", highlight && "text-primary")}>{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className={cn("mt-1 text-sm font-semibold tracking-tight", highlight && "text-primary")}>
+        {value}
+      </p>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * A labelled control.
+ *
+ * The label is bound to the control with a generated id: this used to render a
+ * bare `<Label>` next to children that carried no `id`, so nothing associated
+ * them. Every input on this page announced as unlabelled, and clicking a label
+ * did not focus its field — WCAG 1.3.1 and 4.1.2, on the page's main workflow.
+ */
+function Field({
+  label,
+  children,
+  hint,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+}) {
+  const id = React.useId();
+  const hintId = `${id}-hint`;
+
+  // Several fields render an <Input> plus a <datalist>, so children is an
+  // array. Bind the label to the first non-datalist element — the control.
+  let bound = false;
+  const control = React.Children.map(children, (child) => {
+    if (bound || !React.isValidElement(child) || child.type === "datalist") return child;
+    bound = true;
+    return React.cloneElement(child as React.ReactElement<Record<string, unknown>>, {
+      id,
+      ...(hint ? { "aria-describedby": hintId } : {}),
+    });
+  });
+
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
-      {children}
+      <Label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+        {label}
+      </Label>
+      {control}
+      {hint ? (
+        <p id={hintId} className="text-[11px] text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -2884,7 +3128,11 @@ function OptionsGrid({
           htmlFor={option.id}
           className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/70 bg-muted/10 px-2.5 py-2 text-xs transition-colors hover:bg-muted/30"
         >
-          <Checkbox id={option.id} checked={option.checked} onCheckedChange={option.onCheckedChange} />
+          <Checkbox
+            id={option.id}
+            checked={option.checked}
+            onCheckedChange={option.onCheckedChange}
+          />
           <span>{option.label}</span>
         </label>
       ))}

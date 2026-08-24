@@ -26,14 +26,12 @@ export function createTwilioSmsTransport(): SmsTransport {
         }),
       });
 
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            providerMessageId?: string;
-            status?: MessageStatus;
-            error?: string;
-            mock?: boolean;
-          }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        providerMessageId?: string;
+        status?: MessageStatus;
+        error?: string;
+        mock?: boolean;
+      } | null;
 
       if (!response.ok) {
         throw new Error(payload?.error ?? `SMS send failed (HTTP ${response.status}).`);
@@ -53,9 +51,10 @@ export function createTwilioSmsTransport(): SmsTransport {
         `/api/comms/sms/status?sid=${encodeURIComponent(providerMessageId)}`,
         { headers: { Accept: "application/json" } },
       );
-      const payload = (await response.json().catch(() => null)) as
-        | { status?: MessageStatus; error?: string }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        status?: MessageStatus;
+        error?: string;
+      } | null;
       if (!response.ok || !payload?.status) {
         throw new Error(payload?.error ?? "Could not load SMS status.");
       }

@@ -9,6 +9,7 @@ export type IntegrationId =
   | "google_maps"
   | "stripe"
   | "ai"
+  | "resend"
   | (string & {});
 
 export type IntegrationStatus = "connected" | "disconnected" | "error" | "checking";
@@ -38,6 +39,7 @@ export const INTEGRATION_PROVIDERS: { id: IntegrationId; label: string }[] = [
   { id: "google_maps", label: "Google Maps" },
   { id: "stripe", label: "Stripe" },
   { id: "ai", label: "AI" },
+  { id: "resend", label: "Resend Email" },
 ];
 
 /** Map Settings grid legacy ids → canonical ids. */

@@ -1,5 +1,6 @@
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 
+import { companySettingsScope, LEGACY_GLOBAL_SETTINGS_SCOPE } from "./ai/settings-scopes";
 import {
   getAwsRegion,
   getDynamoDocClient,
@@ -11,9 +12,13 @@ import {
   isWorkspaceSettingsConfigured,
 } from "./dynamodb";
 import { createRateLimitedExecutor } from "./rate-limit";
+import { requireCompanyId } from "./tenant/company-context";
 
-/** Workspace-wide settings (not per-user profile). */
-export const GLOBAL_SETTINGS_SCOPE = "global";
+/**
+ * @deprecated Pre-tenant shared partition. Application reads do not use this.
+ * Re-exported so a grep for the old name still finds the warning.
+ */
+export const GLOBAL_SETTINGS_SCOPE = LEGACY_GLOBAL_SETTINGS_SCOPE;
 
 export type WorkspaceSettingsSection =
   | "integrations"
@@ -30,7 +35,8 @@ const runReadLimited = createRateLimitedExecutor(READ_RATE_LIMIT_MS);
 const runWriteLimited = createRateLimitedExecutor(WRITE_RATE_LIMIT_MS);
 
 export type WorkspaceSettingsItem<T> = {
-  scope: typeof GLOBAL_SETTINGS_SCOPE;
+  /** The company's id. Never `global` — that row was the cross-tenant leak. */
+  scope: string;
   section: WorkspaceSettingsSection;
   data: T;
   updatedAt: string;
@@ -80,13 +86,15 @@ export async function getWorkspaceSetting<T extends Record<string, unknown>>(
     return { data: null, updatedAt: null };
   }
 
+  const companyId = await requireCompanyId();
+
   return runReadLimited(async () => {
     try {
       const client = await getDynamoDocClient();
       const out = await client.send(
         new GetCommand({
           TableName: getWorkspaceSettingsTableName(),
-          Key: { scope: GLOBAL_SETTINGS_SCOPE, section },
+          Key: { scope: companySettingsScope(companyId), section },
         }),
       );
       const item = out.Item as WorkspaceSettingsItem<T> | undefined;
@@ -110,6 +118,8 @@ export async function putWorkspaceSetting<T extends Record<string, unknown>>(
     );
   }
 
+  const companyId = await requireCompanyId();
+
   return runWriteLimited(async () => {
     try {
       const client = await getDynamoDocClient();
@@ -117,7 +127,7 @@ export async function putWorkspaceSetting<T extends Record<string, unknown>>(
         new PutCommand({
           TableName: getWorkspaceSettingsTableName(),
           Item: {
-            scope: GLOBAL_SETTINGS_SCOPE,
+            scope: companySettingsScope(companyId),
             section,
             data,
             updatedAt: new Date().toISOString(),

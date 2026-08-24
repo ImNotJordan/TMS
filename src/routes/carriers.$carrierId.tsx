@@ -16,9 +16,15 @@ import {
   recordToCarrierDraft,
   type CarrierDraft,
 } from "@/components/carriers/create-carrier-dialog";
-import { getCarrierByIdCached, updateCarrier, evaluateAutoAwardEligibility, type CarrierRecord } from "@/lib/carriers-store";
+import {
+  getCarrierByIdCached,
+  updateCarrier,
+  evaluateAutoAwardEligibility,
+  type CarrierRecord,
+} from "@/lib/carriers-store";
 import { TIER_LABELS, toneBadge, formatDate } from "@/lib/carriers-display";
 import { useProfileSection } from "@/hooks/use-profile-section";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/carriers/$carrierId")({
   head: ({ params }) => ({
@@ -105,9 +111,12 @@ function CarrierDetailPage() {
     };
   }, [carrierId]);
 
-  const update = React.useCallback(<K extends keyof CarrierDraft>(key: K, value: CarrierDraft[K]) => {
-    setDraft((d) => (d ? { ...d, [key]: value } : d));
-  }, []);
+  const update = React.useCallback(
+    <K extends keyof CarrierDraft>(key: K, value: CarrierDraft[K]) => {
+      setDraft((d) => (d ? { ...d, [key]: value } : d));
+    },
+    [],
+  );
 
   const dirty = React.useMemo(() => {
     if (!baseline || !draft) return false;
@@ -144,7 +153,7 @@ function CarrierDetailPage() {
         <div className="text-sm font-medium text-foreground">{error}</div>
         <Button asChild variant="outline" size="sm">
           <Link to="/carriers">
-            <ArrowLeft className="h-4 w-4" /> Back to carriers
+            <ArrowLeft className="h-4 w-4" /> {t("Back to carriers")}
           </Link>
         </Button>
       </div>
@@ -175,7 +184,7 @@ function CarrierDetailPage() {
               </Badge>
               {baseline.blacklisted && (
                 <Badge variant="outline" className={toneBadge.destructive}>
-                  Blacklisted
+                  {t("Blacklisted")}
                 </Badge>
               )}
             </div>
@@ -183,15 +192,12 @@ function CarrierDetailPage() {
               {baseline.carrierId} · {baseline.carrierKind === "broker" ? "Broker" : "Carrier"}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              <Link
-                to="/loads"
-                className="text-primary underline-offset-2 hover:underline"
-              >
-                Related loads
+              <Link to="/loads" className="text-primary underline-offset-2 hover:underline">
+                {t("Related loads")}
               </Link>
               {" · "}
               <Link to="/crm" className="text-primary underline-offset-2 hover:underline">
-                CRM accounts
+                {t("CRM accounts")}
               </Link>
             </p>
           </div>
@@ -207,10 +213,15 @@ function CarrierDetailPage() {
           />
           <Button variant="ghost" size="sm" asChild>
             <Link to="/carriers">
-              <X className="h-4 w-4" /> Discard
+              <X className="h-4 w-4" /> {t("Discard")}
             </Link>
           </Button>
-          <Button size="sm" disabled={!dirty || saving} onClick={() => void handleSave()} className="gap-1.5">
+          <Button
+            size="sm"
+            disabled={!dirty || saving}
+            onClick={() => void handleSave()}
+            className="gap-1.5"
+          >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save changes
           </Button>
@@ -231,8 +242,7 @@ function CarrierDetailPage() {
               {eligibility.eligible ? "Eligible for auto-award" : "Auto-award blocked"}
             </div>
             <div className="mt-0.5 text-xs opacity-90">
-              {eligibility.reason ??
-                "Insurance is current and the carrier is not blacklisted."}
+              {eligibility.reason ?? "Insurance is current and the carrier is not blacklisted."}
             </div>
           </div>
         </div>
@@ -245,71 +255,94 @@ function CarrierDetailPage() {
         )}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Section title="Company profile">
+          <Section title={t("Company profile")}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Company Name">
-                <Input value={draft.companyName} onChange={(e) => update("companyName", e.target.value)} />
+              <Field label={t("Company Name")}>
+                <Input
+                  value={draft.companyName}
+                  onChange={(e) => update("companyName", e.target.value)}
+                />
               </Field>
-              <Field label="MC Number">
-                <Input value={draft.mcNumber} onChange={(e) => update("mcNumber", e.target.value)} />
+              <Field label={t("MC Number")}>
+                <Input
+                  value={draft.mcNumber}
+                  onChange={(e) => update("mcNumber", e.target.value)}
+                />
               </Field>
-              <Field label="DOT Number">
-                <Input value={draft.dotNumber} onChange={(e) => update("dotNumber", e.target.value)} />
+              <Field label={t("DOT Number")}>
+                <Input
+                  value={draft.dotNumber}
+                  onChange={(e) => update("dotNumber", e.target.value)}
+                />
               </Field>
-              <Field label="SCAC Code">
-                <Input value={draft.scacCode} onChange={(e) => update("scacCode", e.target.value)} />
+              <Field label={t("SCAC Code")}>
+                <Input
+                  value={draft.scacCode}
+                  onChange={(e) => update("scacCode", e.target.value)}
+                />
               </Field>
-              <Field label="HQ City">
+              <Field label={t("HQ City")}>
                 <Input value={draft.hqCity} onChange={(e) => update("hqCity", e.target.value)} />
               </Field>
-              <Field label="HQ State">
+              <Field label={t("HQ State")}>
                 <Input value={draft.hqState} onChange={(e) => update("hqState", e.target.value)} />
               </Field>
             </div>
-            <Field label="Internal Notes" className="mt-4">
-              <Textarea value={draft.internalNotes} onChange={(e) => update("internalNotes", e.target.value)} rows={3} />
+            <Field label={t("Internal Notes")} className="mt-4">
+              <Textarea
+                value={draft.internalNotes}
+                onChange={(e) => update("internalNotes", e.target.value)}
+                rows={3}
+              />
             </Field>
           </Section>
 
           <Section
-            title="Insurance & compliance"
-            hint="Expiry blocks auto-award unless a Manager grants an override"
+            title={t("Insurance & compliance")}
+            hint={t("Expiry blocks auto-award unless a Manager grants an override")}
           >
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Provider">
-                <Input value={draft.insuranceProvider} onChange={(e) => update("insuranceProvider", e.target.value)} />
+              <Field label={t("Provider")}>
+                <Input
+                  value={draft.insuranceProvider}
+                  onChange={(e) => update("insuranceProvider", e.target.value)}
+                />
               </Field>
-              <Field label="Policy Number">
+              <Field label={t("Policy Number")}>
                 <Input
                   value={draft.insurancePolicyNumber}
                   onChange={(e) => update("insurancePolicyNumber", e.target.value)}
                 />
               </Field>
-              <Field label="Insurance Expires">
+              <Field label={t("Insurance Expires")}>
                 <Input
                   type="date"
                   value={draft.insuranceExpiresAt}
                   onChange={(e) => update("insuranceExpiresAt", e.target.value)}
                 />
               </Field>
-              <Field label="Safety Rating">
-                <Input value={draft.safetyRating} onChange={(e) => update("safetyRating", e.target.value)} />
+              <Field label={t("Safety Rating")}>
+                <Input
+                  value={draft.safetyRating}
+                  onChange={(e) => update("safetyRating", e.target.value)}
+                />
               </Field>
             </div>
             <div className="mt-4 flex items-center justify-between rounded-lg border border-input bg-card px-3 py-2.5">
-              <span className="text-sm text-muted-foreground">W-9 on file</span>
+              <span className="text-sm text-muted-foreground">{t("W-9 on file")}</span>
               <Switch checked={draft.w9OnFile} onCheckedChange={(v) => update("w9OnFile", v)} />
             </div>
             {baseline.autoAwardOverrideBy && (
               <div className="mt-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
-                Override granted by {baseline.autoAwardOverrideBy} on {formatDate(baseline.autoAwardOverrideAt)}
+                Override granted by {baseline.autoAwardOverrideBy} on{" "}
+                {formatDate(baseline.autoAwardOverrideAt)}
                 {baseline.autoAwardOverrideReason ? ` — ${baseline.autoAwardOverrideReason}` : ""}
               </div>
             )}
           </Section>
 
-          <Section title="Equipment & lanes">
-            <Field label="Equipment Types (comma separated)">
+          <Section title={t("Equipment & lanes")}>
+            <Field label={t("Equipment Types (comma separated)")}>
               <Input
                 value={draft.equipmentTypes.join(", ")}
                 onChange={(e) =>
@@ -323,7 +356,7 @@ function CarrierDetailPage() {
                 }
               />
             </Field>
-            <Field label="Lanes Served (comma separated)" className="mt-4">
+            <Field label={t("Lanes Served (comma separated)")} className="mt-4">
               <Input
                 value={draft.lanesServed.join(", ")}
                 onChange={(e) =>
@@ -337,28 +370,41 @@ function CarrierDetailPage() {
                 }
               />
             </Field>
-            <Field label="Fleet Size" className="mt-4">
-              <Input value={draft.fleetSize} onChange={(e) => update("fleetSize", e.target.value)} />
+            <Field label={t("Fleet Size")} className="mt-4">
+              <Input
+                value={draft.fleetSize}
+                onChange={(e) => update("fleetSize", e.target.value)}
+              />
             </Field>
           </Section>
 
-          <Section title="Score">
+          <Section title={t("Score")}>
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="OTD %">
-                <Input value={draft.otdPercentage} onChange={(e) => update("otdPercentage", e.target.value)} />
+              <Field label={t("OTD %")}>
+                <Input
+                  value={draft.otdPercentage}
+                  onChange={(e) => update("otdPercentage", e.target.value)}
+                />
               </Field>
-              <Field label="Claims Count">
-                <Input value={draft.claimsCount} onChange={(e) => update("claimsCount", e.target.value)} />
+              <Field label={t("Claims Count")}>
+                <Input
+                  value={draft.claimsCount}
+                  onChange={(e) => update("claimsCount", e.target.value)}
+                />
               </Field>
-              <Field label="Claims Rate %">
+              <Field label={t("Claims Rate %")}>
                 <Input
                   value={draft.claimsRatePercentage}
                   onChange={(e) => update("claimsRatePercentage", e.target.value)}
                 />
               </Field>
             </div>
-            <Field label="Score Notes" className="mt-4">
-              <Textarea value={draft.scoreNotes} onChange={(e) => update("scoreNotes", e.target.value)} rows={3} />
+            <Field label={t("Score Notes")} className="mt-4">
+              <Textarea
+                value={draft.scoreNotes}
+                onChange={(e) => update("scoreNotes", e.target.value)}
+                rows={3}
+              />
             </Field>
           </Section>
         </div>

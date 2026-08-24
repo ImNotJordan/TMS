@@ -21,6 +21,7 @@ import {
   type GoogleMapsIntegration,
   type IntegrationsConfig,
 } from "@/lib/integrations-config";
+import { t } from "@/lib/i18n/t";
 
 type ConfigureGoogleMapsDialogProps = {
   open: boolean;
@@ -94,7 +95,9 @@ export function ConfigureGoogleMapsDialog({
         ...config,
         googleMaps: { ...INTEGRATIONS_CONFIG_DEFAULTS.googleMaps },
       });
-      toast.message("Google Maps disconnected. Facility address search is disabled until you configure it again.");
+      toast.message(
+        "Google Maps disconnected. Facility address search is disabled until you configure it again.",
+      );
       onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to disconnect integration.");
@@ -111,10 +114,10 @@ export function ConfigureGoogleMapsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Configure Google Maps</DialogTitle>
+          <DialogTitle>{t("Configure Google Maps")}</DialogTitle>
           <DialogDescription>
             Powers facility autocomplete on Loads and TruckBoard and geocoding on Tracking maps.
-            Credentials are saved here only — not in <code className="text-xs">.env</code>.
+            Credentials are saved here only — not in <code className="text-xs">{t(".env")}</code>.
           </DialogDescription>
         </DialogHeader>
 
@@ -122,10 +125,10 @@ export function ConfigureGoogleMapsDialog({
           <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2.5">
             <div>
               <Label htmlFor="google-maps-enabled" className="text-sm font-medium">
-                Use Google Maps geocoding
+                {t("Use Google Maps geocoding")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                When off, facility address search on Loads and TruckBoard is disabled.
+                {t("When off, facility address search on Loads and TruckBoard is disabled.")}
               </p>
             </div>
             <Switch
@@ -136,20 +139,21 @@ export function ConfigureGoogleMapsDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="google-maps-api-key">Google Maps API key</Label>
+            <Label htmlFor="google-maps-api-key">{t("Google Maps API key")}</Label>
             <Input
               id="google-maps-api-key"
               type="password"
               autoComplete="off"
-              placeholder="AIza…"
+              placeholder={t("AIza…")}
               value={draft.apiKey}
               onChange={(event) => updateDraft({ apiKey: event.target.value })}
             />
             <p className="text-xs text-muted-foreground">
               Stored in the WorkspaceSettings table (shared for all users). Enable{" "}
-              <span className="font-medium text-foreground">Geocoding API</span>,{" "}
-              <span className="font-medium text-foreground">Maps JavaScript API</span>, and{" "}
-              <span className="font-medium text-foreground">Directions API</span> for your Google Cloud project.
+              <span className="font-medium text-foreground">{t("Geocoding API")}</span>,{" "}
+              <span className="font-medium text-foreground">{t("Maps JavaScript API")}</span>, and{" "}
+              <span className="font-medium text-foreground">{t("Directions API")}</span> for your
+              Google Cloud project.
             </p>
           </div>
         </div>
@@ -166,7 +170,12 @@ export function ConfigureGoogleMapsDialog({
               {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Test connection
             </Button>
-            <Button type="button" className="flex-1 gap-1.5" disabled={busy} onClick={() => void handleSave()}>
+            <Button
+              type="button"
+              className="flex-1 gap-1.5"
+              disabled={busy}
+              onClick={() => void handleSave()}
+            >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Save
             </Button>
@@ -178,7 +187,7 @@ export function ConfigureGoogleMapsDialog({
             disabled={busy}
             onClick={() => void handleDisconnect()}
           >
-            Disconnect
+            {t("Disconnect")}
           </Button>
         </DialogFooter>
       </DialogContent>

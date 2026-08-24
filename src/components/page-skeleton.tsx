@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 /** Grid of KPI/stat card placeholders matching the dashboard stat tiles. */
 export function StatCardsSkeleton({
@@ -388,7 +389,7 @@ export function RoutePageSkeleton({
       aria-busy="true"
       aria-live="polite"
       role="status"
-      aria-label="Loading page"
+      aria-label={t("Loading page")}
     >
       {bare ? null : <PageHeaderSkeleton />}
       <div className={cn(bare ? "px-4 py-10 sm:px-6 lg:px-8" : "px-4 py-6 sm:px-6 lg:px-8")}>

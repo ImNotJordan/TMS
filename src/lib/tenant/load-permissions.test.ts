@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { Role } from "@/lib/admin-user-constants";
 import {
   LOAD_ECONOMIC_FIELDS,
+  LOAD_POST_DELIVERY_FROZEN_FIELDS,
+  LOAD_TAX_FIELDS,
   checkLoadCreate,
   checkLoadDelete,
   checkLoadUpdate,
@@ -28,6 +30,7 @@ const ALL_ROLES: Role[] = [
   "Broker",
   "Dispatcher",
   "Driver",
+  "Client",
   "Accounting",
   "Sales",
   "Marketing",
@@ -55,6 +58,16 @@ describe("checkLoadUpdate — who may write a load at all", () => {
     const check = checkLoadUpdate(ctx(null), { pickupCity: "Dallas" }, { loadStatus: "draft" });
     expect(check.ok).toBe(false);
     expect(check.ok === false && check.status).toBe(403);
+  });
+
+  it("refuses Client on the company-scoped endpoint", () => {
+    const check = checkLoadUpdate(
+      ctx("Client"),
+      { pickupCity: "Dallas" },
+      { loadStatus: "in-transit" },
+    );
+    expect(check.ok).toBe(false);
+    expect(check.ok === false && check.code).toBe("role_cannot_write_load");
   });
 
   it("refuses Driver on the company-scoped endpoint", () => {
@@ -302,6 +315,88 @@ describe("the three checks stay separate", () => {
       ).ok;
       if (checkLoadDelete(ctx(role)).ok)
         expect(canWrite, `${role} deletes but cannot write`).toBe(true);
+    }
+  });
+});
+
+describe("manual tax entry", () => {
+  const TAX_PATCH = { taxManualAmount: "925.00", taxCurrency: "CNY" };
+
+  /**
+   * The reason this is a third permission set rather than a reuse of
+   * `LOAD_PRICERS`: Accounting is deliberately excluded from pricing, and
+   * Accounting is exactly who reads a VAT calculator and types the answer in.
+   */
+  it("lets Accounting set the tax figure even though it cannot price", () => {
+    const accounting = ctx("Accounting");
+    expect(checkLoadUpdate(accounting, TAX_PATCH, {}).ok).toBe(true);
+    // Still cannot touch a rate.
+    const priced = checkLoadUpdate(accounting, { customerRate: "3000" }, {});
+    expect(priced.ok).toBe(false);
+    expect(!priced.ok && priced.code).toBe("role_cannot_price_load");
+  });
+
+  it("lets pricing roles set it too", () => {
+    for (const role of [
+      "Organization Owner",
+      "Admin",
+      "SuperAdmin",
+      "Operations Manager",
+      "Broker",
+    ] as const) {
+      expect(checkLoadUpdate(ctx(role), TAX_PATCH, {}).ok, role).toBe(true);
+    }
+  });
+
+  it("refuses a dispatcher, who may move the truck but not restate what it owes", () => {
+    const result = checkLoadUpdate(ctx("Dispatcher"), TAX_PATCH, {});
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.code).toBe("role_cannot_set_load_tax");
+    expect(!result.ok && result.fields).toEqual(["taxManualAmount", "taxCurrency"]);
+  });
+
+  it.each(["Sales", "Marketing"] as const)("refuses %s", (role) => {
+    expect(checkLoadUpdate(ctx(role), TAX_PATCH, {}).ok).toBe(false);
+  });
+
+  it("refuses an unassigned role rather than defaulting", () => {
+    expect(checkLoadUpdate(ctx(null), TAX_PATCH, {}).ok).toBe(false);
+  });
+
+  it("gates it on create as well as update", () => {
+    expect(checkLoadCreate(ctx("Dispatcher"), TAX_PATCH).ok).toBe(false);
+    expect(checkLoadCreate(ctx("Accounting"), TAX_PATCH).ok).toBe(true);
+  });
+
+  /**
+   * The behaviour that would otherwise have been broken by reusing
+   * `LOAD_ECONOMIC_FIELDS`: `LOAD_POST_DELIVERY_FROZEN_FIELDS` spreads that set,
+   * and tax is determined at invoicing — which happens after delivery by
+   * definition. Freezing it would lock the field exactly when it needs filling in.
+   */
+  it("stays editable after delivery, unlike a rate", () => {
+    const delivered = { loadStatus: "delivered" };
+    const accounting = ctx("Accounting");
+    expect(checkLoadUpdate(accounting, TAX_PATCH, delivered).ok).toBe(true);
+
+    const broker = ctx("Broker");
+    const frozen = checkLoadUpdate(broker, { customerRate: "3000" }, delivered);
+    expect(frozen.ok).toBe(false);
+    expect(!frozen.ok && frozen.code).toBe("load_economically_frozen");
+  });
+
+  it("names the tax fields as its own set", () => {
+    expect([...LOAD_TAX_FIELDS].sort()).toEqual([
+      "taxCurrency",
+      "taxLines",
+      "taxManualAmount",
+      "taxManualNote",
+      "taxManualSource",
+    ]);
+    // Kept out of the economic set on purpose — see the header in the module.
+    for (const field of LOAD_TAX_FIELDS) {
+      expect(LOAD_ECONOMIC_FIELDS.has(field), field).toBe(false);
+      expect(LOAD_POST_DELIVERY_FROZEN_FIELDS.has(field), field).toBe(false);
     }
   });
 });

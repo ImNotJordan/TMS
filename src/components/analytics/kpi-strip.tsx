@@ -1,12 +1,9 @@
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { AnalyticsKpi, KpiTone } from "@/lib/analytics-kpis";
+import { t } from "@/lib/i18n/t";
 
 const toneAccent: Record<KpiTone, string> = {
   default: "bg-muted text-foreground",
@@ -86,10 +83,12 @@ export function AnalyticsKpiStrip({
                 </p>
               )}
               {kpi.description && (
-                <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{kpi.description}</p>
+                <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
+                  {kpi.description}
+                </p>
               )}
               <p className="mt-2 text-[10px] font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                Drill into events →
+                {t("Drill into events →")}
               </p>
             </CardContent>
           </Card>

@@ -31,7 +31,7 @@
  * valued: recording every address edit in full would bloat the item toward
  * DynamoDB's 400KB limit for no investigative benefit.
  */
-import { LOAD_ECONOMIC_FIELDS } from "@/lib/tenant/load-permissions";
+import { LOAD_ECONOMIC_FIELDS, LOAD_TAX_FIELDS } from "@/lib/tenant/load-permissions";
 import type { TenantContext } from "@/lib/tenant/server-tenant-context";
 
 /** One recorded change to a load. */
@@ -93,7 +93,10 @@ export function buildLoadAuditEntry(args: {
 
   const rates: Record<string, { from: unknown; to: unknown }> = {};
   for (const field of changed) {
-    if (LOAD_ECONOMIC_FIELDS.has(field)) {
+    // Tax joins the economic fields for value logging even though it is not one
+    // of them for permission or freeze purposes — "the tax went from 0 to 925"
+    // is exactly the edit someone asks about three months later.
+    if (LOAD_ECONOMIC_FIELDS.has(field) || LOAD_TAX_FIELDS.has(field)) {
       rates[field] = { from: current[field] ?? null, to: patch[field] };
     }
   }

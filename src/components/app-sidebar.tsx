@@ -25,6 +25,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useRbac } from "@/hooks/use-rbac";
 import { AppLogoMark } from "@/components/app-logo-mark";
+import { useLocaleSettings } from "@/lib/i18n/locale-context";
 
 function computeInitials(value: string) {
   const parts = value.split(/[\s@.]+/).filter(Boolean);
@@ -49,20 +50,23 @@ export function AppSidebar() {
   const { user, status } = useAuth();
   const attrs = user?.attributes;
   const { canViewItem, loading: rbacLoading, roleLabel } = useRbac();
+  const { t, navLabel, navGroup } = useLocaleSettings();
   const displayName =
     [attrs?.given_name, attrs?.family_name].filter(Boolean).join(" ").trim() ||
     user?.name ||
     attrs?.nickname ||
     attrs?.preferred_username ||
     user?.email ||
-    (status === "loading" ? "Loading…" : "Signed in");
+    (status === "loading" ? t("shell.loading") : t("shell.signedIn"));
 
   const role =
     roleLabel ||
     attrs?.["custom:job_title"] ||
     attrs?.["custom:department"] ||
     (status === "loading" || rbacLoading ? "" : "Operations");
-  const initials = computeInitials(displayName === "Loading…" ? "U" : displayName);
+  // Compared against the translated string, not the English literal — otherwise
+  // a Chinese UI derives its avatar initials from "加载中…".
+  const initials = computeInitials(displayName === t("shell.loading") ? "U" : displayName);
 
   const {
     data: operationalCounts,
@@ -109,10 +113,10 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="flex min-w-0 flex-col leading-tight">
               <span className="truncate text-sm font-semibold text-sidebar-foreground">
-                Logistics Software
+                {t("shell.appName")}
               </span>
               <span className="truncate text-[11px] text-sidebar-foreground/60">
-                Operations Console
+                {t("shell.appTagline")}
               </span>
             </div>
           )}
@@ -127,7 +131,9 @@ export function AppSidebar() {
           if (items.length === 0) return null;
           return (
             <SidebarGroup key={group}>
-              <SidebarGroupLabel className="text-sidebar-foreground/50">{group}</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-sidebar-foreground/50">
+                {navGroup(group)}
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {items.map((item) => {
@@ -139,12 +145,15 @@ export function AppSidebar() {
                         <SidebarMenuButton
                           asChild
                           isActive={active}
-                          tooltip={item.title}
+                          tooltip={navLabel(item.title)}
                           className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/60"
                         >
                           <Link to={item.url}>
                             <Icon className="h-4 w-4" />
-                            <span>{item.title}</span>
+                            {/* Display only. `item.title` is the RBAC key that
+                                `navItemToModule` matches against MODULES, so it
+                                must never be translated in place. */}
+                            <span>{navLabel(item.title)}</span>
                           </Link>
                         </SidebarMenuButton>
                         {badge != null && !collapsed && (

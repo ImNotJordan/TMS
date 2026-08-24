@@ -4,6 +4,7 @@ import {
   getAiConnectionStatus,
   getGoogleMapsConnectionStatus,
   readAiConnectionStatus,
+  readResendConnectionStatus,
   getStoredGeocodeApiKey,
   readIntegrationsConfig,
   type IntegrationConnectionStatus,
@@ -71,9 +72,32 @@ export function resolveIntegrationState(
     };
   }
 
+  if (id === "resend") {
+    const status = readResendConnectionStatus();
+    const connected = Boolean(status?.connected);
+    const connectionLabel: IntegrationConnectionStatus = connected ? "Connected" : "Disconnected";
+    const lastAt = status?.lastDigestAt ?? status?.updatedAt ?? null;
+    return {
+      id,
+      name,
+      status: connectionLabelToStatus(connectionLabel),
+      connectionLabel,
+      lastSyncAt: lastAt,
+      lastSyncLabel: lastAt ? formatIntegrationLastSync(lastAt) : connected ? "—" : "Never",
+      maskedConfig: {
+        ...(status?.fromEmail ? { fromEmail: status.fromEmail } : {}),
+        ...(status?.last4 ? { apiKey: `****${status.last4}` } : {}),
+      },
+      capabilities: connected ? ["email.send", "email.digest"] : [],
+    };
+  }
+
   if (id === "dat") {
     const key = String(settingsValues.dat_api_key ?? "").trim();
-    const connected = key.length > 0 && !key.includes("****");
+    const hasKey = key.length > 0 && !key.includes("****");
+    const capacityOn = settingsValues.enable_dat_capacity_data !== false;
+    const rateOn = settingsValues.enable_dat_rate_data !== false;
+    const connected = hasKey && (capacityOn || rateOn);
     const connectionLabel: IntegrationConnectionStatus = connected ? "Connected" : "Disconnected";
     return {
       id,
@@ -83,7 +107,10 @@ export function resolveIntegrationState(
       lastSyncAt: null,
       lastSyncLabel: connected ? "—" : "Never",
       maskedConfig: key ? { apiKey: maskKey(key) } : {},
-      capabilities: connected ? ["dat.rates", "dat.capacity"] : [],
+      capabilities: [
+        ...(connected && rateOn ? ["dat.rates"] : []),
+        ...(connected && capacityOn ? ["dat.capacity"] : []),
+      ],
     };
   }
 

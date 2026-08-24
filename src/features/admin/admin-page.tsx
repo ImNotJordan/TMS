@@ -135,6 +135,7 @@ import {
   type TwoFAStatus,
   type UserStatus,
 } from "@/lib/admin-user-constants";
+import { t } from "@/lib/i18n/t";
 
 type UserRecord = {
   id: string;
@@ -203,8 +204,9 @@ type AddUserDraft = {
   permissionTemplate: PermissionTemplate;
   accessLevel: "Standard" | "Elevated" | "Restricted";
   manager: string;
-  assignedTeam: string;
-  assignedBranch: string;
+    assignedTeam: string;
+    assignedBranch: string;
+    assignedCustomers: string;
   modulePermissions: ModulePermissionMatrix;
   fieldPermissions: FieldPermissionMatrix;
   dataAccessScope: AccessScope;
@@ -288,9 +290,9 @@ const ROLE_TEMPLATE_SUMMARY: Record<
     fieldRules: "No financial visibility",
   },
   "Customer Portal Template": {
-    modules: "Quotes, Tracking, Profile",
+    modules: "Tracking, Loads (view), Profile",
     dataScope: "Assigned Customers Only",
-    fieldRules: "Can Export Customer Data",
+    fieldRules: "Billed amount and tax only — no carrier rates",
   },
 };
 
@@ -322,6 +324,7 @@ function buildEmptyDraft(): AddUserDraft {
     manager: "",
     assignedTeam: "",
     assignedBranch: "",
+    assignedCustomers: "",
     modulePermissions: buildDefaultModulePermissions(),
     fieldPermissions: buildDefaultFieldPermissions(),
     dataAccessScope: "Assigned Team Only",
@@ -424,8 +427,11 @@ function applyTemplateToDraft(
     nextDraft.modulePermissions.Analytics["View Only"] = true;
     nextDraft.modulePermissions.Loads["No Access"] = false;
     nextDraft.modulePermissions.Loads["View Only"] = true;
+    nextDraft.modulePermissions.Inventory["No Access"] = false;
+    nextDraft.modulePermissions.Inventory["View Only"] = true;
     nextDraft.fieldPermissions["Can Approve Carrier Payments"] = true;
     nextDraft.fieldPermissions["Can View Accounting Reports"] = true;
+    nextDraft.fieldPermissions["Can View Inventory Valuation"] = true;
     nextDraft.dataAccessScope = "All Company Data";
     nextDraft.role = "Accounting";
     nextDraft.department = "Finance";
@@ -474,6 +480,7 @@ function applyTemplateToDraft(
       "Dashboard",
       "Loads",
       "TruckBoard",
+      "Inventory",
       "Tracking",
       "Carriers / Brokers",
       "Communications",
@@ -540,6 +547,27 @@ function applyTemplateToDraft(
     }
     nextDraft.dataAccessScope = "Assigned Customers Only";
     nextDraft.role = "Broker";
+  }
+
+  if (template === "Customer Portal Template") {
+    for (const moduleName of MODULES) {
+      nextDraft.modulePermissions[moduleName]["No Access"] = true;
+      nextDraft.modulePermissions[moduleName]["View Only"] = false;
+      nextDraft.modulePermissions[moduleName].Create = false;
+      nextDraft.modulePermissions[moduleName].Edit = false;
+      nextDraft.modulePermissions[moduleName].Delete = false;
+      nextDraft.modulePermissions[moduleName].Approve = false;
+      nextDraft.modulePermissions[moduleName].Export = false;
+      nextDraft.modulePermissions[moduleName]["Full Access"] = false;
+    }
+    for (const moduleName of ["Loads", "Tracking", "Profile"] as const) {
+      nextDraft.modulePermissions[moduleName]["No Access"] = false;
+      nextDraft.modulePermissions[moduleName]["View Only"] = true;
+    }
+    nextDraft.dataAccessScope = "Assigned Customers Only";
+    nextDraft.role = "Client";
+    nextDraft.department = "Customer";
+    nextDraft.accessLevel = "Restricted";
   }
 
   return nextDraft;
@@ -1241,6 +1269,7 @@ export function AdminPage() {
         accessLevel: draft.accessLevel,
         assignedTeam: draft.assignedTeam,
         assignedBranch: draft.assignedBranch,
+        assignedCustomers: draft.assignedCustomers,
         dataAccessScope: draft.dataAccessScope,
         accountStatus,
         inviteStatus,
@@ -1300,8 +1329,10 @@ export function AdminPage() {
   return (
     <div>
       <PageHeader
-        title="Admin Control Center"
-        description="Complete user management, permissions, invitation workflows, security controls, and audit visibility."
+        title={t("Admin Control Center")}
+        description={t(
+          "Complete user management, permissions, invitation workflows, security controls, and audit visibility.",
+        )}
         actions={
           <>
             {/* Only rendered for a platform admin, and only while scoped —
@@ -1313,20 +1344,20 @@ export function AdminPage() {
                 className="gap-1.5"
                 onClick={() => setShowAllCompanies(true)}
               >
-                <ShieldAlert className="h-4 w-4" /> View all companies
+                <ShieldAlert className="h-4 w-4" /> {t("View all companies")}
               </Button>
             ) : null}
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Filter className="h-4 w-4" /> Filters
+              <Filter className="h-4 w-4" /> {t("Filters")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" /> Export
+              <Download className="h-4 w-4" /> {t("Export")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Upload className="h-4 w-4" /> Import CSV
+              <Upload className="h-4 w-4" /> {t("Import CSV")}
             </Button>
             <Button size="sm" className="gap-1.5" onClick={openAddUser}>
-              <UserPlus className="h-4 w-4" /> Add User
+              <UserPlus className="h-4 w-4" /> {t("Add User")}
             </Button>
           </>
         }
@@ -1335,8 +1366,8 @@ export function AdminPage() {
       <div className="grid gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:px-8">
         <Card className="h-fit border-border/70 shadow-sm lg:sticky lg:top-4">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Admin Navigation</CardTitle>
-            <CardDescription>Control every access surface</CardDescription>
+            <CardTitle className="text-base">{t("Admin Navigation")}</CardTitle>
+            <CardDescription>{t("Control every access surface")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-1">
             {ADMIN_SECTIONS.map((section) => {
@@ -1369,26 +1400,26 @@ export function AdminPage() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <MetricCard
-                    label="Total Users"
+                    label={t("Total Users")}
                     value={users.length.toString()}
-                    hint="Across all portals"
+                    hint={t("Across all portals")}
                   />
                   <MetricCard
-                    label="Active Users"
+                    label={t("Active Users")}
                     value={userMetrics.activeUsers.toString()}
-                    hint="Can access production"
+                    hint={t("Can access production")}
                     tone="success"
                   />
                   <MetricCard
-                    label="Pending Invites"
+                    label={t("Pending Invites")}
                     value={userMetrics.pendingInvites.toString()}
-                    hint="Need onboarding"
+                    hint={t("Need onboarding")}
                     tone="info"
                   />
                   <MetricCard
-                    label="2FA Protected"
+                    label={t("2FA Protected")}
                     value={userMetrics.twoFAEnabled.toString()}
-                    hint="Security coverage"
+                    hint={t("Security coverage")}
                     tone="warning"
                   />
                 </div>
@@ -1396,24 +1427,25 @@ export function AdminPage() {
 
               <Card className="border-border/70 shadow-sm">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Users</CardTitle>
+                  <CardTitle className="text-base">{t("Users")}</CardTitle>
                   <CardDescription>
-                    Add, invite, edit, suspend, deactivate, and permission users with branch and
-                    team scope.
+                    {t(
+                      "Add, invite, edit, suspend, deactivate, and permission users with branch and\r\n                    team scope.",
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {usersLoading && (
                     <div className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
                       <LoaderCircle className="h-4 w-4 animate-spin" />
-                      Loading users from UsersTable / Cognito...
+                      {t("Loading users from UsersTable / Cognito...")}
                     </div>
                   )}
                   {directoryScope.scope === "platform" && (
                     <div className="flex flex-wrap items-start gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm">
                       <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                       <span className="flex-1 min-w-[16rem]">
-                        <span className="font-medium">All companies.</span> You are viewing
+                        <span className="font-medium">{t("All companies.")}</span> You are viewing
                         {directoryScope.companyCount && directoryScope.companyCount > 1
                           ? ` all ${directoryScope.companyCount} companies`
                           : " every company"}
@@ -1426,7 +1458,7 @@ export function AdminPage() {
                           variant="outline"
                           onClick={() => setShowAllCompanies(false)}
                         >
-                          Show only my company
+                          {t("Show only my company")}
                         </Button>
                       ) : null}
                     </div>
@@ -1448,7 +1480,7 @@ export function AdminPage() {
                       <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input
                         className="pl-9"
-                        placeholder="Search by name, email, or team"
+                        placeholder={t("Search by name, email, or team")}
                         value={userSearch}
                         onChange={(event) => setUserSearch(event.target.value)}
                       />
@@ -1458,10 +1490,10 @@ export function AdminPage() {
                       onValueChange={(value) => setStatusFilter(value as "all" | UserStatus)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Status" />
+                        <SelectValue placeholder={t("Status")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="all">{t("All Statuses")}</SelectItem>
                         {USER_STATUSES.map((status) => (
                           <SelectItem key={status} value={status}>
                             {status}
@@ -1474,10 +1506,10 @@ export function AdminPage() {
                       onValueChange={(value) => setRoleFilter(value as "all" | Role)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Role" />
+                        <SelectValue placeholder={t("Role")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Roles</SelectItem>
+                        <SelectItem value="all">{t("All Roles")}</SelectItem>
                         {ROLES.map((role) => (
                           <SelectItem key={role} value={role}>
                             {role}
@@ -1490,10 +1522,10 @@ export function AdminPage() {
                       onValueChange={(value) => setDepartmentFilter(value as "all" | string)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Department" />
+                        <SelectValue placeholder={t("Department")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Departments</SelectItem>
+                        <SelectItem value="all">{t("All Departments")}</SelectItem>
                         {departments.map((department) => (
                           <SelectItem key={department} value={department}>
                             {department}
@@ -1502,7 +1534,7 @@ export function AdminPage() {
                       </SelectContent>
                     </Select>
                     <Button size="sm" className="gap-1.5" onClick={openAddUser}>
-                      <UserPlus className="h-4 w-4" /> Add User
+                      <UserPlus className="h-4 w-4" /> {t("Add User")}
                     </Button>
                   </div>
 
@@ -1523,7 +1555,7 @@ export function AdminPage() {
                           })();
                         }}
                       >
-                        <Mail className="h-3.5 w-3.5" /> Resend Invite
+                        <Mail className="h-3.5 w-3.5" /> {t("Resend Invite")}
                       </Button>
                       <Button
                         variant="outline"
@@ -1534,7 +1566,7 @@ export function AdminPage() {
                           void updateUsersStatus(selectedVisibleIds, "Suspended", "User Suspended")
                         }
                       >
-                        <PauseCircle className="h-3.5 w-3.5" /> Suspend
+                        <PauseCircle className="h-3.5 w-3.5" /> {t("Suspend")}
                       </Button>
                       <Button
                         variant="outline"
@@ -1549,7 +1581,7 @@ export function AdminPage() {
                           )
                         }
                       >
-                        <UserX className="h-3.5 w-3.5" /> Deactivate
+                        <UserX className="h-3.5 w-3.5" /> {t("Deactivate")}
                       </Button>
                     </div>
                   </div>
@@ -1566,19 +1598,19 @@ export function AdminPage() {
                               }
                             />
                           </TableHead>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Phone</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Company</TableHead>
-                          <TableHead>Department</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Assigned Team</TableHead>
-                          <TableHead>Last Login</TableHead>
-                          <TableHead>Invite Status</TableHead>
-                          <TableHead>2FA Status</TableHead>
-                          <TableHead>Created Date</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
+                          <TableHead>{t("Name")}</TableHead>
+                          <TableHead>{t("Email")}</TableHead>
+                          <TableHead>{t("Phone")}</TableHead>
+                          <TableHead>{t("Role")}</TableHead>
+                          <TableHead>{t("Company")}</TableHead>
+                          <TableHead>{t("Department")}</TableHead>
+                          <TableHead>{t("Status")}</TableHead>
+                          <TableHead>{t("Assigned Team")}</TableHead>
+                          <TableHead>{t("Last Login")}</TableHead>
+                          <TableHead>{t("Invite Status")}</TableHead>
+                          <TableHead>{t("2FA Status")}</TableHead>
+                          <TableHead>{t("Created Date")}</TableHead>
+                          <TableHead className="text-right">{t("Actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1600,7 +1632,7 @@ export function AdminPage() {
                               colSpan={14}
                               className="py-10 text-center text-sm text-muted-foreground"
                             >
-                              No users match your filters.
+                              {t("No users match your filters.")}
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -1642,7 +1674,7 @@ export function AdminPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>User Actions</DropdownMenuLabel>
+                                    <DropdownMenuLabel>{t("User Actions")}</DropdownMenuLabel>
                                     <DropdownMenuItem
                                       onSelect={() => {
                                         void navigate({
@@ -1651,7 +1683,7 @@ export function AdminPage() {
                                         });
                                       }}
                                     >
-                                      <Edit3 className="h-4 w-4" /> Edit User
+                                      <Edit3 className="h-4 w-4" /> {t("Edit User")}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       disabled={passwordResetBusyId === user.id}
@@ -1660,13 +1692,13 @@ export function AdminPage() {
                                       <RefreshCw
                                         className={`h-4 w-4 ${passwordResetBusyId === user.id ? "animate-spin" : ""}`}
                                       />{" "}
-                                      Reset Password
+                                      {t("Reset Password")}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       disabled={passwordResetBusyId === user.id}
                                       onSelect={() => void resendUserInvite(user)}
                                     >
-                                      <Mail className="h-4 w-4" /> Resend Invite
+                                      <Mail className="h-4 w-4" /> {t("Resend Invite")}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onSelect={() => {
@@ -1678,7 +1710,7 @@ export function AdminPage() {
                                         setActiveSection("audit");
                                       }}
                                     >
-                                      <Eye className="h-4 w-4" /> View Activity
+                                      <Eye className="h-4 w-4" /> {t("View Activity")}
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
@@ -1690,7 +1722,7 @@ export function AdminPage() {
                                         )
                                       }
                                     >
-                                      <PauseCircle className="h-4 w-4" /> Suspend User
+                                      <PauseCircle className="h-4 w-4" /> {t("Suspend User")}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       onSelect={() =>
@@ -1701,13 +1733,13 @@ export function AdminPage() {
                                         )
                                       }
                                     >
-                                      <UserX className="h-4 w-4" /> Deactivate User
+                                      <UserX className="h-4 w-4" /> {t("Deactivate User")}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       className="text-destructive"
                                       onSelect={() => void deleteUsers([user.id])}
                                     >
-                                      <Trash2 className="h-4 w-4" /> Delete User
+                                      <Trash2 className="h-4 w-4" /> {t("Delete User")}
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
@@ -1724,14 +1756,16 @@ export function AdminPage() {
               <div className="grid gap-4 xl:grid-cols-2">
                 <Card className="border-border/70 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Invitation Tracking</CardTitle>
+                    <CardTitle className="text-base">{t("Invitation Tracking")}</CardTitle>
                     <CardDescription>
-                      Send, resend, copy link, and expiration controls
+                      {t("Send, resend, copy link, and expiration controls")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {inviteRows.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No pending invitations.</p>
+                      <p className="text-sm text-muted-foreground">
+                        {t("No pending invitations.")}
+                      </p>
                     ) : (
                       inviteRows.map((row) => (
                         <div
@@ -1756,7 +1790,7 @@ export function AdminPage() {
                                 if (user) void resendUserInvite(user);
                               }}
                             >
-                              <Send className="h-3.5 w-3.5" /> Resend
+                              <Send className="h-3.5 w-3.5" /> {t("Resend")}
                             </Button>
                           </div>
                         </div>
@@ -1767,15 +1801,17 @@ export function AdminPage() {
 
                 <Card className="border-border/70 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Admin Notifications</CardTitle>
-                    <CardDescription>Security, role, and invite signal feed</CardDescription>
+                    <CardTitle className="text-base">{t("Admin Notifications")}</CardTitle>
+                    <CardDescription>{t("Security, role, and invite signal feed")}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {auditLogsLoading && securityEvents.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Loading security signals…</p>
+                      <p className="text-sm text-muted-foreground">
+                        {t("Loading security signals…")}
+                      </p>
                     ) : securityEvents.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        No admin audit events yet. User lifecycle actions appear here.
+                        {t("No admin audit events yet. User lifecycle actions appear here.")}
                       </p>
                     ) : (
                       securityEvents.map((event) => (
@@ -1809,9 +1845,9 @@ export function AdminPage() {
           {activeSection === "roles" && (
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Role Templates & Permission Matrix</CardTitle>
+                <CardTitle>{t("Role Templates & Permission Matrix")}</CardTitle>
                 <CardDescription>
-                  Build reusable RBAC templates with module and field-level controls.
+                  {t("Build reusable RBAC templates with module and field-level controls.")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1833,16 +1869,17 @@ export function AdminPage() {
                 </div>
                 <Separator />
                 <div className="rounded-md border border-border/70 p-4">
-                  <h3 className="text-sm font-semibold">Permission Matrix Preview</h3>
+                  <h3 className="text-sm font-semibold">{t("Permission Matrix Preview")}</h3>
                   <p className="mb-3 mt-1 text-xs text-muted-foreground">
-                    Configure No Access, View, Create, Edit, Delete, Approve, Export, and Full
-                    Access by module.
+                    {t(
+                      "Configure No Access, View, Create, Edit, Delete, Approve, Export, and Full\r\n                    Access by module.",
+                    )}
                   </p>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Module</TableHead>
+                          <TableHead>{t("Module")}</TableHead>
                           {PERMISSION_LEVELS.map((level) => (
                             <TableHead key={level}>{level}</TableHead>
                           ))}
@@ -1876,10 +1913,11 @@ export function AdminPage() {
             <div className="grid gap-4 xl:grid-cols-2">
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
-                  <CardTitle>Team & Department Management</CardTitle>
+                  <CardTitle>{t("Team & Department Management")}</CardTitle>
                   <CardDescription>
-                    Live roster counts from Cognito/UsersTable, plus org chart seeded in
-                    WorkspaceSettings (`orgStructure`).
+                    {t(
+                      "Live roster counts from Cognito/UsersTable, plus org chart seeded in\r\n                    WorkspaceSettings (`orgStructure`).",
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -1900,7 +1938,7 @@ export function AdminPage() {
                   {teamsFromDirectory.length > 0 ? (
                     <div className="rounded-md border border-dashed border-border/70 p-3">
                       <p className="text-xs font-medium text-muted-foreground">
-                        Directory teams / departments
+                        {t("Directory teams / departments")}
                       </p>
                       <ul className="mt-2 space-y-1">
                         {teamsFromDirectory.slice(0, 8).map((row) => (
@@ -1919,8 +1957,10 @@ export function AdminPage() {
               </Card>
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
-                  <CardTitle>Branch Permissions</CardTitle>
-                  <CardDescription>Branches from WorkspaceSettings orgStructure.</CardDescription>
+                  <CardTitle>{t("Branch Permissions")}</CardTitle>
+                  <CardDescription>
+                    {t("Branches from WorkspaceSettings orgStructure.")}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {(orgStructure?.branches ?? []).map((branch) => (
@@ -1936,7 +1976,7 @@ export function AdminPage() {
                   ))}
                   {!orgStructure?.branches?.length ? (
                     <p className="text-sm text-muted-foreground">
-                      No branches yet — open Settings once while signed in to seed defaults.
+                      {t("No branches yet — open Settings once while signed in to seed defaults.")}
                     </p>
                   ) : null}
                 </CardContent>
@@ -1948,15 +1988,15 @@ export function AdminPage() {
             <div className="grid gap-4 xl:grid-cols-2">
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
-                  <CardTitle>Authentication Controls</CardTitle>
+                  <CardTitle>{t("Authentication Controls")}</CardTitle>
                   <CardDescription>
-                    2FA, SSO, session, trusted devices, and login restrictions.
+                    {t("2FA, SSO, session, trusted devices, and login restrictions.")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <ToggleRow
-                    label="Require Two-Factor Authentication"
-                    description="Enforce 2FA on all non-portal users"
+                    label={t("Require Two-Factor Authentication")}
+                    description={t("Enforce 2FA on all non-portal users")}
                     defaultChecked
                     onChange={(enabled) =>
                       void logAdminAction({
@@ -1968,8 +2008,8 @@ export function AdminPage() {
                     }
                   />
                   <ToggleRow
-                    label="Single Sign-On (Google)"
-                    description="Allow login with Google Workspace"
+                    label={t("Single Sign-On (Google)")}
+                    description={t("Allow login with Google Workspace")}
                     defaultChecked
                     onChange={(enabled) =>
                       void logAdminAction({
@@ -1981,8 +2021,8 @@ export function AdminPage() {
                     }
                   />
                   <ToggleRow
-                    label="Single Sign-On (Microsoft)"
-                    description="Allow login with Microsoft Entra ID"
+                    label={t("Single Sign-On (Microsoft)")}
+                    description={t("Allow login with Microsoft Entra ID")}
                     onChange={(enabled) =>
                       void logAdminAction({
                         action: "Security Setting Updated",
@@ -1993,8 +2033,8 @@ export function AdminPage() {
                     }
                   />
                   <ToggleRow
-                    label="Trusted Devices"
-                    description="Challenge unknown devices before session creation"
+                    label={t("Trusted Devices")}
+                    description={t("Challenge unknown devices before session creation")}
                     defaultChecked
                     onChange={(enabled) =>
                       void logAdminAction({
@@ -2006,8 +2046,8 @@ export function AdminPage() {
                     }
                   />
                   <ToggleRow
-                    label="IP Restrictions"
-                    description="Only allow office and approved VPN IP ranges"
+                    label={t("IP Restrictions")}
+                    description={t("Only allow office and approved VPN IP ranges")}
                     onChange={(enabled) =>
                       void logAdminAction({
                         action: "Security Setting Updated",
@@ -2022,18 +2062,18 @@ export function AdminPage() {
 
               <Card className="border-border/70 shadow-sm">
                 <CardHeader>
-                  <CardTitle>Password Policy</CardTitle>
+                  <CardTitle>{t("Password Policy")}</CardTitle>
                   <CardDescription>
-                    Company-wide credential policy and temporary password lifecycle.
+                    {t("Company-wide credential policy and temporary password lifecycle.")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <PolicyLine
-                    label="Minimum password length"
+                    label={t("Minimum password length")}
                     value={String(companySettings.minimum_password_length ?? "12")}
                   />
                   <PolicyLine
-                    label="Require uppercase, lowercase, number, symbol"
+                    label={t("Require uppercase, lowercase, number, symbol")}
                     value={
                       companySettings.require_uppercase &&
                       companySettings.require_lowercase &&
@@ -2044,19 +2084,19 @@ export function AdminPage() {
                     }
                   />
                   <PolicyLine
-                    label="Password expiration"
+                    label={t("Password expiration")}
                     value={String(companySettings.password_expiration || "—")}
                   />
                   <PolicyLine
-                    label="Prevent password reuse"
+                    label={t("Prevent password reuse")}
                     value={String(companySettings.prevent_password_reuse || "—")}
                   />
                   <PolicyLine
-                    label="Temporary password expiration"
+                    label={t("Temporary password expiration")}
                     value={String(companySettings.temporary_password_expiration || "—")}
                   />
                   <PolicyLine
-                    label="Login attempt limit"
+                    label={t("Login attempt limit")}
                     value={`${String(companySettings.login_attempt_limit || "5")} attempts`}
                   />
                 </CardContent>
@@ -2064,22 +2104,22 @@ export function AdminPage() {
 
               <Card className="xl:col-span-2 border-border/70 shadow-sm">
                 <CardHeader>
-                  <CardTitle>Login Activity</CardTitle>
+                  <CardTitle>{t("Login Activity")}</CardTitle>
                   <CardDescription>
-                    Last login, failed attempts, session state, and device telemetry.
+                    {t("Last login, failed attempts, session state, and device telemetry.")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>Last Login</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
+                        <TableHead>{t("User")}</TableHead>
+                        <TableHead>{t("Last Login")}</TableHead>
+                        <TableHead>{t("Email")}</TableHead>
+                        <TableHead>{t("Role")}</TableHead>
                         <TableHead>2FA</TableHead>
-                        <TableHead>Session Status</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
+                        <TableHead>{t("Session Status")}</TableHead>
+                        <TableHead className="text-right">{t("Action")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2089,7 +2129,7 @@ export function AdminPage() {
                             colSpan={7}
                             className="py-8 text-center text-sm text-muted-foreground"
                           >
-                            Loading Cognito directory…
+                            {t("Loading Cognito directory…")}
                           </TableCell>
                         </TableRow>
                       ) : loginActivityRows.length === 0 ? (
@@ -2098,7 +2138,7 @@ export function AdminPage() {
                             colSpan={7}
                             className="py-8 text-center text-sm text-muted-foreground"
                           >
-                            No directory users yet. Invite a user to populate login activity.
+                            {t("No directory users yet. Invite a user to populate login activity.")}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -2114,7 +2154,7 @@ export function AdminPage() {
                               <TableCell>{row.sessionStatus}</TableCell>
                               <TableCell className="text-right">
                                 <Button size="sm" variant="outline" className="h-8" disabled>
-                                  Logout All Devices
+                                  {t("Logout All Devices")}
                                 </Button>
                               </TableCell>
                             </TableRow>
@@ -2131,31 +2171,32 @@ export function AdminPage() {
           {activeSection === "audit" && (
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Admin Audit Logs</CardTitle>
+                <CardTitle>{t("Admin Audit Logs")}</CardTitle>
                 <CardDescription>
-                  Track user lifecycle, permission changes, sensitive edits, and override
-                  operations.
+                  {t(
+                    "Track user lifecycle, permission changes, sensitive edits, and override\r\n                  operations.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 {auditLogsLoading && (
                   <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Loading audit logs…
+                    {t("Loading audit logs…")}
                   </div>
                 )}
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date / Time</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Action</TableHead>
-                      <TableHead>Module</TableHead>
-                      <TableHead>Record</TableHead>
-                      <TableHead>IP Address</TableHead>
-                      <TableHead>Device</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Details</TableHead>
+                      <TableHead>{t("Date / Time")}</TableHead>
+                      <TableHead>{t("User")}</TableHead>
+                      <TableHead>{t("Action")}</TableHead>
+                      <TableHead>{t("Module")}</TableHead>
+                      <TableHead>{t("Record")}</TableHead>
+                      <TableHead>{t("IP Address")}</TableHead>
+                      <TableHead>{t("Device")}</TableHead>
+                      <TableHead>{t("Status")}</TableHead>
+                      <TableHead>{t("Details")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2175,7 +2216,9 @@ export function AdminPage() {
                           colSpan={9}
                           className="py-10 text-center text-sm text-muted-foreground"
                         >
-                          No admin actions logged yet. Create or edit a user to see entries here.
+                          {t(
+                            "No admin actions logged yet. Create or edit a user to see entries here.",
+                          )}
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -2219,16 +2262,17 @@ export function AdminPage() {
           {activeSection === "invitations" && (
             <Card className="border-border/70 shadow-sm">
               <CardHeader>
-                <CardTitle>Invitation Center</CardTitle>
+                <CardTitle>{t("Invitation Center")}</CardTitle>
                 <CardDescription>
-                  Live Cognito invitations from the user directory — resend, copy, and track
-                  expiration.
+                  {t(
+                    "Live Cognito invitations from the user directory — resend, copy, and track\r\n                  expiration.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {inviteRows.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    No pending invitations. Create a user from Users to send an invite.
+                    {t("No pending invitations. Create a user from Users to send an invite.")}
                   </p>
                 ) : (
                   inviteRows.map((invite) => (
@@ -2253,7 +2297,7 @@ export function AdminPage() {
                             if (user) void resendUserInvite(user);
                           }}
                         >
-                          Resend
+                          {t("Resend")}
                         </Button>
                         <Button
                           variant="outline"
@@ -2271,7 +2315,7 @@ export function AdminPage() {
                             );
                           }}
                         >
-                          Copy Link
+                          {t("Copy Link")}
                         </Button>
                       </div>
                     </div>
@@ -2288,14 +2332,15 @@ export function AdminPage() {
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
                 <div>
-                  <CardTitle>Company Admin Settings</CardTitle>
+                  <CardTitle>{t("Company Admin Settings")}</CardTitle>
                   <CardDescription>
-                    Sourced from Settings → Company (WorkspaceSettings / DynamoDB). Edit there to
-                    update letterhead, MC/DOT, and billing contacts.
+                    {t(
+                      "Sourced from Settings → Company (WorkspaceSettings / DynamoDB). Edit there to\r\n                    update letterhead, MC/DOT, and billing contacts.",
+                    )}
                   </CardDescription>
                 </div>
                 <Button variant="outline" size="sm" asChild>
-                  <Link to="/settings">Open Settings</Link>
+                  <Link to="/settings">{t("Open Settings")}</Link>
                 </Button>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
@@ -2304,44 +2349,44 @@ export function AdminPage() {
                 ) : (
                   <>
                     <SettingBlock
-                      label="Company Profile"
+                      label={t("Company Profile")}
                       value={String(companySettings.company_legal_name || "—")}
                     />
                     <SettingBlock
-                      label="MC / DOT"
+                      label={t("MC / DOT")}
                       value={`${String(companySettings.mc_number || "—")} / ${String(companySettings.dot_number || "—")}`}
                     />
                     <SettingBlock
-                      label="EIN / Tax ID"
+                      label={t("EIN / Tax ID")}
                       value={String(companySettings.ein_tax_id || "—")}
                     />
                     <SettingBlock
-                      label="Operating Regions"
+                      label={t("Operating Regions")}
                       value={String(companySettings.operating_regions || "—")}
                     />
                     <SettingBlock
-                      label="Default Currency"
+                      label={t("Default Currency")}
                       value={String(companySettings.default_currency || "USD")}
                     />
                     <SettingBlock
-                      label="Default Time Zone"
+                      label={t("Default Time Zone")}
                       value={String(companySettings.default_time_zone || "—")}
                     />
                     <SettingBlock
-                      label="Measurement Units"
+                      label={t("Measurement Units")}
                       value={String(companySettings.default_distance_unit || "—")}
                     />
                     <SettingBlock
-                      label="Accounting Email"
+                      label={t("Accounting Email")}
                       value={String(companySettings.accounting_email || "—")}
                     />
                     <SettingBlock
-                      label="Support Email"
+                      label={t("Support Email")}
                       value={String(companySettings.support_email || "—")}
                     />
                     {activeSection === "integrations" ? (
                       <SettingBlock
-                        label="Integrations"
+                        label={t("Integrations")}
                         value="Configure Google Maps, AI, and providers in Settings → Integrations"
                       />
                     ) : null}
@@ -2388,7 +2433,7 @@ export function AdminPage() {
               ) : passwordResetResult.temporaryPassword ? (
                 <div className="rounded-lg border border-border/70 bg-muted/40 p-3">
                   <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Temporary password
+                    {t("Temporary password")}
                   </p>
                   <p className="mt-1 break-all font-mono text-sm font-semibold text-foreground">
                     {passwordResetResult.temporaryPassword}
@@ -2414,13 +2459,13 @@ export function AdminPage() {
                   toast.success("Temporary password copied");
                 }}
               >
-                Copy password
+                {t("Copy password")}
               </Button>
             ) : (
               <span />
             )}
             <Button type="button" onClick={() => setPasswordResetResult(null)}>
-              Done
+              {t("Done")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2429,10 +2474,11 @@ export function AdminPage() {
       <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
         <DialogContent className="max-h-[90vh] max-w-[1200px] overflow-y-auto p-0">
           <DialogHeader className="border-b border-border px-6 py-4">
-            <DialogTitle className="text-xl">Add New User</DialogTitle>
+            <DialogTitle className="text-xl">{t("Add New User")}</DialogTitle>
             <DialogDescription>
-              Multi-step onboarding for identity, role, module permissions, data scope, and invite
-              security.
+              {t(
+                "Multi-step onboarding for identity, role, module permissions, data scope, and invite\r\n              security.",
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -2459,29 +2505,31 @@ export function AdminPage() {
             {wizardStep === 0 && (
               <div className="space-y-4">
                 <SectionTitle
-                  title="Basic Information"
-                  description="First name, last name, profile details, branch, locale, and contact details."
+                  title={t("Basic Information")}
+                  description={t(
+                    "First name, last name, profile details, branch, locale, and contact details.",
+                  )}
                 />
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="First Name" required>
+                  <Field label={t("First Name")} required>
                     <Input
                       value={draft.firstName}
                       onChange={(e) => updateDraft("firstName", e.target.value)}
                     />
                   </Field>
-                  <Field label="Last Name" required>
+                  <Field label={t("Last Name")} required>
                     <Input
                       value={draft.lastName}
                       onChange={(e) => updateDraft("lastName", e.target.value)}
                     />
                   </Field>
-                  <Field label="Display Name">
+                  <Field label={t("Display Name")}>
                     <Input
                       value={draft.displayName}
                       onChange={(e) => updateDraft("displayName", e.target.value)}
                     />
                   </Field>
-                  <Field label="Email Address" required>
+                  <Field label={t("Email Address")} required>
                     <Input
                       type="email"
                       value={draft.email}
@@ -2489,13 +2537,13 @@ export function AdminPage() {
                       placeholder="name@company.com"
                     />
                   </Field>
-                  <Field label="Phone Number">
+                  <Field label={t("Phone Number")}>
                     <Input
                       value={draft.phone}
                       onChange={(e) => updateDraft("phone", e.target.value)}
                     />
                   </Field>
-                  <Field label="Profile Photo URL">
+                  <Field label={t("Profile Photo URL")}>
                     <Input
                       value={draft.profilePhoto}
                       onChange={(e) => updateDraft("profilePhoto", e.target.value)}
@@ -2503,7 +2551,7 @@ export function AdminPage() {
                     />
                   </Field>
                   <Field
-                    label="Company"
+                    label={t("Company")}
                     hint={
                       matchedCompany
                         ? `Joins ${matchedCompany.companyName} · ${matchedCompany.userCount} existing ${
@@ -2518,7 +2566,7 @@ export function AdminPage() {
                       value={draft.companyName}
                       onChange={(e) => updateDraft("companyName", e.target.value)}
                       list="admin-known-companies"
-                      placeholder="Start typing to pick or create"
+                      placeholder={t("Start typing to pick or create")}
                       autoComplete="off"
                     />
                     <datalist id="admin-known-companies">
@@ -2527,37 +2575,37 @@ export function AdminPage() {
                       ))}
                     </datalist>
                   </Field>
-                  <Field label="Job Title">
+                  <Field label={t("Job Title")}>
                     <Input
                       value={draft.jobTitle}
                       onChange={(e) => updateDraft("jobTitle", e.target.value)}
                     />
                   </Field>
-                  <Field label="Department">
+                  <Field label={t("Department")}>
                     <Input
                       value={draft.department}
                       onChange={(e) => updateDraft("department", e.target.value)}
                     />
                   </Field>
-                  <Field label="Office / Branch">
+                  <Field label={t("Office / Branch")}>
                     <Input
                       value={draft.officeBranch}
                       onChange={(e) => updateDraft("officeBranch", e.target.value)}
                     />
                   </Field>
-                  <Field label="Time Zone">
+                  <Field label={t("Time Zone")}>
                     <Input
                       value={draft.timeZone}
                       onChange={(e) => updateDraft("timeZone", e.target.value)}
                     />
                   </Field>
-                  <Field label="Language">
+                  <Field label={t("Language")}>
                     <Input
                       value={draft.language}
                       onChange={(e) => updateDraft("language", e.target.value)}
                     />
                   </Field>
-                  <Field label="Username">
+                  <Field label={t("Username")}>
                     <Input
                       value={draft.username}
                       onChange={(e) => updateDraft("username", e.target.value)}
@@ -2570,17 +2618,19 @@ export function AdminPage() {
             {wizardStep === 1 && (
               <div className="space-y-4">
                 <SectionTitle
-                  title="Role & Department"
-                  description="Assign role, template, reporting manager, team ownership, and branch."
+                  title={t("Role & Department")}
+                  description={t(
+                    "Assign role, template, reporting manager, team ownership, and branch.",
+                  )}
                 />
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="User Role" required>
+                  <Field label={t("User Role")} required>
                     <Select
                       value={draft.role}
                       onValueChange={(value) => updateDraft("role", value as Role)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select role" />
+                        <SelectValue placeholder={t("Select role")} />
                       </SelectTrigger>
                       <SelectContent>
                         {ROLES.map((role) => (
@@ -2591,7 +2641,7 @@ export function AdminPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Permission Template" required>
+                  <Field label={t("Permission Template")} required>
                     <Select
                       value={draft.permissionTemplate}
                       onValueChange={(value) =>
@@ -2599,7 +2649,7 @@ export function AdminPage() {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select template" />
+                        <SelectValue placeholder={t("Select template")} />
                       </SelectTrigger>
                       <SelectContent>
                         {PERMISSION_TEMPLATES.map((template) => (
@@ -2610,7 +2660,7 @@ export function AdminPage() {
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Access Level">
+                  <Field label={t("Access Level")}>
                     <Select
                       value={draft.accessLevel}
                       onValueChange={(value) =>
@@ -2621,35 +2671,47 @@ export function AdminPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Standard">Standard</SelectItem>
-                        <SelectItem value="Elevated">Elevated</SelectItem>
-                        <SelectItem value="Restricted">Restricted</SelectItem>
+                        <SelectItem value="Standard">{t("Standard")}</SelectItem>
+                        <SelectItem value="Elevated">{t("Elevated")}</SelectItem>
+                        <SelectItem value="Restricted">{t("Restricted")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Manager / Reports To">
+                  <Field label={t("Manager / Reports To")}>
                     <Input
                       value={draft.manager}
                       onChange={(e) => updateDraft("manager", e.target.value)}
                     />
                   </Field>
-                  <Field label="Assigned Team">
+                  <Field label={t("Assigned Team")}>
                     <Input
                       value={draft.assignedTeam}
                       onChange={(e) => updateDraft("assignedTeam", e.target.value)}
                     />
                   </Field>
-                  <Field label="Assigned Branch">
+                  <Field label={t("Assigned Branch")}>
                     <Input
                       value={draft.assignedBranch}
                       onChange={(e) => updateDraft("assignedBranch", e.target.value)}
+                    />
+                  </Field>
+                  <Field
+                    label={t("Assigned customers")}
+                    hint={t(
+                      "Required for Client portal users. Exact names as they appear on loads, comma-separated.",
+                    )}
+                  >
+                    <Input
+                      value={draft.assignedCustomers}
+                      onChange={(e) => updateDraft("assignedCustomers", e.target.value)}
+                      placeholder={t("Acme Manufacturing, Northwind")}
                     />
                   </Field>
                 </div>
 
                 <Card className="border-border/70 bg-muted/20">
                   <CardContent className="p-4 text-xs text-muted-foreground">
-                    <div className="font-semibold text-foreground">Template Summary</div>
+                    <div className="font-semibold text-foreground">{t("Template Summary")}</div>
                     <p className="mt-1">
                       Modules: {ROLE_TEMPLATE_SUMMARY[draft.permissionTemplate].modules}
                     </p>
@@ -2663,14 +2725,16 @@ export function AdminPage() {
             {wizardStep === 2 && (
               <div className="space-y-4">
                 <SectionTitle
-                  title="Module Access"
-                  description="Set module-level permission matrix plus field-level sensitivity permissions."
+                  title={t("Module Access")}
+                  description={t(
+                    "Set module-level permission matrix plus field-level sensitivity permissions.",
+                  )}
                 />
                 <div className="overflow-x-auto rounded-md border border-border/70">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="min-w-[180px]">Module</TableHead>
+                        <TableHead className="min-w-[180px]">{t("Module")}</TableHead>
                         {PERMISSION_LEVELS.map((level) => (
                           <TableHead key={level} className="min-w-[100px]">
                             {level}
@@ -2700,9 +2764,9 @@ export function AdminPage() {
 
                 <Card className="border-border/70">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Field-Level Permissions</CardTitle>
+                    <CardTitle className="text-base">{t("Field-Level Permissions")}</CardTitle>
                     <CardDescription>
-                      Control access to sensitive rates, margins, payments, and risk data.
+                      {t("Control access to sensitive rates, margins, payments, and risk data.")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-2 md:grid-cols-2">
@@ -2728,8 +2792,10 @@ export function AdminPage() {
             {wizardStep === 3 && (
               <div className="space-y-4">
                 <SectionTitle
-                  title="Data Access Scope"
-                  description="Define whether this user can access all company data or only assigned records."
+                  title={t("Data Access Scope")}
+                  description={t(
+                    "Define whether this user can access all company data or only assigned records.",
+                  )}
                 />
                 <div className="grid gap-3 md:grid-cols-2">
                   {ACCESS_SCOPES.map((scope) => (
@@ -2761,18 +2827,20 @@ export function AdminPage() {
             {wizardStep === 4 && (
               <div className="space-y-4">
                 <SectionTitle
-                  title="Security & Invite Settings"
-                  description="Passwords, access windows, 2FA, SSO options, and invite controls."
+                  title={t("Security & Invite Settings")}
+                  description={t(
+                    "Passwords, access windows, 2FA, SSO options, and invite controls.",
+                  )}
                 />
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Temporary Password">
+                  <Field label={t("Temporary Password")}>
                     <Input
                       type="password"
                       value={draft.temporaryPassword}
                       onChange={(e) => updateDraft("temporaryPassword", e.target.value)}
                     />
                   </Field>
-                  <Field label="Account Status">
+                  <Field label={t("Account Status")}>
                     <Select
                       value={draft.accountStatus}
                       onValueChange={(value) => updateDraft("accountStatus", value as UserStatus)}
@@ -2781,46 +2849,46 @@ export function AdminPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Pending Invite">Pending Invite</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
-                        <SelectItem value="Suspended">Suspended</SelectItem>
+                        <SelectItem value="Active">{t("Active")}</SelectItem>
+                        <SelectItem value="Pending Invite">{t("Pending Invite")}</SelectItem>
+                        <SelectItem value="Inactive">{t("Inactive")}</SelectItem>
+                        <SelectItem value="Suspended">{t("Suspended")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Invite Expiration (days)">
+                  <Field label={t("Invite Expiration (days)")}>
                     <Input
                       value={draft.inviteExpirationDays}
                       onChange={(e) => updateDraft("inviteExpirationDays", e.target.value)}
                     />
                   </Field>
-                  <Field label="Login Access Start Date">
+                  <Field label={t("Login Access Start Date")}>
                     <Input
                       type="date"
                       value={draft.loginAccessStartDate}
                       onChange={(e) => updateDraft("loginAccessStartDate", e.target.value)}
                     />
                   </Field>
-                  <Field label="Login Access Expiration Date">
+                  <Field label={t("Login Access Expiration Date")}>
                     <Input
                       type="date"
                       value={draft.loginAccessExpirationDate}
                       onChange={(e) => updateDraft("loginAccessExpirationDate", e.target.value)}
                     />
                   </Field>
-                  <Field label="Session Timeout (mins)">
+                  <Field label={t("Session Timeout (mins)")}>
                     <Input
                       value={draft.sessionTimeoutMins}
                       onChange={(e) => updateDraft("sessionTimeoutMins", e.target.value)}
                     />
                   </Field>
-                  <Field label="Login Attempt Limit">
+                  <Field label={t("Login Attempt Limit")}>
                     <Input
                       value={draft.loginAttemptLimit}
                       onChange={(e) => updateDraft("loginAttemptLimit", e.target.value)}
                     />
                   </Field>
-                  <Field label="IP Restrictions">
+                  <Field label={t("IP Restrictions")}>
                     <Input
                       placeholder="10.30.0.0/16, 73.44.211.0/24"
                       value={draft.ipRestrictions}
@@ -2831,48 +2899,48 @@ export function AdminPage() {
 
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <SwitchField
-                    label="Send Email Invite"
+                    label={t("Send Email Invite")}
                     checked={draft.sendEmailInvite}
                     onCheckedChange={(checked) => updateDraft("sendEmailInvite", checked)}
                   />
                   <SwitchField
-                    label="Require Password Reset on First Login"
+                    label={t("Require Password Reset on First Login")}
                     checked={draft.requirePasswordReset}
                     onCheckedChange={(checked) => updateDraft("requirePasswordReset", checked)}
                   />
                   <SwitchField
-                    label="Require Two-Factor Authentication"
+                    label={t("Require Two-Factor Authentication")}
                     checked={draft.requireTwoFactor}
                     onCheckedChange={(checked) => updateDraft("requireTwoFactor", checked)}
                   />
                   <SwitchField
-                    label="Enforce Session Timeout"
+                    label={t("Enforce Session Timeout")}
                     checked={draft.enforceSessionTimeout}
                     onCheckedChange={(checked) => updateDraft("enforceSessionTimeout", checked)}
                   />
                   <SwitchField
-                    label="Trusted Devices Only"
+                    label={t("Trusted Devices Only")}
                     checked={draft.trustedDevicesOnly}
                     onCheckedChange={(checked) => updateDraft("trustedDevicesOnly", checked)}
                   />
                   <SwitchField
-                    label="Require Profile Completion"
+                    label={t("Require Profile Completion")}
                     checked={draft.requireProfileCompletion}
                     onCheckedChange={(checked) => updateDraft("requireProfileCompletion", checked)}
                   />
                   <SwitchField
-                    label="Enable Google Login"
+                    label={t("Enable Google Login")}
                     checked={draft.enableSsoGoogle}
                     onCheckedChange={(checked) => updateDraft("enableSsoGoogle", checked)}
                   />
                   <SwitchField
-                    label="Enable Microsoft Login"
+                    label={t("Enable Microsoft Login")}
                     checked={draft.enableSsoMicrosoft}
                     onCheckedChange={(checked) => updateDraft("enableSsoMicrosoft", checked)}
                   />
                 </div>
 
-                <Field label="Custom Welcome Message">
+                <Field label={t("Custom Welcome Message")}>
                   <Textarea
                     rows={3}
                     value={draft.customWelcomeMessage}
@@ -2885,28 +2953,37 @@ export function AdminPage() {
             {wizardStep === 5 && (
               <div className="space-y-4">
                 <SectionTitle
-                  title="Review & Send Invite"
-                  description="Confirm final user settings before creating account and sending invite."
+                  title={t("Review & Send Invite")}
+                  description={t(
+                    "Confirm final user settings before creating account and sending invite.",
+                  )}
                 />
 
                 <div className="grid gap-4 lg:grid-cols-2">
                   <Card className="border-border/70">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">User Summary</CardTitle>
+                      <CardTitle className="text-base">{t("User Summary")}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <SummaryRow
-                        label="User Name"
+                        label={t("User Name")}
                         value={`${draft.firstName} ${draft.lastName}`.trim() || "-"}
                       />
-                      <SummaryRow label="Email" value={draft.email || "-"} />
-                      <SummaryRow label="Role" value={draft.role} />
-                      <SummaryRow label="Department" value={draft.department || "-"} />
-                      <SummaryRow label="Assigned Team" value={draft.assignedTeam || "-"} />
-                      <SummaryRow label="Assigned Branch" value={draft.assignedBranch || "-"} />
-                      <SummaryRow label="Data Access Scope" value={draft.dataAccessScope} />
+                      <SummaryRow label={t("Email")} value={draft.email || "-"} />
+                      <SummaryRow label={t("Role")} value={draft.role} />
+                      <SummaryRow label={t("Department")} value={draft.department || "-"} />
+                      <SummaryRow label={t("Assigned Team")} value={draft.assignedTeam || "-"} />
                       <SummaryRow
-                        label="Security Requirements"
+                        label={t("Assigned Branch")}
+                        value={draft.assignedBranch || "-"}
+                      />
+                      <SummaryRow
+                        label={t("Assigned customers")}
+                        value={draft.assignedCustomers || "-"}
+                      />
+                      <SummaryRow label={t("Data Access Scope")} value={draft.dataAccessScope} />
+                      <SummaryRow
+                        label={t("Security Requirements")}
                         value={
                           draft.requireTwoFactor
                             ? "2FA required, password reset on first login"
@@ -2918,11 +2995,11 @@ export function AdminPage() {
 
                   <Card className="border-border/70">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Modules & Restrictions</CardTitle>
+                      <CardTitle className="text-base">{t("Modules & Restrictions")}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <SummaryRow
-                        label="Modules Allowed"
+                        label={t("Modules Allowed")}
                         value={
                           MODULES.filter((moduleName) => {
                             const selected = selectedPermissionsForModule(
@@ -2933,7 +3010,7 @@ export function AdminPage() {
                         }
                       />
                       <SummaryRow
-                        label="Restricted Modules"
+                        label={t("Restricted Modules")}
                         value={
                           MODULES.filter(
                             (moduleName) => draft.modulePermissions[moduleName]["No Access"],
@@ -2941,7 +3018,7 @@ export function AdminPage() {
                         }
                       />
                       <SummaryRow
-                        label="Invite Email Preview"
+                        label={t("Invite Email Preview")}
                         value={`Hello ${draft.firstName || "there"}, welcome to Titan Freight. You have been assigned ${draft.role}.`}
                       />
                     </CardContent>
@@ -2950,7 +3027,7 @@ export function AdminPage() {
 
                 <Card className="border-border/70 bg-muted/20">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Invite Email Preview</CardTitle>
+                    <CardTitle className="text-base">{t("Invite Email Preview")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     <p>Subject: You are invited to Logistics Software - {draft.role}</p>
@@ -2978,10 +3055,10 @@ export function AdminPage() {
                 onClick={() => setAddUserOpen(false)}
                 disabled={creatingUser}
               >
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button variant="outline" onClick={saveDraft} disabled={creatingUser}>
-                Save Draft
+                {t("Save Draft")}
               </Button>
               {wizardStep > 0 && (
                 <Button
@@ -2989,7 +3066,7 @@ export function AdminPage() {
                   onClick={() => setWizardStep((prev) => Math.max(0, prev - 1))}
                   disabled={creatingUser}
                 >
-                  Back
+                  {t("Back")}
                 </Button>
               )}
               {wizardStep < ADD_USER_STEPS.length - 1 ? (
@@ -2999,7 +3076,7 @@ export function AdminPage() {
                   }
                   disabled={!stepCanContinue || creatingUser}
                 >
-                  Continue
+                  {t("Continue")}
                 </Button>
               ) : (
                 <>
@@ -3010,7 +3087,7 @@ export function AdminPage() {
                   >
                     {creatingUser ? (
                       <>
-                        <LoaderCircle className="h-4 w-4 animate-spin" /> Saving…
+                        <LoaderCircle className="h-4 w-4 animate-spin" /> {t("Saving…")}
                       </>
                     ) : (
                       "Create User"
@@ -3019,7 +3096,7 @@ export function AdminPage() {
                   <Button onClick={() => void createUser(true)} disabled={creatingUser}>
                     {creatingUser ? (
                       <>
-                        <LoaderCircle className="h-4 w-4 animate-spin" /> Saving…
+                        <LoaderCircle className="h-4 w-4 animate-spin" /> {t("Saving…")}
                       </>
                     ) : (
                       "Create & Send Invite"
@@ -3066,7 +3143,7 @@ function MetricCard({
                     : "bg-muted text-foreground"
             }
           >
-            Live
+            {t("Live")}
           </Badge>
         </div>
         <div className="mt-1 text-xs text-muted-foreground">{hint}</div>

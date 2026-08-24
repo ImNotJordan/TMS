@@ -9,6 +9,7 @@ import { assignUserCompany, listKnownCompanies, type KnownCompany } from "@/lib/
 import { newCompanyId, normalizeCompanyName } from "@/lib/tenant/company-context";
 import { isRoleTenantExempt } from "@/lib/tenant/tenant-exemption";
 import { strictRole } from "@/lib/tenant/strict-role";
+import { t } from "@/lib/i18n/t";
 
 /**
  * Assign a user to a company.
@@ -91,11 +92,14 @@ export function CompanyAssignmentCard({
       // applies — saying it anyway would send admins chasing a step that does
       // not exist.
       if (result.scope === "employer") {
-        toast.success(result.companyId ? `Employer set to ${result.companyName}` : "Employer cleared", {
-          description: result.companyId
-            ? "They now appear in that company's directory. Their own access is unchanged."
-            : "They no longer appear in any company's directory. Their own access is unchanged.",
-        });
+        toast.success(
+          result.companyId ? `Employer set to ${result.companyName}` : "Employer cleared",
+          {
+            description: result.companyId
+              ? "They now appear in that company's directory. Their own access is unchanged."
+              : "They no longer appear in any company's directory. Their own access is unchanged.",
+          },
+        );
       } else if (!result.companyId) {
         toast.success("Removed from company", {
           description: "They will lose access to that company's records when they next sign in.",
@@ -136,22 +140,22 @@ export function CompanyAssignmentCard({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Building2 className="h-4 w-4" /> Employer
+            <Building2 className="h-4 w-4" /> {t("Employer")}
           </CardTitle>
           <CardDescription>
-            Which company this driver works for. This controls who sees them in the user directory
-            and in load-assignment pickers — it grants no access to that company&apos;s records.
-            Their own access stays scoped to the loads assigned to them.
+            {t(
+              "Which company this driver works for. This controls who sees them in the user directory\n            and in load-assignment pickers — it grants no access to that company's records.\n            Their own access stays scoped to the loads assigned to them.",
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <label className="space-y-1 block">
-            <span className="text-xs font-medium text-muted-foreground">Employer</span>
+            <span className="text-xs font-medium text-muted-foreground">{t("Employer")}</span>
             <Input
               value={companyName}
               onChange={(event) => setCompanyName(event.target.value)}
               list="admin-edit-known-companies"
-              placeholder="Start typing to pick or create"
+              placeholder={t("Start typing to pick or create")}
               autoComplete="off"
               disabled={saving}
             />
@@ -181,7 +185,7 @@ export function CompanyAssignmentCard({
             >
               {saving ? (
                 <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Applying…
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("Applying…")}
                 </>
               ) : employerRemoval ? (
                 "Clear employer"
@@ -197,7 +201,7 @@ export function CompanyAssignmentCard({
                 disabled={saving}
                 onClick={() => setCompanyName(currentEmployerCompanyName)}
               >
-                Cancel
+                {t("Cancel")}
               </Button>
             ) : null}
           </div>
@@ -205,8 +209,9 @@ export function CompanyAssignmentCard({
           {currentCompanyId ? (
             <div className="space-y-2 rounded-md border border-warning/40 bg-warning/5 p-3">
               <p className="text-xs text-warning">
-                This driver still carries a company claim from before Rule B applied. That claim
-                grants them access to that company&apos;s records — remove it.
+                {t(
+                  "This driver still carries a company claim from before Rule B applied. That claim\n                grants them access to that company's records — remove it.",
+                )}
               </p>
               <Button
                 type="button"
@@ -217,7 +222,7 @@ export function CompanyAssignmentCard({
               >
                 {saving ? (
                   <>
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Removing…
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("Removing…")}
                   </>
                 ) : (
                   "Remove company claim"
@@ -234,21 +239,22 @@ export function CompanyAssignmentCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Building2 className="h-4 w-4" /> Company
+          <Building2 className="h-4 w-4" /> {t("Company")}
         </CardTitle>
         <CardDescription>
-          Determines which records this user can see. Applied immediately — they must sign in again
-          before it takes effect.
+          {t(
+            "Determines which records this user can see. Applied immediately — they must sign in again\n          before it takes effect.",
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <label className="space-y-1 block">
-          <span className="text-xs font-medium text-muted-foreground">Company</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("Company")}</span>
           <Input
             value={companyName}
             onChange={(event) => setCompanyName(event.target.value)}
             list="admin-edit-known-companies"
-            placeholder="Start typing to pick or create"
+            placeholder={t("Start typing to pick or create")}
             autoComplete="off"
             disabled={saving}
           />
@@ -278,7 +284,7 @@ export function CompanyAssignmentCard({
           >
             {saving ? (
               <>
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Applying…
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" /> {t("Applying…")}
               </>
             ) : isRemoval ? (
               "Remove from company"
@@ -294,7 +300,7 @@ export function CompanyAssignmentCard({
               disabled={saving}
               onClick={() => setCompanyName(currentCompanyName)}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
           ) : null}
         </div>

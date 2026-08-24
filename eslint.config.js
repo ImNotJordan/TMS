@@ -69,11 +69,21 @@ export default tseslint.config(
       "src/lib/profile-proxy.ts",
       "src/lib/admin-audit-proxy.ts",
       "src/lib/admin-credentials-proxy.ts",
+      // Reads that company's AvaTax credential from the server-only `secrets`
+      // partition. No other tenant's key is in this row.
+      "src/lib/tax-proxy.ts",
+      // Stores and reads that company's China tax API credential in the
+      // server-only `secrets` partition.
+      "src/lib/settings-china-tax.ts",
       "src/lib/tenant/known-companies.ts",
       "src/lib/cognito-admin-core.ts",
       "src/lib/settings-proxy.ts",
       "src/lib/tracking-messages-proxy.ts",
       "src/lib/bidding-workspace-proxy.ts",
+      // Server-side lane aggregation. Queries the company index with the
+      // companyId taken from the verified token, never from the request — the
+      // same shape as the loads proxy above.
+      "src/lib/bidding-search-proxy.ts",
       "src/lib/ai/**",
       // Not yet migrated — each drops off this list as it moves behind the API.
       "src/lib/workspace-settings-store.ts",

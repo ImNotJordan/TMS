@@ -3,6 +3,7 @@ import { KeyRound, Sparkles } from "lucide-react";
 
 import { SUGGESTED_PROMPTS } from "@/components/logistics-ai/ai-chat-utils";
 import { Button } from "@/components/ui/button";
+import { t } from "@/lib/i18n/t";
 
 type AiEmptyStateProps = {
   connected: boolean;
@@ -17,14 +18,15 @@ export function AiEmptyState({ connected, onPickPrompt }: AiEmptyStateProps) {
           <KeyRound className="h-5 w-5 text-muted-foreground" />
         </div>
         <div className="max-w-[18rem] space-y-1.5">
-          <p className="text-sm font-semibold text-foreground">Connect your OpenAI key</p>
+          <p className="text-sm font-semibold text-foreground">{t("Connect your OpenAI key")}</p>
           <p className="text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-            Logistics AI uses the key saved under Settings → Integrations. Nothing is called until
-            that key is connected.
+            {t(
+              "Logistics AI uses the key saved under Settings → Integrations. Nothing is called until\n            that key is connected.",
+            )}
           </p>
         </div>
         <Button asChild size="sm" className="cursor-pointer rounded-xl">
-          <Link to="/settings">Open Integrations settings</Link>
+          <Link to="/settings">{t("Open Integrations settings")}</Link>
         </Button>
       </div>
     );
@@ -35,11 +37,15 @@ export function AiEmptyState({ connected, onPickPrompt }: AiEmptyStateProps) {
       <div className="space-y-1.5">
         <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
           <Sparkles className="h-3 w-3" />
-          Logistics AI
+          {t("Logistics AI")}
         </div>
-        <p className="text-sm font-semibold text-foreground">How can I help with ops today?</p>
+        <p className="text-sm font-semibold text-foreground">
+          {t("How can I help with ops today?")}
+        </p>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Ask about shipments, exceptions, carrier questions, or draft a quick operational message.
+          {t(
+            "Ask about shipments, exceptions, carrier questions, or draft a quick operational message.",
+          )}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

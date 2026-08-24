@@ -1,9 +1,4 @@
-import type {
-  ChannelId,
-  ConsentRecord,
-  DncEntry,
-  GuardResult,
-} from "../types";
+import type { ChannelId, ConsentRecord, DncEntry, GuardResult } from "../types";
 
 export type ConsentGuardInput = {
   contactId: string;
@@ -23,7 +18,11 @@ function isDncActive(entry: DncEntry, now: Date): boolean {
 
 function addressMatches(entryAddress: string, address?: string): boolean {
   if (!address) return false;
-  const normalize = (v: string) => v.trim().toLowerCase().replace(/[\s()-]/g, "");
+  const normalize = (v: string) =>
+    v
+      .trim()
+      .toLowerCase()
+      .replace(/[\s()-]/g, "");
   return normalize(entryAddress) === normalize(address);
 }
 

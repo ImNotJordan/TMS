@@ -99,6 +99,17 @@ import {
   TRACKING_OPTIONS,
   TRAILER_OPTIONS,
 } from "./create-load/create-load-constants";
+import { t } from "@/lib/i18n/t";
+import { LoadTaxPanel } from "@/features/tax/load-tax-panel";
+import { withStoredLoadTax } from "@/features/tax/stamp-load-tax";
+import { useAuthoritativeLoadTax } from "@/features/tax/use-load-tax";
+import { TaxOverrideDialog, type TaxOverrideDraft } from "@/features/tax/tax-override-dialog";
+import { parseMoney } from "@/lib/tax/tax-domain";
+import { useDatFeatureFlags } from "@/lib/dat-feature-flags";
+import { LoadInventoryLinesEditor } from "@/components/loads/load-inventory-lines";
+import { useOperationalList } from "@/hooks/use-operational-list";
+import { listInventoryItemsCached } from "@/lib/inventory-store";
+import { summarizeLoadInventoryLines } from "@/lib/load-inventory";
 
 export type { LoadDraft } from "./create-load/create-load-types";
 export {
@@ -271,10 +282,12 @@ export function CreateLoadDialog({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const payload: CreateLoadInput = normalizeLoadForDriverAssignment({
-        ...draft,
-        createdBy: user?.userId,
-      });
+      const payload: CreateLoadInput = normalizeLoadForDriverAssignment(
+        withStoredLoadTax({
+          ...draft,
+          createdBy: user?.userId,
+        }),
+      );
       const saved = await createLoad(payload);
       syncTrackingSessionForLoad(saved, user?.name ?? "Dispatcher");
       skipDraftSaveRef.current = true;
@@ -310,9 +323,9 @@ export function CreateLoadDialog({
           }
         }}
       >
-        <DialogTitle className="sr-only">Create Load</DialogTitle>
+        <DialogTitle className="sr-only">{t("Create Load")}</DialogTitle>
         <DialogDescription className="sr-only">
-          Create a load with pickup, delivery, pricing, assignment, and tracking details.
+          {t("Create a load with pickup, delivery, pricing, assignment, and tracking details.")}
         </DialogDescription>
         <div className="grid h-[88vh] grid-cols-1 lg:grid-cols-[280px_1fr]">
           {/* Stepper sidebar */}
@@ -323,7 +336,7 @@ export function CreateLoadDialog({
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold tracking-tight text-sidebar-accent-foreground">
-                  Create Load
+                  {t("Create Load")}
                 </div>
                 <div className="truncate text-xs text-sidebar-foreground/70">
                   {draft.loadId} · {draft.loadType ? draft.loadType.toUpperCase() : "Draft"}
@@ -331,7 +344,7 @@ export function CreateLoadDialog({
               </div>
             </div>
             <div className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/60">
-              Progress
+              {t("Progress")}
             </div>
             <div className="px-5">
               <div className="h-1 w-full overflow-hidden rounded-full bg-sidebar-accent/40">
@@ -391,7 +404,7 @@ export function CreateLoadDialog({
               })}
             </nav>
             <div className="border-t border-sidebar-border/60 px-5 py-3 text-xs text-sidebar-foreground/70">
-              Close or Cancel saves to Drafts.
+              {t("Close or Cancel saves to Drafts.")}
             </div>
           </aside>
 
@@ -415,7 +428,7 @@ export function CreateLoadDialog({
                 type="button"
                 onClick={closeWithDraftSave}
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Close and save draft"
+                aria-label={t("Close and save draft")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -486,6 +499,7 @@ export function CreateLoadDialog({
                   draft={draft}
                   stepErrors={stepErrors}
                   onJump={setStep}
+                  update={update}
                   customerOptions={customerOptions}
                   brokerOptions={brokerOptions}
                   dispatcherOptions={dispatcherOptions}
@@ -514,7 +528,7 @@ export function CreateLoadDialog({
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                    Cancel saves to Drafts
+                    {t("Cancel saves to Drafts")}
                   </span>
                 )}
               </div>
@@ -526,11 +540,11 @@ export function CreateLoadDialog({
                   onClick={closeWithDraftSave}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </Button>
                 {step > 1 && (
                   <Button type="button" variant="outline" size="sm" onClick={goBack}>
-                    <ArrowLeft className="h-4 w-4" /> Back
+                    <ArrowLeft className="h-4 w-4" /> {t("Back")}
                   </Button>
                 )}
                 {step < 7 ? (
@@ -540,7 +554,7 @@ export function CreateLoadDialog({
                     onClick={goNext}
                     className="bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
                   >
-                    Continue <ArrowRight className="h-4 w-4" />
+                    {t("Continue")} <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button
@@ -552,11 +566,11 @@ export function CreateLoadDialog({
                   >
                     {submitting ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Creating…
+                        <Loader2 className="h-4 w-4 animate-spin" /> {t("Creating…")}
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="h-4 w-4" /> Create Load
+                        <CheckCircle2 className="h-4 w-4" /> {t("Create Load")}
                       </>
                     )}
                   </Button>
@@ -624,7 +638,9 @@ function FieldShell({
       </div>
       {children}
       {error && (
-        <div className="text-[11px] font-medium text-destructive">This field is required.</div>
+        <div className="text-[11px] font-medium text-destructive">
+          {t("This field is required.")}
+        </div>
       )}
     </div>
   );
@@ -684,13 +700,13 @@ export function StepBasic({
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
         <SectionTitle
-          title="Load identity"
-          hint="Reference numbers and high-level type"
+          title={t("Load identity")}
+          hint={t("Reference numbers and high-level type")}
           icon={Hash}
         />
         <GridSection cols={3}>
           <FieldShell
-            label="Load ID"
+            label={t("Load ID")}
             hint={immutableLoadId ? "Primary key · cannot change" : "Auto-generated"}
             htmlFor="loadId"
           >
@@ -704,23 +720,23 @@ export function StepBasic({
               className={immutableLoadId ? "cursor-not-allowed bg-muted/60" : undefined}
             />
           </FieldShell>
-          <FieldShell label="Load Type">
+          <FieldShell label={t("Load Type")}>
             <FancySelect
               value={draft.loadType}
               onChange={(v) => update("loadType", v)}
               options={LOAD_TYPE_OPTIONS}
               triggerIcon={Truck}
-              placeholder="Choose load type"
+              placeholder={t("Choose load type")}
             />
           </FieldShell>
-          <FieldShell label="Load Status" required error={isErr("loadStatus")}>
+          <FieldShell label={t("Load Status")} required error={isErr("loadStatus")}>
             <FancySelect
               value={draft.loadStatus}
               onChange={(v) => update("loadStatus", v)}
               options={LOAD_STATUS_OPTIONS}
               triggerIcon={Activity}
               error={isErr("loadStatus")}
-              placeholder="Set status"
+              placeholder={t("Set status")}
             />
           </FieldShell>
         </GridSection>
@@ -728,12 +744,12 @@ export function StepBasic({
 
       <Card>
         <SectionTitle
-          title="Customer & ownership"
-          hint="CRM shippers · Broker / Dispatcher roles"
+          title={t("Customer & ownership")}
+          hint={t("CRM shippers · Broker / Dispatcher roles")}
           icon={Users}
         />
         <GridSection cols={3}>
-          <FieldShell label="Customer / Shipper" required error={isErr("customer")}>
+          <FieldShell label={t("Customer / Shipper")} required error={isErr("customer")}>
             <FancySelect
               value={draft.customer}
               onChange={(v) => update("customer", v)}
@@ -748,10 +764,10 @@ export function StepBasic({
                     : "Search customers"
               }
               disabled={ownershipOptionsLoading}
-              emptyMessage="Add a Shipper account in CRM first"
+              emptyMessage={t("Add a Shipper account in CRM first")}
             />
           </FieldShell>
-          <FieldShell label="Broker">
+          <FieldShell label={t("Broker")}>
             <FancySelect
               value={draft.broker}
               onChange={(v) => update("broker", v)}
@@ -765,10 +781,10 @@ export function StepBasic({
                     : "Assign broker"
               }
               disabled={ownershipOptionsLoading}
-              emptyMessage="No users with Broker role"
+              emptyMessage={t("No users with Broker role")}
             />
           </FieldShell>
-          <FieldShell label="Dispatcher">
+          <FieldShell label={t("Dispatcher")}>
             <FancySelect
               value={draft.dispatcher}
               onChange={(v) => update("dispatcher", v)}
@@ -782,50 +798,58 @@ export function StepBasic({
                     : "Assign dispatcher"
               }
               disabled={ownershipOptionsLoading}
-              emptyMessage="No users with Dispatcher role"
+              emptyMessage={t("No users with Dispatcher role")}
             />
           </FieldShell>
         </GridSection>
       </Card>
 
       <Card>
-        <SectionTitle title="Equipment & priority" hint="What truck and how urgent" icon={Truck} />
+        <SectionTitle
+          title={t("Equipment & priority")}
+          hint={t("What truck and how urgent")}
+          icon={Truck}
+        />
         <GridSection cols={3}>
-          <FieldShell label="Equipment Type" required error={isErr("equipmentType")}>
+          <FieldShell label={t("Equipment Type")} required error={isErr("equipmentType")}>
             <FancySelect
               value={draft.equipmentType}
               onChange={(v) => update("equipmentType", v)}
               options={EQUIPMENT_OPTIONS}
               triggerIcon={Truck}
               error={isErr("equipmentType")}
-              placeholder="Dry van, reefer..."
+              placeholder={t("Dry van, reefer...")}
             />
           </FieldShell>
-          <FieldShell label="Trailer Type">
+          <FieldShell label={t("Trailer Type")}>
             <FancySelect
               value={draft.trailerType}
               onChange={(v) => update("trailerType", v)}
               options={TRAILER_OPTIONS}
               triggerIcon={Container}
-              placeholder="Trailer dimensions"
+              placeholder={t("Trailer dimensions")}
             />
           </FieldShell>
-          <FieldShell label="Load Priority">
+          <FieldShell label={t("Load Priority")}>
             <FancySelect
               value={draft.loadPriority}
               onChange={(v) => update("loadPriority", v)}
               options={PRIORITY_OPTIONS}
               triggerIcon={Flag}
-              placeholder="Standard"
+              placeholder={t("Standard")}
             />
           </FieldShell>
         </GridSection>
       </Card>
 
       <Card>
-        <SectionTitle title="Internal notes" hint="Visible to ops team only" icon={FileText} />
+        <SectionTitle
+          title={t("Internal notes")}
+          hint={t("Visible to ops team only")}
+          icon={FileText}
+        />
         <Textarea
-          placeholder="Anything the team should know about this load..."
+          placeholder={t("Anything the team should know about this load...")}
           value={draft.internalNotes}
           onChange={(e) => update("internalNotes", e.target.value)}
           className="min-h-[90px]"
@@ -888,7 +912,7 @@ function StopBlock({
       </div>
 
       <GridSection cols={2}>
-        <FieldShell label="Facility / Location Name">
+        <FieldShell label={t("Facility / Location Name")}>
           <FacilityLocationInput
             key={`${prefix}-facility`}
             value={draft[`${prefix}Facility`] as string}
@@ -900,7 +924,7 @@ function StopBlock({
               update(`${prefix}State` as keyof LoadDraft, result.state as never);
               update(`${prefix}Zip` as keyof LoadDraft, result.zip as never);
             }}
-            placeholder="e.g. Costco Atlanta"
+            placeholder={t("e.g. Costco Atlanta")}
           />
         </FieldShell>
         <FieldShell label={`${title} Reference #`}>
@@ -909,14 +933,14 @@ function StopBlock({
             onChange={(e) =>
               update(`${prefix}Reference` as keyof LoadDraft, e.target.value as never)
             }
-            placeholder="PRO / PO / ref"
+            placeholder={t("PRO / PO / ref")}
           />
         </FieldShell>
       </GridSection>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-6">
         <FieldShell
-          label="Address"
+          label={t("Address")}
           required
           className="sm:col-span-3"
           error={isErr(`${prefix}Address`)}
@@ -924,15 +948,15 @@ function StopBlock({
           <Input
             value={draft[`${prefix}Address`] as string}
             onChange={(e) => update(`${prefix}Address` as keyof LoadDraft, e.target.value as never)}
-            placeholder="Street address"
+            placeholder={t("Street address")}
             className={isErr(`${prefix}Address`) ? "border-destructive/60" : ""}
           />
         </FieldShell>
-        <FieldShell label="City" className="sm:col-span-2">
+        <FieldShell label={t("City")} className="sm:col-span-2">
           <Input
             value={draft[`${prefix}City`] as string}
             onChange={(e) => update(`${prefix}City` as keyof LoadDraft, e.target.value as never)}
-            placeholder="City"
+            placeholder={t("City")}
           />
         </FieldShell>
         <FieldShell label="ZIP" className="sm:col-span-1">
@@ -942,12 +966,12 @@ function StopBlock({
             placeholder="ZIP"
           />
         </FieldShell>
-        <FieldShell label="State" className="sm:col-span-3">
+        <FieldShell label={t("State")} className="sm:col-span-3">
           <FancySelect
             value={draft[`${prefix}State`] as string}
             onChange={(v) => update(`${prefix}State` as keyof LoadDraft, v as never)}
             options={STATE_OPTIONS}
-            placeholder="State"
+            placeholder={t("State")}
             triggerIcon={MapPin}
             className="w-full"
           />
@@ -963,7 +987,7 @@ function StopBlock({
             className={isErr(`${prefix}Date`) ? "border-destructive/60" : ""}
           />
         </FieldShell>
-        <FieldShell label="Appointment Time" hint="exact" error={isErr(`${prefix}Time`)}>
+        <FieldShell label={t("Appointment Time")} hint="exact" error={isErr(`${prefix}Time`)}>
           <Input
             type="time"
             value={draft[`${prefix}AppointmentTime`] as string}
@@ -974,7 +998,7 @@ function StopBlock({
           />
         </FieldShell>
         <div className="grid grid-cols-2 gap-2">
-          <FieldShell label="Window Start" hint="or range">
+          <FieldShell label={t("Window Start")} hint={t("or range")}>
             <Input
               type="time"
               value={draft[`${prefix}WindowStart`] as string}
@@ -983,7 +1007,7 @@ function StopBlock({
               }
             />
           </FieldShell>
-          <FieldShell label="Window End">
+          <FieldShell label={t("Window End")}>
             <Input
               type="time"
               value={draft[`${prefix}WindowEnd`] as string}
@@ -996,16 +1020,16 @@ function StopBlock({
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <FieldShell label="Contact Name">
+        <FieldShell label={t("Contact Name")}>
           <Input
             value={draft[`${prefix}ContactName`] as string}
             onChange={(e) =>
               update(`${prefix}ContactName` as keyof LoadDraft, e.target.value as never)
             }
-            placeholder="Full name"
+            placeholder={t("Full name")}
           />
         </FieldShell>
-        <FieldShell label="Contact Phone">
+        <FieldShell label={t("Contact Phone")}>
           <Input
             value={draft[`${prefix}ContactPhone`] as string}
             onChange={(e) =>
@@ -1014,7 +1038,7 @@ function StopBlock({
             placeholder="(555) 555-5555"
           />
         </FieldShell>
-        <FieldShell label="Contact Email">
+        <FieldShell label={t("Contact Email")}>
           <Input
             type="email"
             value={draft[`${prefix}ContactEmail`] as string}
@@ -1027,13 +1051,13 @@ function StopBlock({
       </div>
 
       <div className="mt-4">
-        <FieldShell label={`${title} Instructions`} hint="Optional">
+        <FieldShell label={`${title} Instructions`} hint={t("Optional")}>
           <Textarea
             value={draft[`${prefix}Instructions`] as string}
             onChange={(e) =>
               update(`${prefix}Instructions` as keyof LoadDraft, e.target.value as never)
             }
-            placeholder="Dock 7 · Driver must check in at security · No idling..."
+            placeholder={t("Dock 7 · Driver must check in at security · No idling...")}
             className="min-h-[70px]"
           />
         </FieldShell>
@@ -1093,49 +1117,71 @@ export function StepFreight({
   errors: string[];
 }) {
   const isErr = (k: string) => touched && errors.includes(k);
+  const { items: inventoryItems, loading: inventoryLoading } = useOperationalList({
+    queryKey: ["load-freight-inventory"],
+    fetchList: ({ force }) => listInventoryItemsCached({ force }),
+    errorMessage: "Could not load inventory.",
+  });
   const toggleHandling = (id: string) => {
     const next = draft.specialHandling.includes(id)
       ? draft.specialHandling.filter((x) => x !== id)
       : [...draft.specialHandling, id];
     update("specialHandling", next);
   };
+  const applyInventoryLines = (lines: typeof draft.inventoryLines) => {
+    update("inventoryLines", lines);
+    const summary = summarizeLoadInventoryLines(lines);
+    if (summary.text && !draft.commodityDescription.trim()) {
+      update("commodityDescription", summary.text);
+    }
+    if (summary.weightLb > 0 && !draft.weight.trim()) {
+      update("weight", String(Math.round(summary.weightLb)));
+    }
+    if (summary.pieces > 0 && !draft.pieceCount.trim()) {
+      update("pieceCount", String(Math.round(summary.pieces)));
+    }
+  };
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Commodity" hint="What's being moved" icon={Package} />
-        <FieldShell label="Commodity Description" required error={isErr("commodityDescription")}>
+        <SectionTitle title={t("Commodity")} hint={t("What's being moved")} icon={Package} />
+        <FieldShell
+          label={t("Commodity Description")}
+          required
+          error={isErr("commodityDescription")}
+        >
           <Textarea
             value={draft.commodityDescription}
             onChange={(e) => update("commodityDescription", e.target.value)}
-            placeholder="e.g. 24 pallets of cased non-alcoholic beverages"
+            placeholder={t("e.g. 24 pallets of cased non-alcoholic beverages")}
             className={cn("min-h-[70px]", isErr("commodityDescription") && "border-destructive/60")}
           />
         </FieldShell>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <FieldShell label="Freight Class">
+          <FieldShell label={t("Freight Class")}>
             <FancySelect
               value={draft.freightClass}
               onChange={(v) => update("freightClass", v)}
               options={FREIGHT_CLASS_OPTIONS}
-              placeholder="NMFC class"
+              placeholder={t("NMFC class")}
               triggerIcon={Gauge}
             />
           </FieldShell>
-          <FieldShell label="Packaging Type">
+          <FieldShell label={t("Packaging Type")}>
             <FancySelect
               value={draft.packagingType}
               onChange={(v) => update("packagingType", v)}
               options={PACKAGING_OPTIONS}
-              placeholder="How is it packaged"
+              placeholder={t("How is it packaged")}
               triggerIcon={Package}
             />
           </FieldShell>
-          <FieldShell label="Temperature Requirement">
+          <FieldShell label={t("Temperature Requirement")}>
             <FancySelect
               value={draft.temperatureRequirement}
               onChange={(v) => update("temperatureRequirement", v)}
               options={TEMPERATURE_OPTIONS}
-              placeholder="Ambient / reefer"
+              placeholder={t("Ambient / reefer")}
               triggerIcon={Thermometer}
             />
           </FieldShell>
@@ -1144,12 +1190,31 @@ export function StepFreight({
 
       <Card>
         <SectionTitle
-          title="Dimensions & weight"
-          hint="For rate and equipment validation"
+          title={t("Inventory")}
+          hint={t("Reserve warehouse SKUs against this load")}
+          icon={Package}
+        />
+        <LoadInventoryLinesEditor
+          lines={draft.inventoryLines}
+          items={inventoryItems ?? []}
+          loading={inventoryLoading}
+          onChange={applyInventoryLines}
+        />
+      </Card>
+
+      <Card>
+        <SectionTitle
+          title={t("Dimensions & weight")}
+          hint={t("For rate and equipment validation")}
           icon={Ruler}
         />
         <div className="grid gap-4 sm:grid-cols-4">
-          <FieldShell label="Weight" required error={isErr("weight")} className="sm:col-span-2">
+          <FieldShell
+            label={t("Weight")}
+            required
+            error={isErr("weight")}
+            className="sm:col-span-2"
+          >
             <div className="flex items-stretch gap-2">
               <Input
                 inputMode="decimal"
@@ -1177,7 +1242,7 @@ export function StepFreight({
               </div>
             </div>
           </FieldShell>
-          <FieldShell label="Pallet Count">
+          <FieldShell label={t("Pallet Count")}>
             <Input
               inputMode="numeric"
               value={draft.palletCount}
@@ -1185,7 +1250,7 @@ export function StepFreight({
               placeholder="24"
             />
           </FieldShell>
-          <FieldShell label="Piece Count">
+          <FieldShell label={t("Piece Count")}>
             <Input
               inputMode="numeric"
               value={draft.pieceCount}
@@ -1195,21 +1260,21 @@ export function StepFreight({
           </FieldShell>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <FieldShell label="Dimensions (L × W × H)" hint="inches">
+          <FieldShell label={t("Dimensions (L × W × H)")} hint="inches">
             <Input
               value={draft.dimensions}
               onChange={(e) => update("dimensions", e.target.value)}
               placeholder="48 × 40 × 60"
             />
           </FieldShell>
-          <FieldShell label="Seal Number">
+          <FieldShell label={t("Seal Number")}>
             <Input
               value={draft.sealNumber}
               onChange={(e) => update("sealNumber", e.target.value)}
               placeholder="SEAL-0000"
             />
           </FieldShell>
-          <FieldShell label="Load Value (USD)">
+          <FieldShell label={t("Load Value (USD)")}>
             <Input
               inputMode="decimal"
               value={draft.loadValue}
@@ -1221,7 +1286,11 @@ export function StepFreight({
       </Card>
 
       <Card>
-        <SectionTitle title="Special handling" hint="Multi-select all that apply" icon={Sparkles} />
+        <SectionTitle
+          title={t("Special handling")}
+          hint={t("Multi-select all that apply")}
+          icon={Sparkles}
+        />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {HANDLING_OPTIONS.map((h) => {
             const Icon = h.icon;
@@ -1261,10 +1330,10 @@ export function StepFreight({
             </span>
             <div>
               <div className="text-sm font-semibold tracking-tight text-foreground">
-                Hazardous materials
+                {t("Hazardous materials")}
               </div>
               <div className="text-xs text-muted-foreground">
-                Toggle if this load is hazmat-regulated
+                {t("Toggle if this load is hazmat-regulated")}
               </div>
             </div>
           </div>
@@ -1272,15 +1341,15 @@ export function StepFreight({
         </div>
         {draft.hazmat && (
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <FieldShell label="UN Number">
+            <FieldShell label={t("UN Number")}>
               <Input
                 value={draft.hazmatUn}
                 onChange={(e) => update("hazmatUn", e.target.value)}
                 placeholder="UN1203"
               />
             </FieldShell>
-            <FieldShell label="Hazmat Class">
-              <Input placeholder="e.g. Class 3 - Flammable Liquid" />
+            <FieldShell label={t("Hazmat Class")}>
+              <Input placeholder={t("e.g. Class 3 - Flammable Liquid")} />
             </FieldShell>
           </div>
         )}
@@ -1354,9 +1423,13 @@ export function StepPricing({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Customer rate" hint="What you charge the shipper" icon={DollarSign} />
+        <SectionTitle
+          title={t("Customer rate")}
+          hint={t("What you charge the shipper")}
+          icon={DollarSign}
+        />
         <GridSection cols={2}>
-          <FieldShell label="Customer Rate (Total)" required error={isErr("customerRate")}>
+          <FieldShell label={t("Customer Rate (Total)")} required error={isErr("customerRate")}>
             <MoneyInput
               value={draft.customerRate}
               onChange={(v) => update("customerRate", v)}
@@ -1364,21 +1437,21 @@ export function StepPricing({
               error={isErr("customerRate")}
             />
           </FieldShell>
-          <FieldShell label="Linehaul Rate">
+          <FieldShell label={t("Linehaul Rate")}>
             <MoneyInput
               value={draft.linehaulRate}
               onChange={(v) => update("linehaulRate", v)}
               placeholder="0.00"
             />
           </FieldShell>
-          <FieldShell label="Fuel Surcharge">
+          <FieldShell label={t("Fuel Surcharge")}>
             <MoneyInput
               value={draft.fuelSurcharge}
               onChange={(v) => update("fuelSurcharge", v)}
               placeholder="0.00"
             />
           </FieldShell>
-          <FieldShell label="Accessorial Charges">
+          <FieldShell label={t("Accessorial Charges")}>
             <MoneyInput
               value={draft.accessorialCharges}
               onChange={(v) => update("accessorialCharges", v)}
@@ -1389,9 +1462,9 @@ export function StepPricing({
       </Card>
 
       <Card>
-        <SectionTitle title="Carrier pay" hint="What you pay the carrier" icon={Truck} />
+        <SectionTitle title={t("Carrier pay")} hint={t("What you pay the carrier")} icon={Truck} />
         <GridSection cols={2}>
-          <FieldShell label="Carrier Rate (Total)" required error={isErr("carrierRate")}>
+          <FieldShell label={t("Carrier Rate (Total)")} required error={isErr("carrierRate")}>
             <MoneyInput
               value={draft.carrierRate}
               onChange={(v) => update("carrierRate", v)}
@@ -1399,39 +1472,39 @@ export function StepPricing({
               error={isErr("carrierRate")}
             />
           </FieldShell>
-          <FieldShell label="Payment Terms">
+          <FieldShell label={t("Payment Terms")}>
             <FancySelect
               value={draft.paymentTerms}
               onChange={(v) => update("paymentTerms", v)}
               options={PAYMENT_TERMS_OPTIONS}
               triggerIcon={DollarSign}
-              placeholder="Choose terms"
+              placeholder={t("Choose terms")}
             />
           </FieldShell>
         </GridSection>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <FieldShell label="Detention Rate" hint="per hour">
+          <FieldShell label={t("Detention Rate")} hint={t("per hour")}>
             <MoneyInput
               value={draft.detentionRate}
               onChange={(v) => update("detentionRate", v)}
               placeholder="0.00"
             />
           </FieldShell>
-          <FieldShell label="Lumper Fee">
+          <FieldShell label={t("Lumper Fee")}>
             <MoneyInput
               value={draft.lumperFee}
               onChange={(v) => update("lumperFee", v)}
               placeholder="0.00"
             />
           </FieldShell>
-          <FieldShell label="TONU Fee">
+          <FieldShell label={t("TONU Fee")}>
             <MoneyInput
               value={draft.tonuFee}
               onChange={(v) => update("tonuFee", v)}
               placeholder="0.00"
             />
           </FieldShell>
-          <FieldShell label="Layover Fee">
+          <FieldShell label={t("Layover Fee")}>
             <MoneyInput
               value={draft.layoverFee}
               onChange={(v) => update("layoverFee", v)}
@@ -1446,10 +1519,10 @@ export function StepPricing({
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Live Margin Preview
+              {t("Live Margin Preview")}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Auto-calculated from rates entered above
+              {t("Auto-calculated from rates entered above")}
             </div>
           </div>
           <span
@@ -1468,7 +1541,7 @@ export function StepPricing({
         <div className="mt-4 grid grid-cols-3 divide-x divide-border/70 overflow-hidden rounded-lg border border-border/70 bg-card">
           <div className="px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Revenue
+              {t("Revenue")}
             </div>
             <div className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
               ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -1476,7 +1549,7 @@ export function StepPricing({
           </div>
           <div className="px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Cost
+              {t("Cost")}
             </div>
             <div className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
               ${carrier.toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -1484,7 +1557,7 @@ export function StepPricing({
           </div>
           <div className="px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Gross Margin
+              {t("Gross Margin")}
             </div>
             <div
               className={cn(
@@ -1524,8 +1597,11 @@ export function StepAssignment({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Carrier" hint="From your Carriers directory" icon={Truck} />
-        <FieldShell label="Assigned Carrier" hint="At least one of carrier or driver required">
+        <SectionTitle title={t("Carrier")} hint={t("From your Carriers directory")} icon={Truck} />
+        <FieldShell
+          label={t("Assigned Carrier")}
+          hint={t("At least one of carrier or driver required")}
+        >
           <FancySelect
             value={draft.assignedCarrier}
             onChange={(v) => update("assignedCarrier", v)}
@@ -1539,13 +1615,17 @@ export function StepAssignment({
             }
             triggerIcon={Truck}
             disabled={assignmentOptionsLoading}
-            emptyMessage="Add a carrier in Carriers first"
+            emptyMessage={t("Add a carrier in Carriers first")}
           />
         </FieldShell>
       </Card>
       <Card>
-        <SectionTitle title="Driver" hint="Users with Driver role from your directory" icon={User} />
-        <FieldShell label="Assigned Driver">
+        <SectionTitle
+          title={t("Driver")}
+          hint={t("Users with Driver role from your directory")}
+          icon={User}
+        />
+        <FieldShell label={t("Assigned Driver")}>
           <FancySelect
             value={draft.assignedDriver}
             onChange={(v) => update("assignedDriver", v)}
@@ -1559,35 +1639,35 @@ export function StepAssignment({
             }
             triggerIcon={User}
             disabled={assignmentOptionsLoading}
-            emptyMessage="No users with Driver role"
+            emptyMessage={t("No users with Driver role")}
           />
         </FieldShell>
       </Card>
 
       <Card>
         <SectionTitle
-          title="Compliance verification"
-          hint="Pre-booking checks"
+          title={t("Compliance verification")}
+          hint={t("Pre-booking checks")}
           icon={ShieldCheck}
         />
         <div className="grid gap-3 sm:grid-cols-3">
           <ToggleTile
-            label="Insurance Verified"
-            description="Cert on file & valid"
+            label={t("Insurance Verified")}
+            description={t("Cert on file & valid")}
             checked={draft.insuranceVerified}
             onChange={(v) => update("insuranceVerified", v)}
             icon={ShieldCheck}
           />
           <ToggleTile
-            label="Authority Verified"
-            description="Active MC/DOT"
+            label={t("Authority Verified")}
+            description={t("Active MC/DOT")}
             checked={draft.authorityVerified}
             onChange={(v) => update("authorityVerified", v)}
             icon={Shield}
           />
           <ToggleTile
-            label="High-Value Flag"
-            description="Extra escort & monitoring"
+            label={t("High-Value Flag")}
+            description={t("Extra escort & monitoring")}
             checked={draft.highValueFlag}
             onChange={(v) => update("highValueFlag", v)}
             icon={Sparkles}
@@ -1598,7 +1678,7 @@ export function StepAssignment({
       {isErr && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4" />
-          You must assign at least one carrier or driver before continuing.
+          {t("You must assign at least one carrier or driver before continuing.")}
         </div>
       )}
     </div>
@@ -1663,28 +1743,28 @@ export function StepDocsTracking({
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
         <SectionTitle
-          title="Visibility & tracking"
-          hint="Real-time location updates"
+          title={t("Visibility & tracking")}
+          hint={t("Real-time location updates")}
           icon={MapPin}
         />
         <div className="grid gap-3 sm:grid-cols-3">
           <ToggleTile
-            label="Tracking Required"
-            description="Carrier must share location"
+            label={t("Tracking Required")}
+            description={t("Carrier must share location")}
             checked={draft.trackingRequired}
             onChange={(v) => update("trackingRequired", v)}
             icon={MapPin}
           />
           <ToggleTile
-            label="Check-In Required"
-            description="At pickup arrival"
+            label={t("Check-In Required")}
+            description={t("At pickup arrival")}
             checked={draft.checkInRequired}
             onChange={(v) => update("checkInRequired", v)}
             icon={CheckCircle2}
           />
           <ToggleTile
-            label="Check-Out Required"
-            description="At delivery completion"
+            label={t("Check-Out Required")}
+            description={t("At delivery completion")}
             checked={draft.checkOutRequired}
             onChange={(v) => update("checkOutRequired", v)}
             icon={ClipboardCheck}
@@ -1692,13 +1772,13 @@ export function StepDocsTracking({
         </div>
         {draft.trackingRequired && (
           <div className="mt-4">
-            <FieldShell label="Tracking Method">
+            <FieldShell label={t("Tracking Method")}>
               <FancySelect
                 value={draft.trackingMethod}
                 onChange={(v) => update("trackingMethod", v)}
                 options={TRACKING_OPTIONS}
                 triggerIcon={MapPin}
-                placeholder="Choose visibility provider"
+                placeholder={t("Choose visibility provider")}
               />
             </FieldShell>
           </div>
@@ -1707,8 +1787,8 @@ export function StepDocsTracking({
 
       <Card>
         <SectionTitle
-          title="Documents to attach"
-          hint="Upload now or after dispatch"
+          title={t("Documents to attach")}
+          hint={t("Upload now or after dispatch")}
           icon={Paperclip}
         />
         <div className="grid gap-2 sm:grid-cols-2">
@@ -1759,11 +1839,11 @@ export function StepDocsTracking({
           <div className="flex items-center gap-3 text-sm">
             <Paperclip className="h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">
-              Drop files here or click to upload PDFs, images, or scans.
+              {t("Drop files here or click to upload PDFs, images, or scans.")}
             </span>
           </div>
           <Button size="sm" variant="outline" type="button">
-            Choose files
+            {t("Choose files")}
           </Button>
         </div>
       </Card>
@@ -1793,6 +1873,7 @@ export function StepReview({
   stepErrors,
   onJump,
   variant = "create",
+  update,
   customerOptions = [],
   brokerOptions = [],
   dispatcherOptions = [],
@@ -1801,6 +1882,12 @@ export function StepReview({
 }: {
   draft: LoadDraft;
   stepErrors: Record<number, string[]>;
+  /**
+   * Enables manual tax entry. Optional so a genuinely read-only render of this
+   * step simply omits it — absence of a writer is what hides the affordance,
+   * rather than a flag that could disagree with whether a write is possible.
+   */
+  update?: <K extends keyof LoadDraft>(key: K, value: LoadDraft[K]) => void;
   onJump: (s: number) => void;
   variant?: "create" | "edit";
   customerOptions?: FancySelectOption[];
@@ -1835,7 +1922,7 @@ export function StepReview({
           </div>
           <div className="text-right">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Margin
+              {t("Margin")}
             </div>
             <div
               className={cn(
@@ -1860,7 +1947,9 @@ export function StepReview({
         <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/8 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="flex-1">
-            <div className="font-semibold text-destructive">Missing required information</div>
+            <div className="font-semibold text-destructive">
+              {t("Missing required information")}
+            </div>
             <div className="mt-0.5 text-xs text-destructive/90">
               The following steps still need attention before you can{" "}
               {variant === "edit" ? "save changes to DynamoDB." : "create this load."}
@@ -1883,38 +1972,44 @@ export function StepReview({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <SectionTitle title="Basic" icon={Sparkles} />
+          <SectionTitle title={t("Basic")} icon={Sparkles} />
           <div className="divide-y divide-border/70">
-            <ReviewRow label="Load ID" value={draft.loadId} />
-            <ReviewRow label="Customer" value={lookup(customerOptions, draft.customer)} />
-            <ReviewRow label="Broker" value={lookup(brokerOptions, draft.broker)} />
-            <ReviewRow label="Type" value={lookup(LOAD_TYPE_OPTIONS, draft.loadType)} />
-            <ReviewRow label="Status" value={lookup(LOAD_STATUS_OPTIONS, draft.loadStatus)} />
-            <ReviewRow label="Equipment" value={lookup(EQUIPMENT_OPTIONS, draft.equipmentType)} />
-            <ReviewRow label="Priority" value={lookup(PRIORITY_OPTIONS, draft.loadPriority)} />
-            <ReviewRow label="Dispatcher" value={lookup(dispatcherOptions, draft.dispatcher)} />
+            <ReviewRow label={t("Load ID")} value={draft.loadId} />
+            <ReviewRow label={t("Customer")} value={lookup(customerOptions, draft.customer)} />
+            <ReviewRow label={t("Broker")} value={lookup(brokerOptions, draft.broker)} />
+            <ReviewRow label={t("Type")} value={lookup(LOAD_TYPE_OPTIONS, draft.loadType)} />
+            <ReviewRow label={t("Status")} value={lookup(LOAD_STATUS_OPTIONS, draft.loadStatus)} />
+            <ReviewRow
+              label={t("Equipment")}
+              value={lookup(EQUIPMENT_OPTIONS, draft.equipmentType)}
+            />
+            <ReviewRow label={t("Priority")} value={lookup(PRIORITY_OPTIONS, draft.loadPriority)} />
+            <ReviewRow
+              label={t("Dispatcher")}
+              value={lookup(dispatcherOptions, draft.dispatcher)}
+            />
           </div>
         </Card>
         <Card>
-          <SectionTitle title="Stops" icon={MapPin} />
+          <SectionTitle title={t("Stops")} icon={MapPin} />
           <div className="divide-y divide-border/70">
             <ReviewRow
-              label="Pickup"
+              label={t("Pickup")}
               value={`${draft.pickupCity || "?"}, ${draft.pickupState || "?"} · ${draft.pickupDate || "no date"}`}
             />
             <ReviewRow
-              label="Pickup time"
+              label={t("Pickup time")}
               value={
                 draft.pickupAppointmentTime ||
                 (draft.pickupWindowStart && `${draft.pickupWindowStart}–${draft.pickupWindowEnd}`)
               }
             />
             <ReviewRow
-              label="Delivery"
+              label={t("Delivery")}
               value={`${draft.deliveryCity || "?"}, ${draft.deliveryState || "?"} · ${draft.deliveryDate || "no date"}`}
             />
             <ReviewRow
-              label="Delivery time"
+              label={t("Delivery time")}
               value={
                 draft.deliveryAppointmentTime ||
                 (draft.deliveryWindowStart &&
@@ -1924,50 +2019,61 @@ export function StepReview({
           </div>
         </Card>
         <Card>
-          <SectionTitle title="Freight" icon={Package} />
+          <SectionTitle title={t("Freight")} icon={Package} />
           <div className="divide-y divide-border/70">
-            <ReviewRow label="Commodity" value={draft.commodityDescription} />
+            <ReviewRow label={t("Commodity")} value={draft.commodityDescription} />
+            {draft.inventoryLines.length > 0 ? (
+              <ReviewRow
+                label={t("Inventory")}
+                value={draft.inventoryLines
+                  .map((line) => `${line.quantity} × ${line.sku}`)
+                  .join(" · ")}
+              />
+            ) : null}
             <ReviewRow
-              label="Weight"
+              label={t("Weight")}
               value={draft.weight ? `${draft.weight} ${draft.weightUnit}` : ""}
             />
-            <ReviewRow label="Pallets" value={draft.palletCount} />
-            <ReviewRow label="Class" value={draft.freightClass && `Class ${draft.freightClass}`} />
+            <ReviewRow label={t("Pallets")} value={draft.palletCount} />
             <ReviewRow
-              label="Temperature"
+              label={t("Class")}
+              value={draft.freightClass && `Class ${draft.freightClass}`}
+            />
+            <ReviewRow
+              label={t("Temperature")}
               value={lookup(TEMPERATURE_OPTIONS, draft.temperatureRequirement)}
             />
             <ReviewRow
-              label="Hazmat"
+              label={t("Hazmat")}
               value={draft.hazmat ? `Yes · ${draft.hazmatUn || "no UN"}` : "No"}
             />
           </div>
         </Card>
         <Card>
-          <SectionTitle title="Pricing & assignment" icon={DollarSign} />
+          <SectionTitle title={t("Pricing & assignment")} icon={DollarSign} />
           <div className="divide-y divide-border/70">
             <ReviewRow
-              label="Customer Rate"
+              label={t("Customer Rate")}
               value={
                 draft.customerRate &&
                 `$${customerRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
               }
             />
             <ReviewRow
-              label="Carrier Rate"
+              label={t("Carrier Rate")}
               value={
                 draft.carrierRate &&
                 `$${carrierRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
               }
             />
             <ReviewRow
-              label="Payment Terms"
+              label={t("Payment Terms")}
               value={lookup(PAYMENT_TERMS_OPTIONS, draft.paymentTerms)}
             />
-            <ReviewRow label="Carrier" value={lookup(carrierOptions, draft.assignedCarrier)} />
-            <ReviewRow label="Driver" value={lookup(driverOptions, draft.assignedDriver)} />
+            <ReviewRow label={t("Carrier")} value={lookup(carrierOptions, draft.assignedCarrier)} />
+            <ReviewRow label={t("Driver")} value={lookup(driverOptions, draft.assignedDriver)} />
             <ReviewRow
-              label="Tracking"
+              label={t("Tracking")}
               value={
                 draft.trackingRequired
                   ? lookup(TRACKING_OPTIONS, draft.trackingMethod) || "Required"
@@ -1979,7 +2085,109 @@ export function StepReview({
       </div>
 
       <DatMarketPanel draft={draft} customerRate={customerRate} carrierRate={carrierRate} />
+
+      {/*
+        Inside StepReview rather than beside it. This component is rendered by
+        the create wizard's step 7 *and* by the load detail page, so putting the
+        panel here is what makes tax visible in both — wiring it next to one
+        caller left the other blank, which is the bug the render test caught.
+      */}
+      <LoadTaxReviewPanel draft={draft} update={update} />
     </div>
+  );
+}
+
+/**
+ * The tax estimate, wired to whatever is currently in the draft.
+ *
+ * A separate component so the hook call sits outside `StepReview`'s early
+ * returns, and so the estimate recomputes only when a rate or a lane actually
+ * changes rather than on every keystroke elsewhere in a seven-step form.
+ */
+function LoadTaxReviewPanel({
+  draft,
+  update,
+}: {
+  draft: LoadDraft;
+  /**
+   * Absent on read-only surfaces. Its absence is what hides the manual-entry
+   * affordance, rather than a separate `readOnly` flag that could disagree with
+   * whether a write is actually possible.
+   */
+  update?: <K extends keyof LoadDraft>(key: K, value: LoadDraft[K]) => void;
+}) {
+  // Authoritative: the statutory figure appears immediately, then the server's —
+  // published IFTA rates, and AvaTax for a US sales-tax determination if a key is
+  // configured. Falls back to the local figure silently if either is unavailable.
+  const tax = useAuthoritativeLoadTax(draft);
+  const [open, setOpen] = React.useState(false);
+  const [overrideDraft, setOverrideDraft] = React.useState<TaxOverrideDraft>({
+    amount: "",
+    currency: "",
+    source: "",
+    note: "",
+  });
+
+  React.useEffect(() => {
+    if (!open) return;
+    setOverrideDraft({
+      amount: draft.taxManualAmount ?? "",
+      currency: draft.taxCurrency ?? "",
+      source: draft.taxManualSource ?? "",
+      note: draft.taxManualNote ?? "",
+    });
+  }, [open, draft.taxManualAmount, draft.taxCurrency, draft.taxManualSource, draft.taxManualNote]);
+
+  const manual = parseMoney(draft.taxManualAmount);
+
+  const handleSubmit = () => {
+    if (!update) return;
+    const amount = overrideDraft.amount.trim();
+    update("taxManualAmount", amount);
+    // Cleared together with the amount: a currency and a note with no figure are
+    // stale annotations that outlive what they described.
+    update("taxCurrency", amount ? overrideDraft.currency.trim() || tax.estimate.currency : "");
+    update("taxManualSource", amount ? overrideDraft.source.trim() : "");
+    update("taxManualNote", amount ? overrideDraft.note.trim() : "");
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <LoadTaxPanel
+        estimate={tax.estimate}
+        grossRevenue={tax.grossRevenue}
+        source={tax.source}
+        provider={tax.provider}
+        providerError={tax.providerError}
+        agreement={tax.agreement}
+        fuelRatesLive={tax.fuelRatesLive}
+        fuelRateQuarter={tax.fuelRateQuarter}
+        resolving={tax.resolving}
+        manualAmount={manual ?? null}
+        manualCurrency={draft.taxCurrency}
+        manualSource={draft.taxManualSource}
+        manualNote={draft.taxManualNote}
+        onEditManual={update ? () => setOpen(true) : undefined}
+      />
+      {/*
+        Mounted only while open. The dialog resolves who may set a tax figure,
+        which needs the auth context — keeping that off the always-rendered path
+        means the panel itself renders anywhere, including in a server-rendered
+        test with no AuthProvider above it.
+      */}
+      {open ? (
+        <TaxOverrideDialog
+          open={open}
+          onOpenChange={setOpen}
+          estimate={tax.estimate}
+          draft={overrideDraft}
+          setDraft={setOverrideDraft}
+          saving={false}
+          onSubmit={handleSubmit}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -2379,20 +2587,24 @@ function RateBand({
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div className="rounded-lg border border-border/70 bg-card px-2 py-1.5">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-info">Low</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-info">
+            {t("Low")}
+          </div>
           <div className="text-sm font-semibold tabular-nums text-foreground">
             ${low.toLocaleString()}
           </div>
         </div>
         <div className="rounded-lg border border-primary/40 bg-primary/5 px-2 py-1.5">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">Avg</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+            {t("Avg")}
+          </div>
           <div className="text-sm font-semibold tabular-nums text-foreground">
             ${avg.toLocaleString()}
           </div>
         </div>
         <div className="rounded-lg border border-border/70 bg-card px-2 py-1.5">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-success">
-            High
+            {t("High")}
           </div>
           <div className="text-sm font-semibold tabular-nums text-foreground">
             ${high.toLocaleString()}
@@ -2451,6 +2663,7 @@ function DatMarketPanel({
   customerRate: number;
   carrierRate: number;
 }) {
+  const flags = useDatFeatureFlags();
   const insights = React.useMemo(
     () => computeDatInsights(draft, customerRate),
     [
@@ -2492,6 +2705,8 @@ function DatMarketPanel({
   const diffAbs = Math.abs(insights.diffVsAvg);
   const diffPctAbs = Math.abs(insights.diffPct);
 
+  if (!flags.showOnLoadReview) return null;
+
   return (
     <Card className="border-primary/30 bg-gradient-to-br from-primary/5 via-card to-info/8">
       {/* Header */}
@@ -2503,10 +2718,10 @@ function DatMarketPanel({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                DAT Market Suggestions
+                {t("DAT Market Suggestions")}
               </h3>
               <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                Last 7 days
+                {flags.dataWindow}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -2516,213 +2731,224 @@ function DatMarketPanel({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <MarketBadge position={insights.marketPosition} />
-          <CapacityBadge level={insights.capacityBadge} />
+          {flags.showLoadReviewRates ? <MarketBadge position={insights.marketPosition} /> : null}
+          {flags.showLoadReviewCapacity ? <CapacityBadge level={insights.capacityBadge} /> : null}
         </div>
       </div>
 
       {/* Top stats */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatBlock
-          label="DAT Capacity Score"
-          value={`${insights.capacityScore}/100`}
-          hint={
-            insights.capacityBadge === "tight"
-              ? "Low truck availability"
-              : insights.capacityBadge === "loose"
-                ? "High truck availability"
-                : "Balanced supply"
-          }
-          icon={Radar}
-          tone={
-            insights.capacityBadge === "tight"
-              ? "destructive"
-              : insights.capacityBadge === "loose"
-                ? "success"
-                : "warning"
-          }
-        />
-        <StatBlock
-          label="Trucks Near Origin"
-          value={insights.trucksNearOrigin.toLocaleString()}
-          hint="Within 100 mi · last 24h"
-          icon={Truck}
-          tone="primary"
-        />
-        <StatBlock
-          label="Truck-to-Load Ratio"
-          value={insights.trl.toFixed(2)}
-          hint={
-            insights.trl >= 1.2
-              ? "Supply > demand"
-              : insights.trl >= 0.8
-                ? "Balanced"
-                : "Demand > supply"
-          }
-          icon={Gauge}
-          tone="info"
-        />
-        <div className="rounded-lg border border-border/70 bg-card/80 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Capacity Trend
-            </span>
-            <span
-              className={cn("inline-flex items-center gap-1 text-[11px] font-semibold", trendColor)}
-            >
-              <TrendIcon className="h-3 w-3" />
-              {trendLabel}
-            </span>
-          </div>
-          <div className="mt-1 flex items-end justify-between">
-            <div className="text-[11px] text-muted-foreground">7-day capacity</div>
-            <Sparkline
-              data={insights.trend}
-              color={
-                trendUp
-                  ? "var(--color-success)"
-                  : trendDown
-                    ? "var(--color-destructive)"
-                    : "var(--color-primary)"
-              }
-              width={140}
-              height={36}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Rate band */}
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
-        <div className="rounded-xl border border-border/70 bg-card/80 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-xs font-semibold tracking-tight text-foreground">
-                7-Day DAT Rate Band
-              </div>
-              <div className="text-[11px] text-muted-foreground">
-                Lane rate distribution · {insights.miles.toLocaleString()} mi
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Rate / Mile
-              </div>
-              <div className="text-sm font-semibold tabular-nums text-foreground">
-                ${insights.avgRpm.toFixed(2)}
-                <span className="ml-1 text-[10px] font-medium text-muted-foreground">
-                  (${insights.lowRpm.toFixed(2)}–${insights.highRpm.toFixed(2)})
-                </span>
-              </div>
-            </div>
-          </div>
-          <RateBand
-            low={insights.lowRate}
-            avg={insights.avgRate}
-            high={insights.highRate}
-            user={customerRate}
+      {flags.showLoadReviewCapacity ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatBlock
+            label={t("DAT Capacity Score")}
+            value={`${insights.capacityScore}/100`}
+            hint={
+              insights.capacityBadge === "tight"
+                ? "Low truck availability"
+                : insights.capacityBadge === "loose"
+                  ? "High truck availability"
+                  : "Balanced supply"
+            }
+            icon={Radar}
+            tone={
+              insights.capacityBadge === "tight"
+                ? "destructive"
+                : insights.capacityBadge === "loose"
+                  ? "success"
+                  : "warning"
+            }
           />
-          {customerRate > 0 && (
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
-              <div className="flex items-center gap-2">
-                <Target className="h-3.5 w-3.5 text-primary" />
-                <span className="text-xs text-muted-foreground">Your customer rate vs DAT avg</span>
-              </div>
+          <StatBlock
+            label={t("Trucks Near Origin")}
+            value={insights.trucksNearOrigin.toLocaleString()}
+            hint={t("Within 100 mi · last 24h")}
+            icon={Truck}
+            tone="primary"
+          />
+          <StatBlock
+            label={t("Truck-to-Load Ratio")}
+            value={insights.trl.toFixed(2)}
+            hint={
+              insights.trl >= 1.2
+                ? "Supply > demand"
+                : insights.trl >= 0.8
+                  ? "Balanced"
+                  : "Demand > supply"
+            }
+            icon={Gauge}
+            tone="info"
+          />
+          <div className="rounded-lg border border-border/70 bg-card/80 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("Capacity Trend")}
+              </span>
               <span
                 className={cn(
-                  "text-sm font-semibold tabular-nums",
-                  insights.marketPosition === "above"
-                    ? "text-success"
-                    : insights.marketPosition === "below"
-                      ? "text-destructive"
-                      : "text-foreground",
+                  "inline-flex items-center gap-1 text-[11px] font-semibold",
+                  trendColor,
                 )}
               >
-                {diffSign}${diffAbs.toLocaleString()}{" "}
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  ({diffSign}
-                  {diffPctAbs.toFixed(1)}%)
-                </span>
+                <TrendIcon className="h-3 w-3" />
+                {trendLabel}
               </span>
             </div>
-          )}
+            <div className="mt-1 flex items-end justify-between">
+              <div className="text-[11px] text-muted-foreground">{t("7-day capacity")}</div>
+              <Sparkline
+                data={insights.trend}
+                color={
+                  trendUp
+                    ? "var(--color-success)"
+                    : trendDown
+                      ? "var(--color-destructive)"
+                      : "var(--color-primary)"
+                }
+                width={140}
+                height={36}
+              />
+            </div>
+          </div>
         </div>
+      ) : null}
 
-        {/* Suggested rates */}
-        <div className="rounded-xl border border-border/70 bg-card/80 p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="text-xs font-semibold tracking-tight text-foreground">
-                Suggested Rates
+      {/* Rate band */}
+      {flags.showLoadReviewRates ? (
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
+          <div className="rounded-xl border border-border/70 bg-card/80 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold tracking-tight text-foreground">
+                  {t("7-Day DAT Rate Band")}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Lane rate distribution · {insights.miles.toLocaleString()} mi
+                </div>
               </div>
-              <div className="text-[11px] text-muted-foreground">
-                Optimized for current capacity
+              <div className="text-right">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("Rate / Mile")}
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-foreground">
+                  ${insights.avgRpm.toFixed(2)}
+                  <span className="ml-1 text-[10px] font-medium text-muted-foreground">
+                    (${insights.lowRpm.toFixed(2)}–${insights.highRpm.toFixed(2)})
+                  </span>
+                </div>
               </div>
             </div>
-            <span className="rounded-md bg-primary/12 px-2 py-0.5 text-[10px] font-semibold text-primary">
-              AI
-            </span>
+            <RateBand
+              low={insights.lowRate}
+              avg={insights.avgRate}
+              high={insights.highRate}
+              user={customerRate}
+            />
+            {customerRate > 0 && (
+              <div className="mt-3 flex items-center justify-between rounded-lg border border-border/70 bg-muted/40 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Target className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs text-muted-foreground">
+                    {t("Your customer rate vs DAT avg")}
+                  </span>
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-semibold tabular-nums",
+                    insights.marketPosition === "above"
+                      ? "text-success"
+                      : insights.marketPosition === "below"
+                        ? "text-destructive"
+                        : "text-foreground",
+                  )}
+                >
+                  {diffSign}${diffAbs.toLocaleString()}{" "}
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    ({diffSign}
+                    {diffPctAbs.toFixed(1)}%)
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-lg border border-info/30 bg-info/5 px-3 py-2">
+
+          {/* Suggested rates */}
+          <div className="rounded-xl border border-border/70 bg-card/80 p-4">
+            <div className="mb-3 flex items-center justify-between">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-info">
-                  Carrier
+                <div className="text-xs font-semibold tracking-tight text-foreground">
+                  {t("Suggested Rates")}
                 </div>
-                <div className="text-xs text-muted-foreground">Recommended buy</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {t("Optimized for current capacity")}
+                </div>
               </div>
-              <div className="text-base font-semibold tabular-nums text-foreground">
-                ${insights.suggestedCarrierRate.toLocaleString()}
-              </div>
+              <span className="rounded-md bg-primary/12 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                AI
+              </span>
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/8 px-3 py-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
-                  Customer
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-lg border border-info/30 bg-info/5 px-3 py-2">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-info">
+                    {t("Carrier")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{t("Recommended buy")}</div>
                 </div>
-                <div className="text-xs text-muted-foreground">Recommended sell</div>
-              </div>
-              <div className="text-base font-semibold tabular-nums text-foreground">
-                ${insights.suggestedCustomerRate.toLocaleString()}
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-success/30 bg-success/8 px-3 py-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-success">
-                  Est. Gross Margin
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {insights.estMarginPct.toFixed(1)}% on suggested
+                <div className="text-base font-semibold tabular-nums text-foreground">
+                  ${insights.suggestedCarrierRate.toLocaleString()}
                 </div>
               </div>
-              <div className="text-base font-semibold tabular-nums text-success">
-                ${insights.estMargin.toLocaleString()}
+              <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/8 px-3 py-2">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                    {t("Customer")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{t("Recommended sell")}</div>
+                </div>
+                <div className="text-base font-semibold tabular-nums text-foreground">
+                  ${insights.suggestedCustomerRate.toLocaleString()}
+                </div>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-success/30 bg-success/8 px-3 py-2">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-success">
+                    {t("Est. Gross Margin")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {insights.estMarginPct.toFixed(1)}% on suggested
+                  </div>
+                </div>
+                <div className="text-base font-semibold tabular-nums text-success">
+                  ${insights.estMargin.toLocaleString()}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Recommendation banner */}
-      <div className="mt-5 flex items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/8 via-card to-info/8 p-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm shadow-primary/30">
-          <Lightbulb className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <div className="text-xs font-semibold tracking-tight text-foreground">
-              Smart recommendation
+      {flags.showLoadReviewRates || flags.showLoadReviewCapacity ? (
+        <div className="mt-5 flex items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/8 via-card to-info/8 p-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm shadow-primary/30">
+            <Lightbulb className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <div className="text-xs font-semibold tracking-tight text-foreground">
+                {t("Smart recommendation")}
+              </div>
+              <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                {t("DAT-informed")}
+              </span>
             </div>
-            <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-              DAT-informed
-            </span>
-          </div>
-          <p className="mt-1 text-sm leading-relaxed text-foreground/90">{recommendation}</p>
-          <div className="mt-2 text-[11px] text-muted-foreground">
-            Adjust pricing or posting strategy on prior steps before clicking Create Load.
+            <p className="mt-1 text-sm leading-relaxed text-foreground/90">{recommendation}</p>
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              {t("Adjust pricing or posting strategy on prior steps before clicking Create Load.")}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </Card>
   );
 }

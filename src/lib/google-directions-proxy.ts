@@ -42,11 +42,14 @@ function toRoutesApiWaypoint(value: string) {
   return latLng ? { location: { latLng } } : { address: value };
 }
 
+type PolylineQuality = "OVERVIEW" | "HIGH_QUALITY";
+
 /** Modern Routes API — required for API keys created in newer Google Cloud projects. */
 async function fetchViaRoutesApi(
   origin: string,
   destination: string,
   apiKey: string,
+  polylineQuality: PolylineQuality = "OVERVIEW",
 ): Promise<ProxyRouteResult | null> {
   const upstream = await fetch(GOOGLE_ROUTES_URL, {
     method: "POST",
@@ -59,7 +62,7 @@ async function fetchViaRoutesApi(
       origin: toRoutesApiWaypoint(origin),
       destination: toRoutesApiWaypoint(destination),
       travelMode: "DRIVE",
-      polylineQuality: "OVERVIEW",
+      polylineQuality,
     }),
   });
 
@@ -144,13 +147,18 @@ export async function handleGoogleDirectionsRequest(
     );
   }
 
+  const polylineQuality: PolylineQuality =
+    requestUrl.searchParams.get("quality")?.trim().toLowerCase() === "high"
+      ? "HIGH_QUALITY"
+      : "OVERVIEW";
+
   async function computeRoute(
     fromWaypoint: string,
     toWaypoint: string,
   ): Promise<ProxyRouteResult | { error: string; status: number } | null> {
     let routed: ProxyRouteResult | null = null;
     try {
-      routed = await fetchViaRoutesApi(fromWaypoint, toWaypoint, apiKey);
+      routed = await fetchViaRoutesApi(fromWaypoint, toWaypoint, apiKey, polylineQuality);
     } catch (err) {
       console.error("[directions-proxy] Routes API request failed:", err);
     }

@@ -16,6 +16,7 @@ import {
 import { CreateAccountDialog } from "./create-account-dialog";
 import { EntityDetailSheet } from "./entity-detail-sheet";
 import type { CrmAccountRecord } from "@/lib/crm-store";
+import { t } from "@/lib/i18n/t";
 
 export function AccountsPanel({
   accounts,
@@ -38,7 +39,7 @@ export function AccountsPanel({
           {loading ? "Loading…" : `${accounts?.length ?? 0} accounts`}
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> New Account
+          <Plus className="h-4 w-4" /> {t("New Account")}
         </Button>
       </div>
 
@@ -53,11 +54,11 @@ export function AccountsPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border/70">
-              <TableHead className="pl-4">Account</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Owner</TableHead>
+              <TableHead className="pl-4">{t("Account")}</TableHead>
+              <TableHead>{t("Type")}</TableHead>
+              <TableHead>{t("Status")}</TableHead>
+              <TableHead>{t("Location")}</TableHead>
+              <TableHead>{t("Owner")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -75,7 +76,7 @@ export function AccountsPanel({
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                   <Building2 className="mx-auto mb-1 h-5 w-5" />
-                  No accounts yet.
+                  {t("No accounts yet.")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -134,7 +135,7 @@ export function AccountsPanel({
                     ),
                   },
                 ]
-              : (selected.accountType === "Carrier" || selected.accountType === "Broker")
+              : selected.accountType === "Carrier" || selected.accountType === "Broker"
                 ? [
                     {
                       label: "Carriers",
@@ -143,7 +144,7 @@ export function AccountsPanel({
                           to="/carriers"
                           className="text-primary underline-offset-2 hover:underline"
                         >
-                          Browse carriers
+                          {t("Browse carriers")}
                         </Link>
                       ),
                     },

@@ -23,6 +23,7 @@ import {
   type AiIntegration,
   type IntegrationsConfig,
 } from "@/lib/integrations-config";
+import { t } from "@/lib/i18n/t";
 
 type ConfigureAiDialogProps = {
   open: boolean;
@@ -121,11 +122,11 @@ export function ConfigureAiDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Configure AI</DialogTitle>
+          <DialogTitle>{t("Configure AI")}</DialogTitle>
           <DialogDescription>
             Connect your OpenAI API key once — Titan Freight uses it for Bidding Copilot, RFP
             matching explanations, Content Studio drafts, and other AI assistants. Stored in
-            WorkspaceSettings (not <code className="text-xs">.env</code>).
+            WorkspaceSettings (not <code className="text-xs">{t(".env")}</code>).
           </DialogDescription>
         </DialogHeader>
 
@@ -133,10 +134,10 @@ export function ConfigureAiDialog({
           <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2.5">
             <div>
               <Label htmlFor="ai-enabled" className="text-sm font-medium">
-                Enable workspace AI
+                {t("Enable workspace AI")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                When off, AI features fall back to local heuristics and templates.
+                {t("When off, AI features fall back to local heuristics and templates.")}
               </p>
             </div>
             <Switch
@@ -147,7 +148,7 @@ export function ConfigureAiDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="ai-api-key">OpenAI API key</Label>
+            <Label htmlFor="ai-api-key">{t("OpenAI API key")}</Label>
             <Input
               id="ai-api-key"
               type="password"
@@ -164,7 +165,7 @@ export function ConfigureAiDialog({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="ai-model">Chat model</Label>
+            <Label htmlFor="ai-model">{t("Chat model")}</Label>
             <Input
               id="ai-model"
               autoComplete="off"
@@ -208,7 +209,7 @@ export function ConfigureAiDialog({
             disabled={busy}
             onClick={() => void handleDisconnect()}
           >
-            Disconnect
+            {t("Disconnect")}
           </Button>
         </DialogFooter>
       </DialogContent>

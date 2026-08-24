@@ -26,6 +26,7 @@ import * as React from "react";
 
 import type { InvoiceRecord } from "@/lib/accounting-store";
 import { accountingAmount, invoiceReconciliation } from "@/lib/invoice-document";
+import { t } from "@/lib/i18n/t";
 
 export type InvoiceDocumentProps = {
   invoice: InvoiceRecord;
@@ -73,24 +74,29 @@ export function InvoiceDocument({ invoice, issuer, packetRefs = [] }: InvoiceDoc
       </header>
 
       <section className="grid grid-cols-2 gap-6 border-b border-black/20 py-5 sm:grid-cols-4">
-        <Field label="Bill to" value={invoice.customer} />
-        <Field label="Load" value={<span className="font-mono">{invoice.loadId}</span>} />
-        <Field label="Lane" value={invoice.lane} />
-        <Field label="Terms" value={invoice.terms} />
-        <Field label="Issued" value={invoice.issuedAt?.slice(0, 10) ?? "—"} />
-        <Field label="Due" value={invoice.dueAt?.slice(0, 10) ?? "—"} />
+        <Field label={t("Bill to")} value={invoice.customer} />
+        <Field label={t("Load")} value={<span className="font-mono">{invoice.loadId}</span>} />
+        <Field label={t("Lane")} value={invoice.lane} />
+        <Field label={t("Terms")} value={invoice.terms} />
+        <Field label={t("Issued")} value={invoice.issuedAt?.slice(0, 10) ?? "—"} />
+        <Field label={t("Due")} value={invoice.dueAt?.slice(0, 10) ?? "—"} />
         {invoice.rateConRef ? (
-          <Field label="Rate confirmation" value={<span className="font-mono">{invoice.rateConRef}</span>} />
+          <Field
+            label={t("Rate confirmation")}
+            value={<span className="font-mono">{invoice.rateConRef}</span>}
+          />
         ) : null}
-        {invoice.carrier ? <Field label="Carrier" value={invoice.carrier} /> : null}
+        {invoice.carrier ? <Field label={t("Carrier")} value={invoice.carrier} /> : null}
       </section>
 
       <table className="mt-6 w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-black/40 text-left">
-            <th className="pb-2 text-[10px] font-semibold uppercase tracking-wide">Description</th>
+            <th className="pb-2 text-[10px] font-semibold uppercase tracking-wide">
+              {t("Description")}
+            </th>
             <th className="pb-2 text-right text-[10px] font-semibold uppercase tracking-wide">
-              Amount (USD)
+              {t("Amount (USD)")}
             </th>
           </tr>
         </thead>
@@ -108,28 +114,26 @@ export function InvoiceDocument({ invoice, issuer, packetRefs = [] }: InvoiceDoc
           {invoice.lines.length === 0 ? (
             <tr>
               <td colSpan={2} className="py-4 text-center text-xs italic">
-                This invoice has no line items.
+                {t("This invoice has no line items.")}
               </td>
             </tr>
           ) : null}
         </tbody>
         <tfoot>
           <tr>
-            <td className="pt-3 text-right text-xs">Subtotal</td>
+            <td className="pt-3 text-right text-xs">{t("Subtotal")}</td>
             <td className="pt-3 text-right font-mono tabular-nums">
               {accountingAmount(invoice.subtotal)}
             </td>
           </tr>
           {invoice.tax ? (
             <tr>
-              <td className="text-right text-xs">Tax</td>
-              <td className="text-right font-mono tabular-nums">
-                {accountingAmount(invoice.tax)}
-              </td>
+              <td className="text-right text-xs">{t("Tax")}</td>
+              <td className="text-right font-mono tabular-nums">{accountingAmount(invoice.tax)}</td>
             </tr>
           ) : null}
           <tr className="border-t-2 border-black/80">
-            <td className="pt-2 text-right text-sm font-bold">Total due</td>
+            <td className="pt-2 text-right text-sm font-bold">{t("Total due")}</td>
             <td className="pt-2 text-right font-mono text-base font-bold tabular-nums">
               {recon.reconciles ? accountingAmount(invoice.total) : "—"}
             </td>
@@ -143,17 +147,16 @@ export function InvoiceDocument({ invoice, issuer, packetRefs = [] }: InvoiceDoc
           className="mt-4 rounded border-2 border-red-700 bg-red-50 p-3 text-sm font-semibold text-red-800"
         >
           This invoice does not reconcile and cannot be issued. Line items total{" "}
-          {accountingAmount(recon.lineSum)}, the stored total is{" "}
-          {accountingAmount(invoice.total)}, a difference of{" "}
-          {accountingAmount(recon.difference)}. The total has been withheld rather than
-          printed.
+          {accountingAmount(recon.lineSum)}, the stored total is {accountingAmount(invoice.total)},
+          a difference of {accountingAmount(recon.difference)}. The total has been withheld rather
+          than printed.
         </p>
       ) : null}
 
       {packetRefs.length > 0 ? (
         <section className="mt-6 border-t border-black/20 pt-4">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Supporting documents
+            {t("Supporting documents")}
           </div>
           <ul className="mt-1 list-inside list-disc font-mono text-xs">
             {packetRefs.map((ref) => (
@@ -165,7 +168,7 @@ export function InvoiceDocument({ invoice, issuer, packetRefs = [] }: InvoiceDoc
 
       <footer className="mt-8 border-t border-black/20 pt-4 text-[11px] leading-relaxed">
         <div className="whitespace-pre-line">
-          <span className="font-semibold">Remit to:</span> {invoice.remitTo}
+          <span className="font-semibold">{t("Remit to:")}</span> {invoice.remitTo}
         </div>
         <div className="mt-1">
           Payment terms {invoice.terms}. Reference {number} on all remittances.

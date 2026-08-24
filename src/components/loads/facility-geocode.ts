@@ -131,17 +131,16 @@ function parseStopAutofillResult(result: GeocodeSearchResult): StopAutofillResul
   const street = getStreetAddress(addr);
   const roadOnly = addr.road?.trim() ?? "";
   const address =
-    street ||
-    roadOnly ||
-    result.name?.trim() ||
-    result.display_name?.split(",")[0]?.trim() ||
-    "";
+    street || roadOnly || result.name?.trim() || result.display_name?.split(",")[0]?.trim() || "";
 
   const zip = normalizeUsZip(addr.postcode) || extractZipFromDisplay(result.display_name);
   return { address, city, state, zip };
 }
 
-function buildGeocodeFetchInit(limit: string): { params: URLSearchParams; headers: Record<string, string> } {
+function buildGeocodeFetchInit(limit: string): {
+  params: URLSearchParams;
+  headers: Record<string, string>;
+} {
   const params = new URLSearchParams({ q: "", limit, provider: "google" });
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -165,7 +164,10 @@ async function fetchGeocodePayload(query: string, signal: AbortSignal, limit = "
   const response = await fetch(url, { signal, headers });
   if (!response.ok) {
     if (import.meta.env.DEV) {
-      const body = (await response.clone().json().catch(() => null)) as { error?: string } | null;
+      const body = (await response
+        .clone()
+        .json()
+        .catch(() => null)) as { error?: string } | null;
       console.warn("[facility-geocode] Google geocode failed:", body?.error ?? response.status);
     }
     return [] as GeocodeSearchResult[];
@@ -273,9 +275,7 @@ export async function geocodeStopCoordinates(
       const parsed = parseStopAutofillResult(result);
       const label =
         result.display_name ??
-        (parsed
-          ? [parsed.address, parsed.city, parsed.state].filter(Boolean).join(", ")
-          : base);
+        (parsed ? [parsed.address, parsed.city, parsed.state].filter(Boolean).join(", ") : base);
 
       return { lat, lng, label };
     }

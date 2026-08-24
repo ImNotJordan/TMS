@@ -43,7 +43,10 @@ function parseEnvFile(path) {
       if (!t || t.startsWith("#")) continue;
       const eq = t.indexOf("=");
       if (eq === -1) continue;
-      out[t.slice(0, eq).trim()] = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      out[t.slice(0, eq).trim()] = t
+        .slice(eq + 1)
+        .trim()
+        .replace(/^["']|["']$/g, "");
     }
     return out;
   } catch {
@@ -66,8 +69,12 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv);
 if (!args.from || !args.into) {
-  console.error("Usage: node scripts/merge-companies.mjs --from <losingId> --into <winningId> [--apply]");
-  console.error("\nRun scripts/verify-driver-scoping.mjs first — it prints the ids and who is in each.");
+  console.error(
+    "Usage: node scripts/merge-companies.mjs --from <losingId> --into <winningId> [--apply]",
+  );
+  console.error(
+    "\nRun scripts/verify-driver-scoping.mjs first — it prints the ids and who is in each.",
+  );
   process.exit(1);
 }
 if (args.from === args.into) {
@@ -196,7 +203,9 @@ async function main() {
   }
 
   if (!args.apply) {
-    console.log(`\nDry run. Re-run with --apply to move ${totalRecords} record(s) and ${affected.length} user(s).`);
+    console.log(
+      `\nDry run. Re-run with --apply to move ${totalRecords} record(s) and ${affected.length} user(s).`,
+    );
     return;
   }
 
@@ -272,7 +281,9 @@ async function main() {
 main().catch((err) => {
   console.error(`\nFailed: ${err?.name ?? "Error"} — ${err?.message ?? err}`);
   if (err?.name === "AccessDeniedException") {
-    console.error("The server principal needs Query on companyId-index and UpdateItem on each table.");
+    console.error(
+      "The server principal needs Query on companyId-index and UpdateItem on each table.",
+    );
   }
   process.exit(1);
 });

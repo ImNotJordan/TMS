@@ -1,13 +1,14 @@
 import { z } from "zod";
 
-const messageLinkSchema = z.union([
-  z.object({ loadId: z.string().min(1), contactId: z.string().min(1) }),
-  z.object({ loadId: z.string().min(1), contactId: z.undefined().optional() }),
-  z.object({ loadId: z.undefined().optional(), contactId: z.string().min(1) }),
-]).refine(
-  (v) => Boolean(("loadId" in v && v.loadId) || ("contactId" in v && v.contactId)),
-  { message: "Message must link to a load and/or contact." },
-);
+const messageLinkSchema = z
+  .union([
+    z.object({ loadId: z.string().min(1), contactId: z.string().min(1) }),
+    z.object({ loadId: z.string().min(1), contactId: z.undefined().optional() }),
+    z.object({ loadId: z.undefined().optional(), contactId: z.string().min(1) }),
+  ])
+  .refine((v) => Boolean(("loadId" in v && v.loadId) || ("contactId" in v && v.contactId)), {
+    message: "Message must link to a load and/or contact.",
+  });
 
 export const smsSendSchema = z.object({
   to: z.string().min(7).max(32),

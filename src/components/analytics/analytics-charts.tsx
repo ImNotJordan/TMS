@@ -12,6 +12,7 @@ import {
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SeriesPoint } from "@/lib/analytics-kpis";
+import { t } from "@/lib/i18n/t";
 
 export function AnalyticsTrendChart({
   title,
@@ -39,7 +40,7 @@ export function AnalyticsTrendChart({
       <CardContent>
         {!hasData ? (
           <div className="flex h-[240px] items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
-            No event volume in this period yet.
+            {t("No event volume in this period yet.")}
           </div>
         ) : variant === "bar" ? (
           <ResponsiveContainer width="100%" height={240}>
@@ -67,7 +68,12 @@ export function AnalyticsTrendChart({
                   fontSize: 12,
                 }}
               />
-              <Bar dataKey="value" name={primaryLabel} fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+              <Bar
+                dataKey="value"
+                name={primaryLabel}
+                fill="var(--color-primary)"
+                radius={[4, 4, 0, 0]}
+              />
               {secondaryLabel && (
                 <Bar
                   dataKey="secondary"

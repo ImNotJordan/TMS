@@ -19,7 +19,6 @@ export function validateRegexTerm(pattern: string): { ok: true } | { ok: false; 
     return { ok: false, reason: "Regex rejected: pattern risks catastrophic backtracking." };
   }
   try {
-    // eslint-disable-next-line no-new -- validate compile
     new RegExp(trimmed);
   } catch {
     return { ok: false, reason: "Regex is invalid." };

@@ -73,6 +73,7 @@ import { listAllCarriersCached } from "@/lib/carriers-store";
 import { removeTrackingSessionForLoad } from "@/lib/tracking-workflow-store";
 import { invalidateOperationalCounts } from "@/lib/sidebar-counts";
 import { useOperationalList } from "@/hooks/use-operational-list";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/loads")({
   head: () => ({
@@ -92,7 +93,8 @@ function Page() {
   const isLoadDetailPath = /^\/loads\/[^/]+$/.test(pathname);
   const queryClient = useQueryClient();
 
-  const [customerLabels, setCustomerLabels] = React.useState<Record<string, string>>(CUSTOMER_LABELS);
+  const [customerLabels, setCustomerLabels] =
+    React.useState<Record<string, string>>(CUSTOMER_LABELS);
   const [carrierLabels, setCarrierLabels] = React.useState<Record<string, string>>(CARRIER_LABELS);
   const [query, setQuery] = React.useState("");
   const [showDrafts, setShowDrafts] = React.useState(false);
@@ -241,15 +243,15 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="Loads"
-        description="Manage every load — from booking and dispatch to delivery and POD."
+        title={t("Loads")}
+        description={t("Manage every load — from booking and dispatch to delivery and POD.")}
         actions={
           <>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Filter className="h-4 w-4" /> Filters
+              <Filter className="h-4 w-4" /> {t("Filters")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-4 w-4" /> Export
+              <Download className="h-4 w-4" /> {t("Export")}
             </Button>
             <Button
               variant="outline"
@@ -274,7 +276,7 @@ function Page() {
               {showDrafts ? (
                 <>
                   <Package className="h-4 w-4" />
-                  Loads
+                  {t("Loads")}
                 </>
               ) : (
                 <>
@@ -293,7 +295,7 @@ function Page() {
               className="gap-1.5 bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
               onClick={openNewLoad}
             >
-              <Plus className="h-4 w-4" /> New Load
+              <Plus className="h-4 w-4" /> {t("New Load")}
             </Button>
             <CreateLoadDialog
               open={createOpen}
@@ -354,17 +356,17 @@ function Page() {
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="pl-8"
-                  placeholder="Search loads, customers, lanes..."
+                  placeholder={t("Search loads, customers, lanes...")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" className="gap-1.5">
-                  <Clock3 className="h-4 w-4" /> Last 7 days
+                  <Clock3 className="h-4 w-4" /> {t("Last 7 days")}
                 </Button>
                 <Button size="sm" variant="outline" className="gap-1.5">
-                  <MapPin className="h-4 w-4" /> All lanes
+                  <MapPin className="h-4 w-4" /> {t("All lanes")}
                 </Button>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {showDrafts
@@ -374,7 +376,7 @@ function Page() {
                       : `${filtered.length} of ${loads?.length ?? 0} load${loads?.length === 1 ? "" : "s"}`}
                 </span>
                 <Button variant="ghost" size="sm" className="gap-1 text-primary">
-                  View all <ArrowUpRight className="h-4 w-4" />
+                  {t("View all")} <ArrowUpRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -383,7 +385,7 @@ function Page() {
               <div className="flex items-start gap-3 border-b border-destructive/30 bg-destructive/8 px-6 py-3 text-sm text-destructive">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div className="flex-1">
-                  <div className="font-semibold">Couldn't load from DynamoDB</div>
+                  <div className="font-semibold">{t("Couldn't load from DynamoDB")}</div>
                   <div className="mt-0.5 text-xs text-destructive/90">{error}</div>
                 </div>
                 <Button
@@ -392,7 +394,7 @@ function Page() {
                   onClick={() => void refreshLoads()}
                   className="border-destructive/30 text-destructive hover:bg-destructive/10"
                 >
-                  Retry
+                  {t("Retry")}
                 </Button>
               </div>
             )}
@@ -403,12 +405,12 @@ function Page() {
                   <>
                     <TableHeader>
                       <TableRow className="border-border/70">
-                        <TableHead className="pl-6">Load</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Lane</TableHead>
-                        <TableHead>Step</TableHead>
-                        <TableHead>Last saved</TableHead>
-                        <TableHead className="pr-6 text-right">Actions</TableHead>
+                        <TableHead className="pl-6">{t("Load")}</TableHead>
+                        <TableHead>{t("Customer")}</TableHead>
+                        <TableHead>{t("Lane")}</TableHead>
+                        <TableHead>{t("Step")}</TableHead>
+                        <TableHead>{t("Last saved")}</TableHead>
+                        <TableHead className="pr-6 text-right">{t("Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -419,10 +421,13 @@ function Page() {
                               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
                                 <FilePen className="h-5 w-5" />
                               </span>
-                              <div className="font-medium text-foreground">No saved drafts</div>
+                              <div className="font-medium text-foreground">
+                                {t("No saved drafts")}
+                              </div>
                               <div className="text-xs">
-                                Start a load and close the wizard — your progress is saved here
-                                automatically.
+                                {t(
+                                  "Start a load and close the wizard — your progress is saved here\r\n                                automatically.",
+                                )}
                               </div>
                             </div>
                           </TableCell>
@@ -473,133 +478,135 @@ function Page() {
                   <>
                     <TableHeader>
                       <TableRow className="border-border/70">
-                        <TableHead className="pl-6">Load</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Lane</TableHead>
-                        <TableHead>Pickup</TableHead>
-                        <TableHead>Delivery</TableHead>
-                        <TableHead>Carrier</TableHead>
-                        <TableHead>Equipment</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Rate</TableHead>
-                        <TableHead className="pr-6 text-right">Actions</TableHead>
+                        <TableHead className="pl-6">{t("Load")}</TableHead>
+                        <TableHead>{t("Customer")}</TableHead>
+                        <TableHead>{t("Lane")}</TableHead>
+                        <TableHead>{t("Pickup")}</TableHead>
+                        <TableHead>{t("Delivery")}</TableHead>
+                        <TableHead>{t("Carrier")}</TableHead>
+                        <TableHead>{t("Equipment")}</TableHead>
+                        <TableHead>{t("Status")}</TableHead>
+                        <TableHead className="text-right">{t("Rate")}</TableHead>
+                        <TableHead className="pr-6 text-right">{t("Actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                  {loading && (!loads || loads.length === 0) ? (
-                    Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={`skel-${i}`} className="border-border/60">
-                        {Array.from({ length: 10 }).map((__, j) => (
-                          <TableCell
-                            key={j}
-                            className={j === 0 ? "pl-6" : j === 9 ? "pr-6 text-right" : ""}
-                          >
-                            <span className="inline-block h-4 w-full max-w-[140px] animate-pulse rounded bg-muted" />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : filtered.length === 0 ? (
-                    <TableRow className="border-border/60">
-                      <TableCell colSpan={10} className="py-12">
-                        <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                            <Inbox className="h-5 w-5" />
-                          </span>
-                          <div className="font-medium text-foreground">
-                            {loads && loads.length > 0
-                              ? "No loads match your search"
-                              : "No loads yet"}
-                          </div>
-                          <div className="text-xs">
-                            {loads && loads.length > 0
-                              ? "Try a different keyword."
-                              : "Create your first load to see it here."}
-                          </div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filtered.map((r) => {
-                      const status = r.loadStatus
-                        ? (STATUS_LABELS[r.loadStatus] ?? {
-                            label: r.loadStatus,
-                            tone: "default" as Tone,
-                          })
-                        : { label: "—", tone: "default" as Tone };
-                      return (
-                        <TableRow key={r.loadId} className="border-border/60">
-                          <TableCell className="pl-6 font-medium">
-                            <Link
-                              to="/loads/$loadId"
-                              params={{ loadId: r.loadId }}
-                              className="text-primary underline-offset-4 hover:underline"
-                            >
-                              {r.loadId}
-                            </Link>
-                          </TableCell>
-                          <TableCell>{labelOrRaw(customerLabels, r.customer)}</TableCell>
-                          <TableCell className="text-muted-foreground">{formatLane(r)}</TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {formatStop(
-                              r.pickupDate,
-                              r.pickupAppointmentTime,
-                              r.pickupWindowStart,
-                              r.pickupWindowEnd,
-                            )}
-                          </TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {formatStop(
-                              r.deliveryDate,
-                              r.deliveryAppointmentTime,
-                              r.deliveryWindowStart,
-                              r.deliveryWindowEnd,
-                            )}
-                          </TableCell>
-                          <TableCell>{labelOrRaw(carrierLabels, r.assignedCarrier)}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {labelOrRaw(EQUIPMENT_LABELS, r.equipmentType)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={toneBadge[status.tone]}>
-                              {status.label}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">
-                            {formatRate(r.customerRate)}
-                          </TableCell>
-                          <TableCell className="pr-6 text-right">
-                            <div className="inline-flex items-center gap-0.5">
-                              {r.assignedDriver?.trim() ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                  aria-label={`Track load ${r.loadId}`}
-                                  asChild
-                                >
-                                  <Link to="/tracking" search={{ loadId: r.loadId }}>
-                                    <MapPin className="h-4 w-4" />
-                                  </Link>
-                                </Button>
-                              ) : null}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                aria-label={`Delete load ${r.loadId}`}
-                                onClick={() => setLoadToDelete(r)}
+                      {loading && (!loads || loads.length === 0) ? (
+                        Array.from({ length: 5 }).map((_, i) => (
+                          <TableRow key={`skel-${i}`} className="border-border/60">
+                            {Array.from({ length: 10 }).map((__, j) => (
+                              <TableCell
+                                key={j}
+                                className={j === 0 ? "pl-6" : j === 9 ? "pr-6 text-right" : ""}
                               >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                                <span className="inline-block h-4 w-full max-w-[140px] animate-pulse rounded bg-muted" />
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      ) : filtered.length === 0 ? (
+                        <TableRow className="border-border/60">
+                          <TableCell colSpan={10} className="py-12">
+                            <div className="flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                                <Inbox className="h-5 w-5" />
+                              </span>
+                              <div className="font-medium text-foreground">
+                                {loads && loads.length > 0
+                                  ? "No loads match your search"
+                                  : "No loads yet"}
+                              </div>
+                              <div className="text-xs">
+                                {loads && loads.length > 0
+                                  ? "Try a different keyword."
+                                  : "Create your first load to see it here."}
+                              </div>
                             </div>
                           </TableCell>
                         </TableRow>
-                      );
-                    })
-                  )}
+                      ) : (
+                        filtered.map((r) => {
+                          const status = r.loadStatus
+                            ? (STATUS_LABELS[r.loadStatus] ?? {
+                                label: r.loadStatus,
+                                tone: "default" as Tone,
+                              })
+                            : { label: "—", tone: "default" as Tone };
+                          return (
+                            <TableRow key={r.loadId} className="border-border/60">
+                              <TableCell className="pl-6 font-medium">
+                                <Link
+                                  to="/loads/$loadId"
+                                  params={{ loadId: r.loadId }}
+                                  className="text-primary underline-offset-4 hover:underline"
+                                >
+                                  {r.loadId}
+                                </Link>
+                              </TableCell>
+                              <TableCell>{labelOrRaw(customerLabels, r.customer)}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {formatLane(r)}
+                              </TableCell>
+                              <TableCell className="tabular-nums text-muted-foreground">
+                                {formatStop(
+                                  r.pickupDate,
+                                  r.pickupAppointmentTime,
+                                  r.pickupWindowStart,
+                                  r.pickupWindowEnd,
+                                )}
+                              </TableCell>
+                              <TableCell className="tabular-nums text-muted-foreground">
+                                {formatStop(
+                                  r.deliveryDate,
+                                  r.deliveryAppointmentTime,
+                                  r.deliveryWindowStart,
+                                  r.deliveryWindowEnd,
+                                )}
+                              </TableCell>
+                              <TableCell>{labelOrRaw(carrierLabels, r.assignedCarrier)}</TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {labelOrRaw(EQUIPMENT_LABELS, r.equipmentType)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={toneBadge[status.tone]}>
+                                  {status.label}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-semibold tabular-nums">
+                                {formatRate(r.customerRate)}
+                              </TableCell>
+                              <TableCell className="pr-6 text-right">
+                                <div className="inline-flex items-center gap-0.5">
+                                  {r.assignedDriver?.trim() ? (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                      aria-label={`Track load ${r.loadId}`}
+                                      asChild
+                                    >
+                                      <Link to="/tracking" search={{ loadId: r.loadId }}>
+                                        <MapPin className="h-4 w-4" />
+                                      </Link>
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    aria-label={`Delete load ${r.loadId}`}
+                                    onClick={() => setLoadToDelete(r)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
                     </TableBody>
                   </>
                 )}
@@ -617,7 +624,7 @@ function Page() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete load?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Delete load?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {loadToDelete ? (
                 <>
@@ -632,7 +639,7 @@ function Page() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingLoad}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingLoad}>{t("Cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={deletingLoad}
@@ -641,7 +648,7 @@ function Page() {
               {deletingLoad ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting…
+                  {t("Deleting…")}
                 </>
               ) : (
                 "Delete load"
@@ -659,7 +666,7 @@ function Page() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete draft?</AlertDialogTitle>
+            <AlertDialogTitle>{t("Delete draft?")}</AlertDialogTitle>
             <AlertDialogDescription>
               {draftToDelete ? (
                 <>
@@ -674,9 +681,9 @@ function Page() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
             <Button variant="destructive" onClick={confirmDeleteDraft}>
-              Delete draft
+              {t("Delete draft")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

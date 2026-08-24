@@ -5,6 +5,7 @@ import {
   FileText,
   FileSpreadsheet,
   Package,
+  Boxes,
   Truck,
   BarChart3,
   Building2,
@@ -39,6 +40,9 @@ export const NAV_ITEMS: NavItem[] = [
     liveCount: "trucks",
   },
   { title: "Tracking", url: "/tracking", icon: MapPin, group: "Operations", liveCount: "tracking" },
+  // Title must match the `MODULES` entry exactly — `navItemToModule` maps them
+  // by name, and a mismatch silently makes the item ungated.
+  { title: "Inventory", url: "/inventory", icon: Boxes, group: "Operations" },
 
   { title: "Bidding", url: "/bidding", icon: Gavel, group: "Commercial" },
   { title: "RFPs", url: "/rfps", icon: FileText, group: "Commercial" },

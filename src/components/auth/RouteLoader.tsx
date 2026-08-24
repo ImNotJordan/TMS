@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import "./route-loader.css";
+import { t } from "@/lib/i18n/t";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RouteLoader
@@ -236,14 +237,14 @@ export function RouteLoader({
               onClick={onRetry}
               className="rounded-lg border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground shadow-sm transition-all hover:border-muted-foreground/40 hover:shadow active:scale-[.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              Try again
+              {t("Try again")}
             </button>
             <button
               type="button"
               onClick={onSignIn}
               className="rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              Sign in manually
+              {t("Sign in manually")}
             </button>
           </div>
         )}

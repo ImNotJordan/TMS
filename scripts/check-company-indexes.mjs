@@ -59,6 +59,8 @@ const TABLES = [
   ["CrmCampaigns", "VITE_CRM_CAMPAIGNS_TABLE_NAME"],
   ["CrmProspectingRuns", "VITE_CRM_PROSPECTING_TABLE_NAME"],
   ["RiskModels", "VITE_RISK_MODELS_TABLE_NAME"],
+  ["InventoryItems", "VITE_INVENTORY_ITEMS_TABLE_NAME"],
+  ["InventoryMovements", "VITE_INVENTORY_MOVEMENTS_TABLE_NAME"],
 ];
 
 const region = devVars.TITAN_AWS_REGION || appEnv.VITE_AWS_REGION || "us-west-1";

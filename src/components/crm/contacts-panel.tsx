@@ -14,6 +14,7 @@ import {
 import { CreateContactDialog } from "./create-contact-dialog";
 import { EntityDetailSheet } from "./entity-detail-sheet";
 import type { CrmAccountRecord, CrmContactRecord } from "@/lib/crm-store";
+import { t } from "@/lib/i18n/t";
 
 export function ContactsPanel({
   contacts,
@@ -40,7 +41,7 @@ export function ContactsPanel({
           {loading ? "Loading…" : `${contacts?.length ?? 0} contacts`}
         </div>
         <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> New Contact
+          <Plus className="h-4 w-4" /> {t("New Contact")}
         </Button>
       </div>
 
@@ -55,11 +56,11 @@ export function ContactsPanel({
         <Table>
           <TableHeader>
             <TableRow className="border-border/70">
-              <TableHead className="pl-4">Name</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Phone</TableHead>
+              <TableHead className="pl-4">{t("Name")}</TableHead>
+              <TableHead>{t("Title")}</TableHead>
+              <TableHead>{t("Account")}</TableHead>
+              <TableHead>{t("Email")}</TableHead>
+              <TableHead>{t("Phone")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -77,7 +78,7 @@ export function ContactsPanel({
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                   <User className="mx-auto mb-1 h-5 w-5" />
-                  No contacts yet.
+                  {t("No contacts yet.")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -91,7 +92,9 @@ export function ContactsPanel({
                     {c.firstName} {c.lastName}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{c.title ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{accountName(c.accountId) ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {accountName(c.accountId) ?? "—"}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{c.email ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{c.phone ?? "—"}</TableCell>
                 </TableRow>

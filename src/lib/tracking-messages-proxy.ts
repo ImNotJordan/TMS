@@ -29,6 +29,7 @@ import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/li
 import { getServerDataClient, ServerDataPrincipalMissingError } from "@/lib/server/server-dynamo";
 import { readServerEnv } from "@/lib/server-env";
 import { requireCurrentTenantContext } from "@/lib/tenant/request-context";
+import { refuseClientOnOpsApi } from "@/lib/tenant/client-scope";
 import {
   logTenantDenial,
   tenantErrorResponse,
@@ -121,6 +122,9 @@ export async function handleTrackingMessagesRequest(request: Request): Promise<R
     return tenantErrorResponse(err) ?? jsonError("Sign in required.", 401, "not_authenticated");
   }
 
+  const refused = refuseClientOnOpsApi(ctx, url.pathname);
+  if (refused) return refused;
+
   try {
     switch (request.method) {
       case "GET": {
@@ -157,11 +161,7 @@ export async function handleTrackingMessagesRequest(request: Request): Promise<R
 
         const unexpected = Object.keys(body).filter((key) => !WRITABLE_FIELDS.has(key));
         if (unexpected.length > 0) {
-          return jsonError(
-            `Unexpected fields: ${unexpected.join(", ")}.`,
-            400,
-            "invalid_payload",
-          );
+          return jsonError(`Unexpected fields: ${unexpected.join(", ")}.`, 400, "invalid_payload");
         }
 
         if (!(await canAccessLoad(ctx, loadId))) {
@@ -250,10 +250,7 @@ export async function handleTrackingMessagesRequest(request: Request): Promise<R
       console.error("[tracking-messages] data principal is not configured");
       return jsonError("Server is not configured for data access.", 503, err.code);
     }
-    console.error(
-      "[tracking-messages] request failed",
-      err instanceof Error ? err.message : err,
-    );
+    console.error("[tracking-messages] request failed", err instanceof Error ? err.message : err);
     return jsonError("Could not complete that request.", 502, "error");
   }
 }

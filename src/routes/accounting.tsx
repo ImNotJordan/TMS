@@ -56,6 +56,7 @@ import {
 } from "@/lib/accounting-store";
 import { listAllLoadsCached } from "@/lib/loads-store";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 const ACCOUNTING_TABS = ["queues", "builder", "factoring", "collections", "payouts"] as const;
 
@@ -198,8 +199,10 @@ function Page() {
   return (
     <div>
       <PageHeader
-        title="Accounting & Invoicing"
-        description="Ready-to-bill queues, invoice builder, factoring, collections AI, and carrier payouts — POD required before invoice."
+        title={t("Accounting & Invoicing")}
+        description={t(
+          "Ready-to-bill queues, invoice builder, factoring, collections AI, and carrier payouts — POD required before invoice.",
+        )}
         actions={
           <>
             <Button
@@ -208,7 +211,7 @@ function Page() {
               className="gap-1.5"
               onClick={() => void refresh(true)}
             >
-              <RefreshCw className="h-4 w-4" /> Refresh
+              <RefreshCw className="h-4 w-4" /> {t("Refresh")}
             </Button>
             <Button
               size="sm"
@@ -225,7 +228,7 @@ function Page() {
                 setTab("builder");
               }}
             >
-              <Receipt className="h-4 w-4" /> Open invoice builder
+              <Receipt className="h-4 w-4" /> {t("Open invoice builder")}
             </Button>
           </>
         }
@@ -234,33 +237,33 @@ function Page() {
       <div className="space-y-6 px-4 py-5 sm:px-6 lg:px-8">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <Kpi
-            label="Ready to bill"
+            label={t("Ready to bill")}
             value={loading ? "—" : String(snapshot?.readyToBillCount ?? 0)}
-            hint="Has POD · not invoiced"
+            hint={t("Has POD · not invoiced")}
             tone="warning"
           />
           <Kpi
-            label="AR open"
+            label={t("AR open")}
             value={loading ? "—" : money(snapshot?.arOpen ?? 0)}
-            hint="Sent · dispute · factored"
+            hint={t("Sent · dispute · factored")}
             tone="info"
           />
           <Kpi
-            label="Overdue"
+            label={t("Overdue")}
             value={loading ? "—" : money(snapshot?.overdue ?? 0)}
-            hint="Past due · collections AI"
+            hint={t("Past due · collections AI")}
             tone="warning"
           />
           <Kpi
             label="DSO"
             value={loading ? "—" : `${snapshot?.dsoDays ?? 0}d`}
-            hint="Computed daily from AR / sales"
+            hint={t("Computed daily from AR / sales")}
             tone="default"
           />
           <Kpi
-            label="Factor advances"
+            label={t("Factor advances")}
             value={loading ? "—" : money(snapshot?.factoredAdvance ?? 0)}
-            hint="Submitted · pending reconcile"
+            hint={t("Submitted · pending reconcile")}
             tone="success"
           />
         </div>
@@ -274,19 +277,19 @@ function Page() {
         <Tabs value={activeTab} onValueChange={(v) => setTab(v as AccountingTab)}>
           <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
             <TabsTrigger value="queues" className="gap-1.5 text-xs sm:text-sm">
-              <ClipboardList className="h-3.5 w-3.5" /> Queues
+              <ClipboardList className="h-3.5 w-3.5" /> {t("Queues")}
             </TabsTrigger>
             <TabsTrigger value="builder" className="gap-1.5 text-xs sm:text-sm">
-              <Receipt className="h-3.5 w-3.5" /> Builder
+              <Receipt className="h-3.5 w-3.5" /> {t("Builder")}
             </TabsTrigger>
             <TabsTrigger value="factoring" className="gap-1.5 text-xs sm:text-sm">
-              <Building2 className="h-3.5 w-3.5" /> Factoring
+              <Building2 className="h-3.5 w-3.5" /> {t("Factoring")}
             </TabsTrigger>
             <TabsTrigger value="collections" className="gap-1.5 text-xs sm:text-sm">
-              <Scale className="h-3.5 w-3.5" /> Collections AI
+              <Scale className="h-3.5 w-3.5" /> {t("Collections AI")}
             </TabsTrigger>
             <TabsTrigger value="payouts" className="gap-1.5 text-xs sm:text-sm">
-              <Banknote className="h-3.5 w-3.5" /> Payouts
+              <Banknote className="h-3.5 w-3.5" /> {t("Payouts")}
             </TabsTrigger>
           </TabsList>
 
@@ -324,7 +327,7 @@ function Page() {
                 className="pl-8"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search invoice, load, customer…"
+                placeholder={t("Search invoice, load, customer…")}
               />
             </div>
 
@@ -339,7 +342,9 @@ function Page() {
                 ) : filtered.length === 0 ? (
                   <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
                     <Wallet className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm font-medium text-foreground">No invoices in this queue</p>
+                    <p className="text-sm font-medium text-foreground">
+                      {t("No invoices in this queue")}
+                    </p>
                     <p className="max-w-sm text-xs text-muted-foreground">
                       {activeQueue === "ready-to-bill"
                         ? "Loads appear here only after POD is on file (acceptance rule)."
@@ -377,7 +382,7 @@ function Page() {
                                 variant="outline"
                                 className="border-destructive/30 bg-destructive/10 text-destructive"
                               >
-                                Missing POD
+                                {t("Missing POD")}
                               </Badge>
                             )}
                           </div>
@@ -399,12 +404,12 @@ function Page() {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <Button size="sm" variant="ghost" className="h-8 px-2" asChild>
                             <Link to="/loads/$loadId" params={{ loadId: inv.loadId }}>
-                              Load
+                              {t("Load")}
                             </Link>
                           </Button>
                           <Button size="sm" variant="ghost" className="h-8 px-2" asChild>
                             <Link to="/tracking" search={{ loadId: inv.loadId }}>
-                              <MapPin className="mr-1 h-3.5 w-3.5" /> Track
+                              <MapPin className="mr-1 h-3.5 w-3.5" /> {t("Track")}
                             </Link>
                           </Button>
                           <Button size="sm" variant="ghost" className="h-8 px-2" asChild>
@@ -415,7 +420,7 @@ function Page() {
                               params={{ invoiceId: inv.invoiceId }}
                               target="_blank"
                             >
-                              <FileText className="mr-1 h-3.5 w-3.5" /> Invoice
+                              <FileText className="mr-1 h-3.5 w-3.5" /> {t("Invoice")}
                             </Link>
                           </Button>
                           <Button
@@ -426,7 +431,7 @@ function Page() {
                               setTab("builder");
                             }}
                           >
-                            Open
+                            {t("Open")}
                           </Button>
                         </div>
                       </li>
@@ -457,9 +462,11 @@ function Page() {
           <TabsContent value="factoring" className="mt-4 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Factoring integration</CardTitle>
+                <CardTitle className="text-base">{t("Factoring integration")}</CardTitle>
                 <CardDescription>
-                  Submit via API/EDI, capture submission id, receive advance status, reconcile.
+                  {t(
+                    "Submit via API/EDI, capture submission id, receive advance status, reconcile.",
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -469,7 +476,7 @@ function Page() {
                   ) ?? []
                 ).length === 0 && !loading ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    Generate an invoice first, then submit it to your factor.
+                    {t("Generate an invoice first, then submit it to your factor.")}
                   </p>
                 ) : loading ? (
                   <Skeleton className="h-24 w-full" />
@@ -512,7 +519,7 @@ function Page() {
                             })();
                           }}
                         >
-                          <Send className="h-3.5 w-3.5" /> Submit API/EDI
+                          <Send className="h-3.5 w-3.5" /> {t("Submit API/EDI")}
                         </Button>
                       ) : (
                         <Button
@@ -550,9 +557,11 @@ function Page() {
               <Card className="border-border/70 shadow-sm lg:col-span-2">
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <Sparkles className="h-4 w-4 text-primary" /> Sequence rules
+                    <Sparkles className="h-4 w-4 text-primary" /> {t("Sequence rules")}
                   </CardTitle>
-                  <CardDescription>Escalations run daily against DSO / aging.</CardDescription>
+                  <CardDescription>
+                    {t("Escalations run daily against DSO / aging.")}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {(snapshot?.collectionsRules ?? []).map((rule) => (
@@ -574,9 +583,11 @@ function Page() {
 
               <Card className="border-border/70 shadow-sm lg:col-span-3">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Dispute capture & handoff</CardTitle>
+                  <CardTitle className="text-base">{t("Dispute capture & handoff")}</CardTitle>
                   <CardDescription>
-                    Capture disputes, then auto-handoff aged balances to a collections partner.
+                    {t(
+                      "Capture disputes, then auto-handoff aged balances to a collections partner.",
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
@@ -606,7 +617,7 @@ function Page() {
                           setDisputeOpen(inv);
                         }}
                       >
-                        <AlertTriangle className="h-3.5 w-3.5" /> Dispute
+                        <AlertTriangle className="h-3.5 w-3.5" /> {t("Dispute")}
                       </Button>
                       <Button
                         size="sm"
@@ -627,7 +638,7 @@ function Page() {
                           })();
                         }}
                       >
-                        Handoff partner
+                        {t("Handoff partner")}
                       </Button>
                     </div>
                   ))}
@@ -636,7 +647,7 @@ function Page() {
                     ["sent", "in-dispute", "sent-to-collections", "factored"].includes(i.status),
                   ).length ?? 0) === 0 ? (
                     <p className="py-6 text-center text-sm text-muted-foreground">
-                      No aged invoices yet.
+                      {t("No aged invoices yet.")}
                     </p>
                   ) : null}
                 </CardContent>
@@ -647,8 +658,10 @@ function Page() {
           <TabsContent value="payouts" className="mt-4 space-y-4">
             <Card className="border-border/70 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Carrier payables</CardTitle>
-                <CardDescription>Not implemented — no settlement model exists yet.</CardDescription>
+                <CardTitle className="text-base">{t("Carrier payables")}</CardTitle>
+                <CardDescription>
+                  {t("Not implemented — no settlement model exists yet.")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {/*
@@ -664,12 +677,12 @@ function Page() {
                 */}
                 <div className="rounded-xl border border-dashed border-border/70 px-4 py-10 text-center">
                   <p className="text-sm font-medium text-foreground">
-                    Carrier settlements are not built yet
+                    {t("Carrier settlements are not built yet")}
                   </p>
                   <p className="mx-auto mt-1.5 max-w-md text-xs text-muted-foreground">
-                    Paying a carrier needs a settlement record, deductions, compliance and factoring
-                    gates, and an approval step. None of those exist, so nothing is shown here.
-                    Carrier rates are on the load record.
+                    {t(
+                      "Paying a carrier needs a settlement record, deductions, compliance and factoring\r\n                    gates, and an approval step. None of those exist, so nothing is shown here.\r\n                    Carrier rates are on the load record.",
+                    )}
                   </p>
                 </div>
               </CardContent>
@@ -683,7 +696,7 @@ function Page() {
       <Dialog open={!!disputeOpen} onOpenChange={(open) => !open && setDisputeOpen(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Capture dispute</DialogTitle>
+            <DialogTitle>{t("Capture dispute")}</DialogTitle>
             <DialogDescription>
               {disputeOpen?.invoiceId} · freeze factoring and route to dispute workflow.
             </DialogDescription>
@@ -691,12 +704,12 @@ function Page() {
           <Textarea
             value={disputeReason}
             onChange={(e) => setDisputeReason(e.target.value)}
-            placeholder="Accessorial denied, short pay, POD quality…"
+            placeholder={t("Accessorial denied, short pay, POD quality…")}
             rows={4}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setDisputeOpen(null)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -716,7 +729,7 @@ function Page() {
                 })();
               }}
             >
-              Save dispute
+              {t("Save dispute")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -785,20 +798,20 @@ function AcceptanceStrip() {
   return (
     <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Acceptance
+        {t("Acceptance")}
       </p>
       <ul className="mt-2 grid gap-1.5 text-xs text-muted-foreground sm:grid-cols-3">
         <li className="inline-flex items-start gap-1.5">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
-          Invoice generated only with required docs (POD)
+          {t("Invoice generated only with required docs (POD)")}
         </li>
         <li className="inline-flex items-start gap-1.5">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
-          Factoring submission id captured on submit
+          {t("Factoring submission id captured on submit")}
         </li>
         <li className="inline-flex items-start gap-1.5">
           <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
-          DSO computed from AR / trailing sales
+          {t("DSO computed from AR / trailing sales")}
         </li>
       </ul>
     </div>
@@ -841,7 +854,7 @@ function InvoiceBuilderPanel({
       <Card className="border-border/70 shadow-sm">
         <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
           <FileWarning className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm font-medium">Select a ready-to-bill load</p>
+          <p className="text-sm font-medium">{t("Select a ready-to-bill load")}</p>
           <div className="flex flex-wrap justify-center gap-2">
             {readyList.slice(0, 6).map((inv) => (
               <Button key={inv.invoiceId} size="sm" variant="outline" onClick={() => onSelect(inv)}>
@@ -851,7 +864,7 @@ function InvoiceBuilderPanel({
           </div>
           {readyList.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No POD-backed loads waiting — finish Tracking close-out first.
+              {t("No POD-backed loads waiting — finish Tracking close-out first.")}
             </p>
           ) : null}
         </CardContent>
@@ -863,9 +876,9 @@ function InvoiceBuilderPanel({
     <div className="grid gap-4 lg:grid-cols-5">
       <Card className="border-border/70 shadow-sm lg:col-span-3">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Invoice builder</CardTitle>
+          <CardTitle className="text-base">{t("Invoice builder")}</CardTitle>
           <CardDescription>
-            Pulls rate con + accessorials + fuel; taxes; remit-to. POD gate enforced.
+            {t("Pulls rate con + accessorials + fuel; taxes; remit-to. POD gate enforced.")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -875,11 +888,11 @@ function InvoiceBuilderPanel({
             <Badge variant="outline">{invoice.rateConRef}</Badge>
             {invoice.podOnFile ? (
               <Badge variant="outline" className="border-success/30 bg-success/10 text-success">
-                POD on file
+                {t("POD on file")}
               </Badge>
             ) : (
               <Badge variant="outline" className="border-destructive/30 text-destructive">
-                POD missing
+                {t("POD missing")}
               </Badge>
             )}
           </div>
@@ -917,14 +930,14 @@ function InvoiceBuilderPanel({
                   setLines((prev) => [...prev, { id: "tax", kind: "tax", label: "Tax", amount: 0 }])
                 }
               >
-                + Add tax line
+                {t("+ Add tax line")}
               </Button>
             ) : null}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Remit-to</Label>
+              <Label className="text-xs">{t("Remit-to")}</Label>
               <Textarea
                 value={remitTo}
                 disabled={invoice.status !== "ready-to-bill"}
@@ -934,7 +947,7 @@ function InvoiceBuilderPanel({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Payment terms</Label>
+              <Label className="text-xs">{t("Payment terms")}</Label>
               <Input
                 value={terms}
                 disabled={invoice.status !== "ready-to-bill"}
@@ -948,13 +961,13 @@ function InvoiceBuilderPanel({
 
       <Card className="border-border/70 bg-gradient-to-b from-card to-muted/20 shadow-sm lg:col-span-2">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Summary</CardTitle>
+          <CardTitle className="text-base">{t("Summary")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Row label="Subtotal" value={moneyExact(totals.subtotal)} />
-          <Row label="Tax" value={moneyExact(totals.tax)} />
+          <Row label={t("Subtotal")} value={moneyExact(totals.subtotal)} />
+          <Row label={t("Tax")} value={moneyExact(totals.tax)} />
           <div className="border-t border-border/70 pt-2">
-            <Row label="Total" value={moneyExact(totals.total)} strong />
+            <Row label={t("Total")} value={moneyExact(totals.total)} strong />
           </div>
           <Button
             className="mt-2 w-full gap-1.5"
@@ -984,7 +997,7 @@ function InvoiceBuilderPanel({
           </Button>
           {!invoice.podOnFile ? (
             <p className="text-center text-[11px] text-destructive">
-              Acceptance: invoice blocked until POD is on file.
+              {t("Acceptance: invoice blocked until POD is on file.")}
             </p>
           ) : null}
         </CardContent>

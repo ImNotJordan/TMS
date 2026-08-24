@@ -25,17 +25,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCompliance } from "../hooks/useCompliance";
 import { useCommsAccess } from "../hooks/useCommsAccess";
 import type { ChannelId } from "../types";
+import { t } from "@/lib/i18n/t";
 
 export function ComplianceTab() {
   const { canViewCompliance } = useCommsAccess();
-  const {
-    consentRecords,
-    dncEntries,
-    auditEvents,
-    recordConsent,
-    addDnc,
-    removeDnc,
-  } = useCompliance();
+  const { consentRecords, dncEntries, auditEvents, recordConsent, addDnc, removeDnc } =
+    useCompliance();
 
   const [consentFilterContact, setConsentFilterContact] = React.useState("");
   const [consentFilterChannel, setConsentFilterChannel] = React.useState<ChannelId | "all">("all");
@@ -48,14 +43,17 @@ export function ComplianceTab() {
     return (
       <Card className="border-border/70 shadow-sm">
         <CardContent className="pt-6 text-sm text-muted-foreground">
-          Compliance is available to broker and admin roles only.
+          {t("Compliance is available to broker and admin roles only.")}
         </CardContent>
       </Card>
     );
   }
 
   const filteredConsent = consentRecords.filter((r) => {
-    if (consentFilterContact && !r.contactId.toLowerCase().includes(consentFilterContact.toLowerCase())) {
+    if (
+      consentFilterContact &&
+      !r.contactId.toLowerCase().includes(consentFilterContact.toLowerCase())
+    ) {
       return false;
     }
     if (consentFilterChannel !== "all" && r.channel !== consentFilterChannel) return false;
@@ -88,21 +86,21 @@ export function ComplianceTab() {
   return (
     <Tabs defaultValue="consent">
       <TabsList>
-        <TabsTrigger value="consent">Consent log</TabsTrigger>
-        <TabsTrigger value="dnc">Do not contact</TabsTrigger>
-        <TabsTrigger value="audit">Audit</TabsTrigger>
+        <TabsTrigger value="consent">{t("Consent log")}</TabsTrigger>
+        <TabsTrigger value="dnc">{t("Do not contact")}</TabsTrigger>
+        <TabsTrigger value="audit">{t("Audit")}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="consent" className="space-y-4">
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Consent log</CardTitle>
-            <CardDescription>Append-only. Revoking creates a new record.</CardDescription>
+            <CardTitle className="text-base">{t("Consent log")}</CardTitle>
+            <CardDescription>{t("Append-only. Revoking creates a new record.")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <Input
-                placeholder="Filter by contact"
+                placeholder={t("Filter by contact")}
                 value={consentFilterContact}
                 onChange={(e) => setConsentFilterContact(e.target.value)}
                 className="max-w-xs"
@@ -115,11 +113,11 @@ export function ComplianceTab() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All channels</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="all">{t("All channels")}</SelectItem>
+                  <SelectItem value="email">{t("Email")}</SelectItem>
                   <SelectItem value="sms">SMS</SelectItem>
-                  <SelectItem value="voice">Voice</SelectItem>
-                  <SelectItem value="chat">Chat</SelectItem>
+                  <SelectItem value="voice">{t("Voice")}</SelectItem>
+                  <SelectItem value="chat">{t("Chat")}</SelectItem>
                 </SelectContent>
               </Select>
               <Button
@@ -139,17 +137,17 @@ export function ComplianceTab() {
                   }).then(() => toast.success("Consent recorded."));
                 }}
               >
-                Record consent
+                {t("Record consent")}
               </Button>
             </div>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Channel</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Basis</TableHead>
-                  <TableHead>Captured</TableHead>
+                  <TableHead>{t("Contact")}</TableHead>
+                  <TableHead>{t("Channel")}</TableHead>
+                  <TableHead>{t("State")}</TableHead>
+                  <TableHead>{t("Basis")}</TableHead>
+                  <TableHead>{t("Captured")}</TableHead>
                   <TableHead>By</TableHead>
                 </TableRow>
               </TableHeader>
@@ -173,17 +171,19 @@ export function ComplianceTab() {
       <TabsContent value="dnc" className="space-y-4">
         <Card className="border-border/70 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Do not contact</CardTitle>
-            <CardDescription>Additions take effect immediately on matching sends.</CardDescription>
+            <CardTitle className="text-base">{t("Do not contact")}</CardTitle>
+            <CardDescription>
+              {t("Additions take effect immediately on matching sends.")}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-2 md:grid-cols-4">
               <div className="space-y-1">
-                <Label>Address</Label>
+                <Label>{t("Address")}</Label>
                 <Input value={dncAddress} onChange={(e) => setDncAddress(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label>Channel</Label>
+                <Label>{t("Channel")}</Label>
                 <Select
                   value={dncChannel}
                   onValueChange={(v) => setDncChannel(v as ChannelId | "all")}
@@ -192,16 +192,16 @@ export function ComplianceTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="all">{t("All")}</SelectItem>
+                    <SelectItem value="email">{t("Email")}</SelectItem>
                     <SelectItem value="sms">SMS</SelectItem>
-                    <SelectItem value="voice">Voice</SelectItem>
-                    <SelectItem value="chat">Chat</SelectItem>
+                    <SelectItem value="voice">{t("Voice")}</SelectItem>
+                    <SelectItem value="chat">{t("Chat")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1 md:col-span-2">
-                <Label>Reason</Label>
+                <Label>{t("Reason")}</Label>
                 <Input value={dncReason} onChange={(e) => setDncReason(e.target.value)} />
               </div>
             </div>
@@ -228,15 +228,15 @@ export function ComplianceTab() {
                 })();
               }}
             >
-              Add entry
+              {t("Add entry")}
             </Button>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Address</TableHead>
-                  <TableHead>Channel</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Added</TableHead>
+                  <TableHead>{t("Address")}</TableHead>
+                  <TableHead>{t("Channel")}</TableHead>
+                  <TableHead>{t("Reason")}</TableHead>
+                  <TableHead>{t("Added")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -256,7 +256,7 @@ export function ComplianceTab() {
                         size="sm"
                         onClick={() => void removeDnc(row.id)}
                       >
-                        Remove
+                        {t("Remove")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -272,17 +272,17 @@ export function ComplianceTab() {
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <CardTitle className="text-base">Audit log</CardTitle>
-                <CardDescription>Read-only. Filter and export to CSV.</CardDescription>
+                <CardTitle className="text-base">{t("Audit log")}</CardTitle>
+                <CardDescription>{t("Read-only. Filter and export to CSV.")}</CardDescription>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={exportAuditCsv}>
-                Export CSV
+                {t("Export CSV")}
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
             <Input
-              placeholder="Filter by action"
+              placeholder={t("Filter by action")}
               value={auditAction}
               onChange={(e) => setAuditAction(e.target.value)}
               className="max-w-xs"
@@ -290,10 +290,10 @@ export function ComplianceTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Actor</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Target</TableHead>
+                  <TableHead>{t("When")}</TableHead>
+                  <TableHead>{t("Actor")}</TableHead>
+                  <TableHead>{t("Action")}</TableHead>
+                  <TableHead>{t("Target")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

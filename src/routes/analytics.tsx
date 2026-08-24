@@ -1,12 +1,6 @@
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  BarChart3,
-  Database,
-  Download,
-  RefreshCw,
-} from "lucide-react";
+import { AlertTriangle, BarChart3, Database, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { AiPanel } from "@/components/analytics/ai-panel";
@@ -28,6 +22,7 @@ import { ANALYTICS_PERIODS, useAnalytics } from "@/hooks/use-analytics";
 import type { AnalyticsEvent, AnalyticsPeriod } from "@/lib/analytics-events";
 import type { AnalyticsKpi, ScorecardRow } from "@/lib/analytics-kpis";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
@@ -138,8 +133,10 @@ function AnalyticsPage() {
   return (
     <div>
       <PageHeader
-        title="Analytics"
-        description="Ops, finance, sales, bidding, and AI — KPIs reproducible from event tables with drill-through to records."
+        title={t("Analytics")}
+        description={t(
+          "Ops, finance, sales, bidding, and AI — KPIs reproducible from event tables with drill-through to records.",
+        )}
         actions={
           <>
             <div className="inline-flex rounded-lg border border-border/70 bg-muted/40 p-0.5">
@@ -167,11 +164,11 @@ function AnalyticsPage() {
               disabled={isFetching}
             >
               <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
-              Refresh
+              {t("Refresh")}
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5" onClick={exportCsv}>
               <Download className="h-4 w-4" />
-              Export
+              {t("Export")}
             </Button>
           </>
         }
@@ -205,13 +202,13 @@ function AnalyticsPage() {
           <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 py-16 text-center">
             <BarChart3 className="h-8 w-8 text-destructive" />
             <div>
-              <h3 className="font-semibold text-foreground">Could not load analytics</h3>
+              <h3 className="font-semibold text-foreground">{t("Could not load analytics")}</h3>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
                 {error instanceof Error ? error.message : "Unknown error"}
               </p>
             </div>
             <Button size="sm" onClick={() => void refetch()}>
-              Retry
+              {t("Retry")}
             </Button>
           </div>
         ) : snapshot ? (
@@ -219,8 +216,7 @@ function AnalyticsPage() {
             <div className="overflow-x-auto">
               <TabsList className="inline-flex h-auto w-max min-w-full gap-0.5 bg-transparent p-0 sm:min-w-0">
                 {TABS.map((item, index) => {
-                  const showDivider =
-                    index > 0 && TABS[index - 1]!.group !== item.group;
+                  const showDivider = index > 0 && TABS[index - 1]!.group !== item.group;
                   return (
                     <React.Fragment key={item.value}>
                       {showDivider && (
@@ -239,11 +235,7 @@ function AnalyticsPage() {
             </div>
 
             <TabsContent value="overview" className="mt-0 outline-none">
-              <OverviewPanel
-                domain={snapshot.overview}
-                onKpi={onKpi}
-                onScorecard={onScorecard}
-              />
+              <OverviewPanel domain={snapshot.overview} onKpi={onKpi} onScorecard={onScorecard} />
             </TabsContent>
             <TabsContent value="ops" className="mt-0 outline-none">
               <OpsPanel domain={snapshot.ops} onKpi={onKpi} onScorecard={onScorecard} />

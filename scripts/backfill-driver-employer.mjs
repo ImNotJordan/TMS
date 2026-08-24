@@ -60,8 +60,12 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv);
 
 if (!args.companyId || !args.companyName) {
-  console.error("Usage: node scripts/backfill-driver-employer.mjs --company-id <id> --company-name <name> [--only sub,sub] [--apply]");
-  console.error("\nFind the company id in the Admin > Users screen, or in any assigned user's profile.");
+  console.error(
+    "Usage: node scripts/backfill-driver-employer.mjs --company-id <id> --company-name <name> [--only sub,sub] [--apply]",
+  );
+  console.error(
+    "\nFind the company id in the Admin > Users screen, or in any assigned user's profile.",
+  );
   process.exit(1);
 }
 
@@ -164,7 +168,9 @@ async function main() {
 main().catch((err) => {
   console.error(`\nFailed: ${err?.name ?? "Error"} — ${err?.message ?? err}`);
   if (err?.name === "AccessDeniedException") {
-    console.error("The server principal needs dynamodb:Scan. Re-render the policy with --with-migration-scan.");
+    console.error(
+      "The server principal needs dynamodb:Scan. Re-render the policy with --with-migration-scan.",
+    );
   }
   process.exit(1);
 });

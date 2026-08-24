@@ -5,6 +5,7 @@ import { ASSISTANT_INPUT_MAX_CHARS } from "@/components/logistics-ai/ai-chat-uti
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n/t";
 
 type AiInputProps = {
   value: string;
@@ -67,7 +68,7 @@ export function AiInput({
             variant="secondary"
             className="h-9 w-9 shrink-0 cursor-pointer rounded-xl"
             onClick={onStop}
-            aria-label="Stop generating"
+            aria-label={t("Stop generating")}
           >
             <Square className="h-3.5 w-3.5 fill-current" />
           </Button>
@@ -78,14 +79,14 @@ export function AiInput({
             className="h-9 w-9 shrink-0 cursor-pointer rounded-xl"
             disabled={!canSend}
             onClick={onSend}
-            aria-label="Send message"
+            aria-label={t("Send message")}
           >
             <ArrowUp className="h-4 w-4" />
           </Button>
         )}
       </div>
       <p className="mt-1.5 px-1 text-[10px] text-muted-foreground">
-        Enter to send · Shift+Enter for a new line
+        {t("Enter to send · Shift+Enter for a new line")}
       </p>
     </div>
   );

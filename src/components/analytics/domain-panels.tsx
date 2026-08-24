@@ -1,16 +1,10 @@
-import {
-  Activity,
-  Gavel,
-  Landmark,
-  LineChart,
-  Truck,
-  type LucideIcon,
-} from "lucide-react";
+import { Activity, Gavel, Landmark, LineChart, Truck, type LucideIcon } from "lucide-react";
 
 import { AnalyticsTrendChart } from "@/components/analytics/analytics-charts";
 import { AnalyticsScorecard } from "@/components/analytics/analytics-scorecard";
 import { AnalyticsKpiStrip, AnalyticsPanelHeader } from "@/components/analytics/kpi-strip";
 import type { AnalyticsKpi, DomainAnalytics, ScorecardRow } from "@/lib/analytics-kpis";
+import { t } from "@/lib/i18n/t";
 
 type PanelHandlers = {
   onKpi: (kpi: AnalyticsKpi) => void;
@@ -76,8 +70,10 @@ export function OverviewPanel({
   return (
     <DomainLayout
       icon={LineChart}
-      title="Overview"
-      description="Cross-domain KPIs reproducible from analytics event tables — click any KPI to drill through."
+      title={t("Overview")}
+      description={t(
+        "Cross-domain KPIs reproducible from analytics event tables — click any KPI to drill through.",
+      )}
       domain={domain}
       onKpi={onKpi}
       onScorecard={onScorecard}
@@ -94,8 +90,8 @@ export function OpsPanel({
   return (
     <DomainLayout
       icon={Truck}
-      title="Operations"
-      description="Time-to-cover, OTD/OTA, dwell, exception rates, and carrier scorecards."
+      title={t("Operations")}
+      description={t("Time-to-cover, OTD/OTA, dwell, exception rates, and carrier scorecards.")}
       domain={domain}
       onKpi={onKpi}
       onScorecard={onScorecard}
@@ -112,8 +108,8 @@ export function FinancePanel({
   return (
     <DomainLayout
       icon={Landmark}
-      title="Finance"
-      description="Margin per mile, margin vs target, DSO, aged AR, and factoring utilization."
+      title={t("Finance")}
+      description={t("Margin per mile, margin vs target, DSO, aged AR, and factoring utilization.")}
       domain={domain}
       onKpi={onKpi}
       onScorecard={onScorecard}
@@ -130,8 +126,10 @@ export function SalesPanel({
   return (
     <DomainLayout
       icon={Activity}
-      title="Sales"
-      description="Hit rate, pipeline velocity, and campaign performance from CRM + quotes events."
+      title={t("Sales")}
+      description={t(
+        "Hit rate, pipeline velocity, and campaign performance from CRM + quotes events.",
+      )}
       domain={domain}
       onKpi={onKpi}
       onScorecard={onScorecard}
@@ -148,8 +146,8 @@ export function BiddingPanel({
   return (
     <DomainLayout
       icon={Gavel}
-      title="Bidding"
-      description="Historical vs DAT spread, win-rate by lane/ZIP3, and backhaul success."
+      title={t("Bidding")}
+      description={t("Historical vs DAT spread, win-rate by lane/ZIP3, and backhaul success.")}
       domain={domain}
       onKpi={onKpi}
       onScorecard={onScorecard}

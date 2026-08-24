@@ -51,6 +51,8 @@ const API_TABLES = [
   "TrackingMessages",
   "RiskModels",
   "BiddingWorkspace",
+  "InventoryItems",
+  "InventoryMovements",
 ];
 
 /**
@@ -92,6 +94,8 @@ const ALL_TABLES = [
   "CrmActivities",
   "CrmCampaigns",
   "CrmProspectingRuns",
+  "InventoryItems",
+  "InventoryMovements",
 ];
 
 /**
@@ -165,6 +169,12 @@ function serverPolicy(account, withMigrationScan = false) {
         // ListUsers is needed to resolve a Cognito `sub` (what the app carries)
         // to a `Username` (what the admin APIs key on) — they differ in this
         // pool because email sign-in makes Cognito generate its own username.
+        //
+        // AdminCreateUser / AdminSetUserPassword / AdminResetUserPassword back
+        // /api/admin/user-credentials. They used to live on the Identity Pool
+        // role; that grant was a tenant bypass, so they belong only here. Without
+        // them, creating a user returns AccessDenied and the admin UI shows 502.
+        //
         // The group actions back /api/admin/user-role. They live here and
         // nowhere else: a group is only trustworthy because no browser can
         // change it, so granting AdminAddUserToGroup to the Identity Pool role
@@ -178,6 +188,9 @@ function serverPolicy(account, withMigrationScan = false) {
         Action: [
           "cognito-idp:AdminGetUser",
           "cognito-idp:AdminUpdateUserAttributes",
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminSetUserPassword",
+          "cognito-idp:AdminResetUserPassword",
           "cognito-idp:ListUsers",
           "cognito-idp:AdminListGroupsForUser",
           "cognito-idp:AdminAddUserToGroup",

@@ -55,6 +55,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { FancySelect, type FancySelectOption } from "@/components/loads/fancy-select";
+import { DatSuggestionsCard } from "@/components/truckboard/dat-suggestions-card";
 import {
   FacilityLocationInput,
   isFacilitySuggestionsTarget,
@@ -67,6 +68,7 @@ import {
   type StoredTruckDraft,
 } from "@/lib/truck-drafts-storage";
 import { useAuth } from "@/lib/auth";
+import { t } from "@/lib/i18n/t";
 
 export type TruckDraft = {
   // Step 1: Availability
@@ -303,8 +305,18 @@ const POSTING_STATUS_OPTIONS: FancySelectOption[] = [
 const CAPACITY_STATUS_OPTIONS: FancySelectOption[] = [
   { value: "open", label: "Open", description: "Full capacity available", icon: CheckCircle2 },
   { value: "partial", label: "Partial", description: "Some capacity remaining", icon: Package },
-  { value: "preplanned", label: "Pre-planned", description: "Soft hold for a customer", icon: Calendar },
-  { value: "deadhead", label: "Deadhead", description: "Empty repositioning move", icon: Navigation },
+  {
+    value: "preplanned",
+    label: "Pre-planned",
+    description: "Soft hold for a customer",
+    icon: Calendar,
+  },
+  {
+    value: "deadhead",
+    label: "Deadhead",
+    description: "Empty repositioning move",
+    icon: Navigation,
+  },
 ];
 
 const EQUIPMENT_OPTIONS: FancySelectOption[] = [
@@ -378,8 +390,19 @@ const TRAILER_OPTIONS: FancySelectOption[] = [
 
 const TRUCK_TYPE_OPTIONS: FancySelectOption[] = [
   { value: "solo", label: "Solo", description: "Single driver", icon: User },
-  { value: "team", label: "Team", description: "Two drivers · faster transit", icon: Users, badge: "Team" },
-  { value: "owner-op", label: "Owner-Operator", description: "Independent contractor", icon: Award },
+  {
+    value: "team",
+    label: "Team",
+    description: "Two drivers · faster transit",
+    icon: Users,
+    badge: "Team",
+  },
+  {
+    value: "owner-op",
+    label: "Owner-Operator",
+    description: "Independent contractor",
+    icon: Award,
+  },
   { value: "fleet", label: "Fleet", description: "Carrier-managed power unit", icon: Truck },
 ];
 
@@ -422,7 +445,11 @@ const TEMPERATURE_OPTIONS: FancySelectOption[] = [
 const REGION_OPTIONS: FancySelectOption[] = [
   { value: "northeast", label: "Northeast", description: "NY, NJ, PA, MA, CT, ME, NH, RI, VT" },
   { value: "southeast", label: "Southeast", description: "FL, GA, SC, NC, VA, WV, AL, MS, TN, KY" },
-  { value: "midwest", label: "Midwest", description: "OH, MI, IN, IL, WI, IA, MN, MO, KS, NE, ND, SD" },
+  {
+    value: "midwest",
+    label: "Midwest",
+    description: "OH, MI, IN, IL, WI, IA, MN, MO, KS, NE, ND, SD",
+  },
   { value: "south", label: "South Central", description: "TX, OK, AR, LA" },
   { value: "mountain", label: "Mountain", description: "CO, UT, NM, AZ, ID, MT, WY" },
   { value: "west", label: "West Coast", description: "CA, OR, WA, NV" },
@@ -456,29 +483,109 @@ const PAYMENT_TERMS_OPTIONS: FancySelectOption[] = [
 ];
 
 const SAFETY_RATING_OPTIONS: FancySelectOption[] = [
-  { value: "satisfactory", label: "Satisfactory", description: "FMCSA satisfactory rating", icon: ShieldCheck, badge: "Good" },
-  { value: "conditional", label: "Conditional", description: "Compliance issues identified", icon: Shield, badge: "Watch" },
+  {
+    value: "satisfactory",
+    label: "Satisfactory",
+    description: "FMCSA satisfactory rating",
+    icon: ShieldCheck,
+    badge: "Good",
+  },
+  {
+    value: "conditional",
+    label: "Conditional",
+    description: "Compliance issues identified",
+    icon: Shield,
+    badge: "Watch",
+  },
   { value: "unrated", label: "Unrated", description: "No formal FMCSA rating", icon: Shield },
-  { value: "unsatisfactory", label: "Unsatisfactory", description: "Failed safety audit", icon: ShieldX, badge: "Block" },
+  {
+    value: "unsatisfactory",
+    label: "Unsatisfactory",
+    description: "Failed safety audit",
+    icon: ShieldX,
+    badge: "Block",
+  },
 ];
 
 const AUTHORITY_STATUS_OPTIONS: FancySelectOption[] = [
-  { value: "active", label: "Active", description: "Authority is in good standing", icon: BadgeCheck, badge: "Active" },
+  {
+    value: "active",
+    label: "Active",
+    description: "Authority is in good standing",
+    icon: BadgeCheck,
+    badge: "Active",
+  },
   { value: "pending", label: "Pending", description: "Application in progress", icon: Clock },
   { value: "inactive", label: "Inactive", description: "Authority has lapsed", icon: ShieldX },
-  { value: "revoked", label: "Revoked", description: "Authority has been revoked", icon: ShieldX, badge: "Block" },
+  {
+    value: "revoked",
+    label: "Revoked",
+    description: "Authority has been revoked",
+    icon: ShieldX,
+    badge: "Block",
+  },
 ];
 
 const STATE_OPTIONS: FancySelectOption[] = [
-  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
-  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
-  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+  "AL",
+  "AK",
+  "AZ",
+  "AR",
+  "CA",
+  "CO",
+  "CT",
+  "DE",
+  "FL",
+  "GA",
+  "HI",
+  "ID",
+  "IL",
+  "IN",
+  "IA",
+  "KS",
+  "KY",
+  "LA",
+  "ME",
+  "MD",
+  "MA",
+  "MI",
+  "MN",
+  "MS",
+  "MO",
+  "MT",
+  "NE",
+  "NV",
+  "NH",
+  "NJ",
+  "NM",
+  "NY",
+  "NC",
+  "ND",
+  "OH",
+  "OK",
+  "OR",
+  "PA",
+  "RI",
+  "SC",
+  "SD",
+  "TN",
+  "TX",
+  "UT",
+  "VT",
+  "VA",
+  "WA",
+  "WV",
+  "WI",
+  "WY",
 ].map((s) => ({ value: s, label: s, description: `US state · ${s}` }));
 
 const EQUIPMENT_FEATURE_OPTIONS = [
-  { id: "reeferUnitAvailable", label: "Reefer Unit", icon: Snowflake, hint: "Active refrigeration unit" },
+  {
+    id: "reeferUnitAvailable",
+    label: "Reefer Unit",
+    icon: Snowflake,
+    hint: "Active refrigeration unit",
+  },
   { id: "liftgateAvailable", label: "Liftgate", icon: ArrowRight, hint: "Hydraulic lift platform" },
   { id: "palletJackAvailable", label: "Pallet Jack", icon: Package, hint: "Onboard pallet jack" },
   { id: "strapsAvailable", label: "Straps", icon: Shield, hint: "Cargo securement straps" },
@@ -487,7 +594,12 @@ const EQUIPMENT_FEATURE_OPTIONS = [
   { id: "chainsAvailable", label: "Chains", icon: Shield, hint: "Binders and chains" },
   { id: "eTrackAvailable", label: "E-Track", icon: Shield, hint: "E-track tie-down system" },
   { id: "airRide", label: "Air Ride", icon: Sparkles, hint: "Air-ride suspension" },
-  { id: "foodGradeTrailer", label: "Food Grade", icon: BadgeCheck, hint: "Food-grade certified trailer" },
+  {
+    id: "foodGradeTrailer",
+    label: "Food Grade",
+    icon: BadgeCheck,
+    hint: "Food-grade certified trailer",
+  },
 ] as const;
 
 const SERVICE_FEATURE_OPTIONS = [
@@ -533,8 +645,12 @@ export function recordToTruckDraft(r: TruckRecord): TruckDraft {
     ...INITIAL,
     ...stripUndefined(r as unknown as Record<string, unknown>),
     truckBoardId: r.truckBoardId,
-    preferredStates: Array.isArray(r.preferredStates) ? [...r.preferredStates] : INITIAL.preferredStates,
-    excludedStates: Array.isArray(r.excludedStates) ? [...r.excludedStates] : INITIAL.excludedStates,
+    preferredStates: Array.isArray(r.preferredStates)
+      ? [...r.preferredStates]
+      : INITIAL.preferredStates,
+    excludedStates: Array.isArray(r.excludedStates)
+      ? [...r.excludedStates]
+      : INITIAL.excludedStates,
     documents: Array.isArray(r.documents) ? [...r.documents] : INITIAL.documents,
   };
 }
@@ -762,9 +878,9 @@ export function CreateTruckDialog({
           }
         }}
       >
-        <DialogTitle className="sr-only">Post Truck</DialogTitle>
+        <DialogTitle className="sr-only">{t("Post Truck")}</DialogTitle>
         <DialogDescription className="sr-only">
-          Post a truck with equipment, location, availability, and pricing details.
+          {t("Post a truck with equipment, location, availability, and pricing details.")}
         </DialogDescription>
         <div className="grid h-[88vh] grid-cols-1 lg:grid-cols-[280px_1fr]">
           {/* Stepper sidebar */}
@@ -775,7 +891,7 @@ export function CreateTruckDialog({
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold tracking-tight text-sidebar-accent-foreground">
-                  Post Truck
+                  {t("Post Truck")}
                 </div>
                 <div className="truncate text-xs text-sidebar-foreground/70">
                   {draft.truckBoardId} ·{" "}
@@ -784,7 +900,7 @@ export function CreateTruckDialog({
               </div>
             </div>
             <div className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/60">
-              Progress
+              {t("Progress")}
             </div>
             <div className="px-5">
               <div className="h-1 w-full overflow-hidden rounded-full bg-sidebar-accent/40">
@@ -844,7 +960,7 @@ export function CreateTruckDialog({
               })}
             </nav>
             <div className="border-t border-sidebar-border/60 px-5 py-3 text-xs text-sidebar-foreground/70">
-              Close or Cancel saves to Drafts.
+              {t("Close or Cancel saves to Drafts.")}
             </div>
           </aside>
 
@@ -867,7 +983,7 @@ export function CreateTruckDialog({
                 type="button"
                 onClick={closeWithDraftSave}
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                aria-label="Close and save draft"
+                aria-label={t("Close and save draft")}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -925,9 +1041,7 @@ export function CreateTruckDialog({
               )}
               {step === 6 && <StepRate draft={draft} update={update} />}
               {step === 7 && <StepCompliance draft={draft} update={update} />}
-              {step === 8 && (
-                <StepReview draft={draft} stepErrors={stepErrors} onJump={setStep} />
-              )}
+              {step === 8 && <StepReview draft={draft} stepErrors={stepErrors} onJump={setStep} />}
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-border/70 bg-muted/30 px-6 py-3">
@@ -948,7 +1062,7 @@ export function CreateTruckDialog({
                 ) : (
                   <span className="inline-flex items-center gap-1.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                    Cancel saves to Drafts
+                    {t("Cancel saves to Drafts")}
                   </span>
                 )}
               </div>
@@ -960,11 +1074,11 @@ export function CreateTruckDialog({
                   onClick={closeWithDraftSave}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </Button>
                 {step > 1 && (
                   <Button type="button" variant="outline" size="sm" onClick={goBack}>
-                    <ArrowLeft className="h-4 w-4" /> Back
+                    <ArrowLeft className="h-4 w-4" /> {t("Back")}
                   </Button>
                 )}
                 {step < 8 ? (
@@ -974,7 +1088,7 @@ export function CreateTruckDialog({
                     onClick={goNext}
                     className="bg-gradient-to-r from-primary to-info text-primary-foreground shadow-sm shadow-primary/30 hover:opacity-95"
                   >
-                    Continue <ArrowRight className="h-4 w-4" />
+                    {t("Continue")} <ArrowRight className="h-4 w-4" />
                   </Button>
                 ) : (
                   <Button
@@ -986,11 +1100,11 @@ export function CreateTruckDialog({
                   >
                     {submitting ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" /> Posting…
+                        <Loader2 className="h-4 w-4 animate-spin" /> {t("Posting…")}
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="h-4 w-4" /> Post Truck
+                        <CheckCircle2 className="h-4 w-4" /> {t("Post Truck")}
                       </>
                     )}
                   </Button>
@@ -1058,7 +1172,9 @@ function FieldShell({
       </div>
       {children}
       {error && (
-        <div className="text-[11px] font-medium text-destructive">This field is required.</div>
+        <div className="text-[11px] font-medium text-destructive">
+          {t("This field is required.")}
+        </div>
       )}
     </div>
   );
@@ -1122,9 +1238,7 @@ function ToggleTile({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium text-foreground">{label}</span>
-        {description && (
-          <span className="block text-xs text-muted-foreground">{description}</span>
-        )}
+        {description && <span className="block text-xs text-muted-foreground">{description}</span>}
       </span>
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
@@ -1227,9 +1341,16 @@ export function StepAvailability({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Posting identity" hint="Board reference and status" icon={Hash} />
+        <SectionTitle
+          title={t("Posting identity")}
+          hint={t("Board reference and status")}
+          icon={Hash}
+        />
         <GridSection cols={3}>
-          <FieldShell label="Truck Board ID" hint={immutableTruckBoardId ? "Primary key · cannot change" : "Auto-generated"}>
+          <FieldShell
+            label={t("Truck Board ID")}
+            hint={immutableTruckBoardId ? "Primary key · cannot change" : "Auto-generated"}
+          >
             <Input
               value={draft.truckBoardId}
               onChange={(e) => update("truckBoardId", e.target.value)}
@@ -1239,40 +1360,44 @@ export function StepAvailability({
               className={immutableTruckBoardId ? "cursor-not-allowed bg-muted/60" : undefined}
             />
           </FieldShell>
-          <FieldShell label="Posting Status" required error={isErr("postingStatus")}>
+          <FieldShell label={t("Posting Status")} required error={isErr("postingStatus")}>
             <FancySelect
               value={draft.postingStatus}
               onChange={(v) => update("postingStatus", v)}
               options={POSTING_STATUS_OPTIONS}
               triggerIcon={Activity}
               error={isErr("postingStatus")}
-              placeholder="Set status"
+              placeholder={t("Set status")}
             />
           </FieldShell>
-          <FieldShell label="Capacity Status">
+          <FieldShell label={t("Capacity Status")}>
             <FancySelect
               value={draft.capacityStatus}
               onChange={(v) => update("capacityStatus", v)}
               options={CAPACITY_STATUS_OPTIONS}
               triggerIcon={Package}
-              placeholder="How much is open"
+              placeholder={t("How much is open")}
             />
           </FieldShell>
         </GridSection>
       </Card>
 
       <Card>
-        <SectionTitle title="Availability window" hint="When the truck is ready" icon={Calendar} />
+        <SectionTitle
+          title={t("Availability window")}
+          hint={t("When the truck is ready")}
+          icon={Calendar}
+        />
         <ToggleTile
-          label="Available right now"
-          description="Truck is empty and ready to dispatch immediately"
+          label={t("Available right now")}
+          description={t("Truck is empty and ready to dispatch immediately")}
           checked={draft.availableNow}
           onChange={(v) => update("availableNow", v)}
           icon={Zap}
         />
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <FieldShell
-            label="Available Date"
+            label={t("Available Date")}
             required={!draft.availableNow}
             error={isErr("availableDate")}
           >
@@ -1285,7 +1410,7 @@ export function StepAvailability({
             />
           </FieldShell>
           <FieldShell
-            label="Available Time"
+            label={t("Available Time")}
             required={!draft.availableNow}
             error={isErr("availableTime")}
           >
@@ -1297,32 +1422,32 @@ export function StepAvailability({
               className={cn(isErr("availableTime") && "border-destructive/60")}
             />
           </FieldShell>
-          <FieldShell label="Available Until">
+          <FieldShell label={t("Available Until")}>
             <Input
               type="date"
               value={draft.availableUntilDate}
               onChange={(e) => update("availableUntilDate", e.target.value)}
-              placeholder="Optional"
+              placeholder={t("Optional")}
             />
           </FieldShell>
-          <FieldShell label="Expiration Date" hint="Auto-remove">
+          <FieldShell label={t("Expiration Date")} hint={t("Auto-remove")}>
             <Input
               type="date"
               value={draft.expirationDate}
               onChange={(e) => update("expirationDate", e.target.value)}
             />
           </FieldShell>
-          <FieldShell label="Expiration Time">
+          <FieldShell label={t("Expiration Time")}>
             <Input
               type="time"
               value={draft.expirationTime}
               onChange={(e) => update("expirationTime", e.target.value)}
             />
           </FieldShell>
-          <FieldShell label="Appointment Required">
+          <FieldShell label={t("Appointment Required")}>
             <div className="flex h-10 items-center justify-between rounded-lg border border-input bg-card px-3">
               <span className="text-sm text-muted-foreground">
-                Pickup needs appointment scheduling
+                {t("Pickup needs appointment scheduling")}
               </span>
               <Switch
                 checked={draft.appointmentRequired}
@@ -1334,23 +1459,27 @@ export function StepAvailability({
       </Card>
 
       <Card>
-        <SectionTitle title="Pickup window & HOS" hint="Driver hours and timing" icon={Clock} />
+        <SectionTitle
+          title={t("Pickup window & HOS")}
+          hint={t("Driver hours and timing")}
+          icon={Clock}
+        />
         <GridSection cols={4}>
-          <FieldShell label="Earliest Pickup">
+          <FieldShell label={t("Earliest Pickup")}>
             <Input
               type="time"
               value={draft.earliestPickupTime}
               onChange={(e) => update("earliestPickupTime", e.target.value)}
             />
           </FieldShell>
-          <FieldShell label="Latest Pickup">
+          <FieldShell label={t("Latest Pickup")}>
             <Input
               type="time"
               value={draft.latestPickupTime}
               onChange={(e) => update("latestPickupTime", e.target.value)}
             />
           </FieldShell>
-          <FieldShell label="Remaining Drive Hours" hint="HOS">
+          <FieldShell label={t("Remaining Drive Hours")} hint="HOS">
             <Input
               inputMode="decimal"
               value={draft.remainingDriveHours}
@@ -1358,7 +1487,7 @@ export function StepAvailability({
               placeholder="9.5"
             />
           </FieldShell>
-          <FieldShell label="On-Duty Hours Available">
+          <FieldShell label={t("On-Duty Hours Available")}>
             <Input
               inputMode="decimal"
               value={draft.hoursOfService}
@@ -1389,8 +1518,12 @@ export function StepLocation({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card className="overflow-visible">
-        <SectionTitle title="Current location" hint="Where the truck is sitting" icon={MapPin} />
-        <FieldShell label="Facility / Yard Name">
+        <SectionTitle
+          title={t("Current location")}
+          hint={t("Where the truck is sitting")}
+          icon={MapPin}
+        />
+        <FieldShell label={t("Facility / Yard Name")}>
           <FacilityLocationInput
             value={draft.facilityName}
             onChange={(v) => update("facilityName", v)}
@@ -1401,24 +1534,34 @@ export function StepLocation({
               update("currentState", result.state);
               update("currentZip", result.zip);
             }}
-            placeholder="e.g. TA Truck Stop, Dallas TX"
+            placeholder={t("e.g. TA Truck Stop, Dallas TX")}
           />
         </FieldShell>
         <div className="mt-4 grid gap-4 sm:grid-cols-6">
-          <FieldShell label="City" required error={isErr("currentCity")} className="sm:col-span-3">
+          <FieldShell
+            label={t("City")}
+            required
+            error={isErr("currentCity")}
+            className="sm:col-span-3"
+          >
             <Input
               value={draft.currentCity}
               onChange={(e) => update("currentCity", e.target.value)}
-              placeholder="Atlanta"
+              placeholder={t("Atlanta")}
               className={cn(isErr("currentCity") && "border-destructive/60")}
             />
           </FieldShell>
-          <FieldShell label="State" required error={isErr("currentState")} className="sm:col-span-2">
+          <FieldShell
+            label={t("State")}
+            required
+            error={isErr("currentState")}
+            className="sm:col-span-2"
+          >
             <FancySelect
               value={draft.currentState}
               onChange={(v) => update("currentState", v)}
               options={STATE_OPTIONS}
-              placeholder="State"
+              placeholder={t("State")}
               triggerIcon={MapPin}
               error={isErr("currentState")}
             />
@@ -1432,16 +1575,16 @@ export function StepLocation({
           </FieldShell>
         </div>
         <div className="mt-4">
-          <FieldShell label="Street Address" hint="Optional">
+          <FieldShell label={t("Street Address")} hint={t("Optional")}>
             <Input
               value={draft.currentAddress}
               onChange={(e) => update("currentAddress", e.target.value)}
-              placeholder="1234 Industrial Blvd"
+              placeholder={t("1234 Industrial Blvd")}
             />
           </FieldShell>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <FieldShell label="Country">
+          <FieldShell label={t("Country")}>
             <FancySelect
               value={draft.currentCountry}
               onChange={(v) => update("currentCountry", v)}
@@ -1453,7 +1596,7 @@ export function StepLocation({
               triggerIcon={Compass}
             />
           </FieldShell>
-          <FieldShell label="Search Radius" hint="miles">
+          <FieldShell label={t("Search Radius")} hint="miles">
             <Input
               inputMode="numeric"
               value={draft.locationRadius}
@@ -1470,11 +1613,11 @@ export function StepLocation({
             <Navigation className="h-4 w-4" />
           </span>
           <div className="text-sm">
-            <div className="font-semibold text-foreground">Location auto-update</div>
+            <div className="font-semibold text-foreground">{t("Location auto-update")}</div>
             <div className="mt-0.5 text-xs text-muted-foreground">
-              When tracking is enabled in Step 7, the truck's location updates automatically from
-              the connected ELD / GPS feed. The values above will only be used as a starting
-              position.
+              {t(
+                "When tracking is enabled in Step 7, the truck's location updates automatically from\r\n              the connected ELD / GPS feed. The values above will only be used as a starting\r\n              position.",
+              )}
             </div>
           </div>
         </div>
@@ -1504,46 +1647,46 @@ export function StepEquipment({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Truck & trailer" hint="Equipment basics" icon={Truck} />
+        <SectionTitle title={t("Truck & trailer")} hint={t("Equipment basics")} icon={Truck} />
         <GridSection cols={3}>
-          <FieldShell label="Equipment Type" required error={isErr("equipmentType")}>
+          <FieldShell label={t("Equipment Type")} required error={isErr("equipmentType")}>
             <FancySelect
               value={draft.equipmentType}
               onChange={(v) => update("equipmentType", v)}
               options={EQUIPMENT_OPTIONS}
               triggerIcon={Truck}
               error={isErr("equipmentType")}
-              placeholder="Dry van, reefer..."
+              placeholder={t("Dry van, reefer...")}
             />
           </FieldShell>
-          <FieldShell label="Trailer Type">
+          <FieldShell label={t("Trailer Type")}>
             <FancySelect
               value={draft.trailerType}
               onChange={(v) => update("trailerType", v)}
               options={TRAILER_OPTIONS}
               triggerIcon={Container}
-              placeholder="Trailer dimensions"
+              placeholder={t("Trailer dimensions")}
             />
           </FieldShell>
-          <FieldShell label="Truck Type">
+          <FieldShell label={t("Truck Type")}>
             <FancySelect
               value={draft.truckType}
               onChange={(v) => update("truckType", v)}
               options={TRUCK_TYPE_OPTIONS}
               triggerIcon={User}
-              placeholder="Solo / Team / Owner-op"
+              placeholder={t("Solo / Team / Owner-op")}
             />
           </FieldShell>
         </GridSection>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <FieldShell label="Truck Number">
+          <FieldShell label={t("Truck Number")}>
             <Input
               value={draft.truckNumber}
               onChange={(e) => update("truckNumber", e.target.value)}
-              placeholder="Unit 4421"
+              placeholder={t("Unit 4421")}
             />
           </FieldShell>
-          <FieldShell label="Trailer Number">
+          <FieldShell label={t("Trailer Number")}>
             <Input
               value={draft.trailerNumber}
               onChange={(e) => update("trailerNumber", e.target.value)}
@@ -1554,10 +1697,14 @@ export function StepEquipment({
       </Card>
 
       <Card>
-        <SectionTitle title="Dimensions & capacity" hint="Maximum legal payload" icon={Weight} />
+        <SectionTitle
+          title={t("Dimensions & capacity")}
+          hint={t("Maximum legal payload")}
+          icon={Weight}
+        />
         <div className="grid gap-4 sm:grid-cols-4">
           <FieldShell
-            label="Max Weight Capacity"
+            label={t("Max Weight Capacity")}
             required
             error={isErr("maxWeightCapacity")}
             hint="lbs"
@@ -1570,7 +1717,7 @@ export function StepEquipment({
               className={cn(isErr("maxWeightCapacity") && "border-destructive/60")}
             />
           </FieldShell>
-          <FieldShell label="Length" hint="ft">
+          <FieldShell label={t("Length")} hint="ft">
             <Input
               inputMode="decimal"
               value={draft.equipmentLength}
@@ -1578,7 +1725,7 @@ export function StepEquipment({
               placeholder="53"
             />
           </FieldShell>
-          <FieldShell label="Width" hint="ft">
+          <FieldShell label={t("Width")} hint="ft">
             <Input
               inputMode="decimal"
               value={draft.equipmentWidth}
@@ -1586,7 +1733,7 @@ export function StepEquipment({
               placeholder="8.5"
             />
           </FieldShell>
-          <FieldShell label="Height" hint="ft">
+          <FieldShell label={t("Height")} hint="ft">
             <Input
               inputMode="decimal"
               value={draft.equipmentHeight}
@@ -1596,22 +1743,22 @@ export function StepEquipment({
           </FieldShell>
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <FieldShell label="Door Type">
+          <FieldShell label={t("Door Type")}>
             <FancySelect
               value={draft.doorType}
               onChange={(v) => update("doorType", v)}
               options={DOOR_TYPE_OPTIONS}
-              placeholder="Swing / roll-up"
+              placeholder={t("Swing / roll-up")}
               triggerIcon={Container}
             />
           </FieldShell>
           {isReefer && (
-            <FieldShell label="Temperature Range">
+            <FieldShell label={t("Temperature Range")}>
               <FancySelect
                 value={draft.temperatureRange}
                 onChange={(v) => update("temperatureRange", v)}
                 options={TEMPERATURE_OPTIONS}
-                placeholder="Reefer setting"
+                placeholder={t("Reefer setting")}
                 triggerIcon={Thermometer}
               />
             </FieldShell>
@@ -1621,8 +1768,8 @@ export function StepEquipment({
 
       <Card>
         <SectionTitle
-          title="Equipment features"
-          hint="Onboard tools and amenities"
+          title={t("Equipment features")}
+          hint={t("Onboard tools and amenities")}
           icon={Sparkles}
         />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1633,10 +1780,7 @@ export function StepEquipment({
               icon={f.icon}
               active={Boolean(draft[f.id as keyof TruckDraft])}
               onClick={() =>
-                update(
-                  f.id as keyof TruckDraft,
-                  !draft[f.id as keyof TruckDraft] as never,
-                )
+                update(f.id as keyof TruckDraft, !draft[f.id as keyof TruckDraft] as never)
               }
             />
           ))}
@@ -1645,8 +1789,8 @@ export function StepEquipment({
 
       <Card>
         <SectionTitle
-          title="Service & endorsements"
-          hint="What this truck/driver can do"
+          title={t("Service & endorsements")}
+          hint={t("What this truck/driver can do")}
           icon={BadgeCheck}
         />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1657,10 +1801,7 @@ export function StepEquipment({
               icon={f.icon}
               active={Boolean(draft[f.id as keyof TruckDraft])}
               onClick={() =>
-                update(
-                  f.id as keyof TruckDraft,
-                  !draft[f.id as keyof TruckDraft] as never,
-                )
+                update(f.id as keyof TruckDraft, !draft[f.id as keyof TruckDraft] as never)
               }
             />
           ))}
@@ -1693,67 +1834,71 @@ export function StepDestination({
     <div className="mx-auto max-w-4xl space-y-6">
       <Card className={cn(isErr && "border-destructive/40 bg-destructive/5")}>
         <SectionTitle
-          title="Preferred destination"
-          hint="At least one preference required"
+          title={t("Preferred destination")}
+          hint={t("At least one preference required")}
           icon={Compass}
         />
         <div className="grid gap-4 sm:grid-cols-3">
-          <FieldShell label="Destination City">
+          <FieldShell label={t("Destination City")}>
             <Input
               value={draft.preferredDestinationCity}
               onChange={(e) => update("preferredDestinationCity", e.target.value)}
-              placeholder="Dallas"
+              placeholder={t("Dallas")}
             />
           </FieldShell>
-          <FieldShell label="Destination State">
+          <FieldShell label={t("Destination State")}>
             <FancySelect
               value={draft.preferredDestinationState}
               onChange={(v) => update("preferredDestinationState", v)}
               options={STATE_OPTIONS}
-              placeholder="State"
+              placeholder={t("State")}
               triggerIcon={MapPin}
             />
           </FieldShell>
-          <FieldShell label="Region / Area">
+          <FieldShell label={t("Region / Area")}>
             <FancySelect
               value={draft.preferredDestinationRegion}
               onChange={(v) => update("preferredDestinationRegion", v)}
               options={REGION_OPTIONS}
-              placeholder="Northeast, Midwest..."
+              placeholder={t("Northeast, Midwest...")}
               triggerIcon={Compass}
             />
           </FieldShell>
         </div>
         <div className="mt-4 grid gap-4">
-          <FieldShell label="Preferred Lanes" hint="comma-separated">
+          <FieldShell label={t("Preferred Lanes")} hint="comma-separated">
             <Textarea
               value={draft.preferredLanes}
               onChange={(e) => update("preferredLanes", e.target.value)}
-              placeholder="Atlanta, GA → Dallas, TX | Chicago, IL → Indianapolis, IN"
+              placeholder={t("Atlanta, GA → Dallas, TX | Chicago, IL → Indianapolis, IN")}
               className="min-h-[70px]"
             />
           </FieldShell>
-          <FieldShell label="Avoided Lanes" hint="comma-separated">
+          <FieldShell label={t("Avoided Lanes")} hint="comma-separated">
             <Textarea
               value={draft.avoidedLanes}
               onChange={(e) => update("avoidedLanes", e.target.value)}
-              placeholder="NYC metro, San Francisco bay area..."
+              placeholder={t("NYC metro, San Francisco bay area...")}
               className="min-h-[60px]"
             />
           </FieldShell>
         </div>
         {isErr && (
           <div className="mt-3 flex items-center gap-2 text-xs font-medium text-destructive">
-            <AlertTriangle className="h-3.5 w-3.5" /> Provide a preferred city, state, region, or
-            lane.
+            <AlertTriangle className="h-3.5 w-3.5" />{" "}
+            {t("Provide a preferred city, state, region, or\r\n            lane.")}
           </div>
         )}
       </Card>
 
       <Card>
-        <SectionTitle title="Trip distance" hint="Filter inbound matches" icon={RouteIcon} />
+        <SectionTitle
+          title={t("Trip distance")}
+          hint={t("Filter inbound matches")}
+          icon={RouteIcon}
+        />
         <GridSection cols={3}>
-          <FieldShell label="Willing Deadhead" hint="miles">
+          <FieldShell label={t("Willing Deadhead")} hint="miles">
             <Input
               inputMode="numeric"
               value={draft.willingDeadheadMiles}
@@ -1761,7 +1906,7 @@ export function StepDestination({
               placeholder="150"
             />
           </FieldShell>
-          <FieldShell label="Minimum Trip Miles">
+          <FieldShell label={t("Minimum Trip Miles")}>
             <Input
               inputMode="numeric"
               value={draft.minimumTripMiles}
@@ -1769,7 +1914,7 @@ export function StepDestination({
               placeholder="200"
             />
           </FieldShell>
-          <FieldShell label="Maximum Trip Miles">
+          <FieldShell label={t("Maximum Trip Miles")}>
             <Input
               inputMode="numeric"
               value={draft.maximumTripMiles}
@@ -1782,8 +1927,8 @@ export function StepDestination({
 
       <Card>
         <SectionTitle
-          title="State preferences"
-          hint="Tap to toggle · gold = preferred · red = excluded"
+          title={t("State preferences")}
+          hint={t("Tap to toggle · gold = preferred · red = excluded")}
           icon={Flag}
         />
         <div className="flex flex-wrap gap-1.5">
@@ -1829,7 +1974,9 @@ export function StepDestination({
             <span className="h-2 w-2 rounded-full bg-destructive" /> Excluded:{" "}
             {draft.excludedStates.length}
           </span>
-          <span className="text-[10px] uppercase tracking-wider">Tap once = prefer · twice = exclude · thrice = clear</span>
+          <span className="text-[10px] uppercase tracking-wider">
+            {t("Tap once = prefer · twice = exclude · thrice = clear")}
+          </span>
         </div>
       </Card>
     </div>
@@ -1853,62 +2000,62 @@ export function StepCarrier({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Carrier" hint="Who owns the truck" icon={Truck} />
+        <SectionTitle title={t("Carrier")} hint={t("Who owns the truck")} icon={Truck} />
         <GridSection cols={3}>
-          <FieldShell label="Carrier Name" required error={isErr("carrierName")}>
+          <FieldShell label={t("Carrier Name")} required error={isErr("carrierName")}>
             <Input
               value={draft.carrierName}
               onChange={(e) => update("carrierName", e.target.value)}
-              placeholder="Bluepeak Freight LLC"
+              placeholder={t("Bluepeak Freight LLC")}
               className={cn(isErr("carrierName") && "border-destructive/60")}
             />
           </FieldShell>
           <FieldShell
-            label="MC Number"
+            label={t("MC Number")}
             required={!draft.carrierDotNumber}
             error={isErr("carrierAuthority")}
-            hint="or DOT #"
+            hint={t("or DOT #")}
           >
             <Input
               value={draft.carrierMcNumber}
               onChange={(e) => update("carrierMcNumber", e.target.value)}
-              placeholder="MC 887412"
+              placeholder={t("MC 887412")}
               className={cn(isErr("carrierAuthority") && "border-destructive/60")}
             />
           </FieldShell>
           <FieldShell
-            label="DOT Number"
+            label={t("DOT Number")}
             required={!draft.carrierMcNumber}
             error={isErr("carrierAuthority")}
-            hint="or MC #"
+            hint={t("or MC #")}
           >
             <Input
               value={draft.carrierDotNumber}
               onChange={(e) => update("carrierDotNumber", e.target.value)}
-              placeholder="DOT 2456789"
+              placeholder={t("DOT 2456789")}
               className={cn(isErr("carrierAuthority") && "border-destructive/60")}
             />
           </FieldShell>
         </GridSection>
         {isErr("carrierAuthority") && (
           <div className="mt-3 flex items-center gap-2 text-xs font-medium text-destructive">
-            <AlertTriangle className="h-3.5 w-3.5" /> Provide either an MC or DOT number.
+            <AlertTriangle className="h-3.5 w-3.5" /> {t("Provide either an MC or DOT number.")}
           </div>
         )}
       </Card>
 
       <Card>
-        <SectionTitle title="Primary contact" hint="Booking calls go here" icon={Phone} />
+        <SectionTitle title={t("Primary contact")} hint={t("Booking calls go here")} icon={Phone} />
         <GridSection cols={3}>
-          <FieldShell label="Contact Name" required error={isErr("contactName")}>
+          <FieldShell label={t("Contact Name")} required error={isErr("contactName")}>
             <Input
               value={draft.contactName}
               onChange={(e) => update("contactName", e.target.value)}
-              placeholder="Full name"
+              placeholder={t("Full name")}
               className={cn(isErr("contactName") && "border-destructive/60")}
             />
           </FieldShell>
-          <FieldShell label="Contact Phone" required error={isErr("contactPhone")}>
+          <FieldShell label={t("Contact Phone")} required error={isErr("contactPhone")}>
             <Input
               value={draft.contactPhone}
               onChange={(e) => update("contactPhone", e.target.value)}
@@ -1916,7 +2063,7 @@ export function StepCarrier({
               className={cn(isErr("contactPhone") && "border-destructive/60")}
             />
           </FieldShell>
-          <FieldShell label="Contact Email">
+          <FieldShell label={t("Contact Email")}>
             <Input
               type="email"
               value={draft.contactEmail}
@@ -1928,16 +2075,16 @@ export function StepCarrier({
       </Card>
 
       <Card>
-        <SectionTitle title="Driver" hint="Behind the wheel" icon={User} />
+        <SectionTitle title={t("Driver")} hint={t("Behind the wheel")} icon={User} />
         <GridSection cols={2}>
-          <FieldShell label="Driver Name">
+          <FieldShell label={t("Driver Name")}>
             <Input
               value={draft.driverName}
               onChange={(e) => update("driverName", e.target.value)}
-              placeholder="Full name"
+              placeholder={t("Full name")}
             />
           </FieldShell>
-          <FieldShell label="Driver Phone">
+          <FieldShell label={t("Driver Phone")}>
             <Input
               value={draft.driverPhone}
               onChange={(e) => update("driverPhone", e.target.value)}
@@ -1948,23 +2095,23 @@ export function StepCarrier({
       </Card>
 
       <Card>
-        <SectionTitle title="Dispatcher" hint="Operations contact" icon={Users} />
+        <SectionTitle title={t("Dispatcher")} hint={t("Operations contact")} icon={Users} />
         <GridSection cols={3}>
-          <FieldShell label="Dispatcher Name">
+          <FieldShell label={t("Dispatcher Name")}>
             <Input
               value={draft.dispatcherName}
               onChange={(e) => update("dispatcherName", e.target.value)}
-              placeholder="Full name"
+              placeholder={t("Full name")}
             />
           </FieldShell>
-          <FieldShell label="Dispatcher Phone">
+          <FieldShell label={t("Dispatcher Phone")}>
             <Input
               value={draft.dispatcherPhone}
               onChange={(e) => update("dispatcherPhone", e.target.value)}
               placeholder="(555) 555-5555"
             />
           </FieldShell>
-          <FieldShell label="Dispatcher Email">
+          <FieldShell label={t("Dispatcher Email")}>
             <Input
               type="email"
               value={draft.dispatcherEmail}
@@ -1993,29 +2140,33 @@ export function StepRate({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Rate type" hint="How you want to be paid" icon={DollarSign} />
-        <FieldShell label="Rate Type">
+        <SectionTitle
+          title={t("Rate type")}
+          hint={t("How you want to be paid")}
+          icon={DollarSign}
+        />
+        <FieldShell label={t("Rate Type")}>
           <FancySelect
             value={draft.rateType}
             onChange={(v) => update("rateType", v)}
             options={RATE_TYPE_OPTIONS}
             triggerIcon={DollarSign}
-            placeholder="Flat, per mile..."
+            placeholder={t("Flat, per mile...")}
           />
         </FieldShell>
       </Card>
 
       <Card>
-        <SectionTitle title="Flat rate targets" hint="Total trip price" icon={Wallet} />
+        <SectionTitle title={t("Flat rate targets")} hint={t("Total trip price")} icon={Wallet} />
         <GridSection cols={2}>
-          <FieldShell label="Desired Rate (Total)">
+          <FieldShell label={t("Desired Rate (Total)")}>
             <MoneyInput
               value={draft.desiredRate}
               onChange={(v) => update("desiredRate", v)}
               placeholder="3,200"
             />
           </FieldShell>
-          <FieldShell label="Minimum Rate (Total)">
+          <FieldShell label={t("Minimum Rate (Total)")}>
             <MoneyInput
               value={draft.minimumRate}
               onChange={(v) => update("minimumRate", v)}
@@ -2026,9 +2177,13 @@ export function StepRate({
       </Card>
 
       <Card>
-        <SectionTitle title="Per mile" hint="Used for rate per mile lanes" icon={RouteIcon} />
+        <SectionTitle
+          title={t("Per mile")}
+          hint={t("Used for rate per mile lanes")}
+          icon={RouteIcon}
+        />
         <GridSection cols={2}>
-          <FieldShell label="Desired $/Mile">
+          <FieldShell label={t("Desired $/Mile")}>
             <MoneyInput
               value={draft.desiredRatePerMile}
               onChange={(v) => update("desiredRatePerMile", v)}
@@ -2036,7 +2191,7 @@ export function StepRate({
               suffix="$/MI"
             />
           </FieldShell>
-          <FieldShell label="Minimum $/Mile">
+          <FieldShell label={t("Minimum $/Mile")}>
             <MoneyInput
               value={draft.minimumRatePerMile}
               onChange={(v) => update("minimumRatePerMile", v)}
@@ -2048,38 +2203,42 @@ export function StepRate({
       </Card>
 
       <Card>
-        <SectionTitle title="Terms & extras" hint="Surcharges and payment" icon={Wallet} />
+        <SectionTitle
+          title={t("Terms & extras")}
+          hint={t("Surcharges and payment")}
+          icon={Wallet}
+        />
         <GridSection cols={2}>
-          <FieldShell label="Fuel Surcharge">
+          <FieldShell label={t("Fuel Surcharge")}>
             <FancySelect
               value={draft.fuelSurchargePreference}
               onChange={(v) => update("fuelSurchargePreference", v)}
               options={FUEL_SURCHARGE_OPTIONS}
               triggerIcon={DollarSign}
-              placeholder="Included or separate"
+              placeholder={t("Included or separate")}
             />
           </FieldShell>
-          <FieldShell label="Payment Terms">
+          <FieldShell label={t("Payment Terms")}>
             <FancySelect
               value={draft.paymentTerms}
               onChange={(v) => update("paymentTerms", v)}
               options={PAYMENT_TERMS_OPTIONS}
               triggerIcon={DollarSign}
-              placeholder="Choose terms"
+              placeholder={t("Choose terms")}
             />
           </FieldShell>
         </GridSection>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <ToggleTile
-            label="QuickPay Accepted"
-            description="Willing to take 2-3 day pay at a fee"
+            label={t("QuickPay Accepted")}
+            description={t("Willing to take 2-3 day pay at a fee")}
             checked={draft.quickPayAccepted}
             onChange={(v) => update("quickPayAccepted", v)}
             icon={Zap}
           />
           <ToggleTile
-            label="Rate Negotiable"
-            description="Open to negotiation around your desired rate"
+            label={t("Rate Negotiable")}
+            description={t("Open to negotiation around your desired rate")}
             checked={draft.negotiableRate}
             onChange={(v) => update("negotiableRate", v)}
             icon={DollarSign}
@@ -2092,10 +2251,10 @@ export function StepRate({
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Negotiation Spread
+                {t("Negotiation Spread")}
               </div>
               <div className="mt-1 text-xs text-muted-foreground">
-                Difference between your desired rate and your floor
+                {t("Difference between your desired rate and your floor")}
               </div>
             </div>
             <span
@@ -2114,7 +2273,7 @@ export function StepRate({
           <div className="mt-4 grid grid-cols-3 divide-x divide-border/70 overflow-hidden rounded-lg border border-border/70 bg-card">
             <div className="px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Desired
+                {t("Desired")}
               </div>
               <div className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
                 ${desired.toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -2122,7 +2281,7 @@ export function StepRate({
             </div>
             <div className="px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Minimum
+                {t("Minimum")}
               </div>
               <div className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
                 ${min.toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -2130,7 +2289,7 @@ export function StepRate({
             </div>
             <div className="px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Walk-away gap
+                {t("Walk-away gap")}
               </div>
               <div className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">
                 ${(desired - min).toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -2161,63 +2320,67 @@ export function StepCompliance({
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Card>
-        <SectionTitle title="Verifications" hint="Pre-booking compliance" icon={ShieldCheck} />
+        <SectionTitle
+          title={t("Verifications")}
+          hint={t("Pre-booking compliance")}
+          icon={ShieldCheck}
+        />
         <div className="grid gap-3 sm:grid-cols-2">
           <ToggleTile
-            label="Insurance Verified"
-            description="Cert of insurance on file & valid"
+            label={t("Insurance Verified")}
+            description={t("Cert of insurance on file & valid")}
             checked={draft.insuranceVerified}
             onChange={(v) => update("insuranceVerified", v)}
             icon={ShieldCheck}
           />
           <ToggleTile
-            label="Authority Verified"
-            description="MC/DOT confirmed active with FMCSA"
+            label={t("Authority Verified")}
+            description={t("MC/DOT confirmed active with FMCSA")}
             checked={draft.authorityVerified}
             onChange={(v) => update("authorityVerified", v)}
             icon={BadgeCheck}
           />
         </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <FieldShell label="Safety Rating">
+          <FieldShell label={t("Safety Rating")}>
             <FancySelect
               value={draft.safetyRating}
               onChange={(v) => update("safetyRating", v)}
               options={SAFETY_RATING_OPTIONS}
               triggerIcon={ShieldCheck}
-              placeholder="FMCSA rating"
+              placeholder={t("FMCSA rating")}
             />
           </FieldShell>
-          <FieldShell label="Authority Status">
+          <FieldShell label={t("Authority Status")}>
             <FancySelect
               value={draft.operatingAuthorityStatus}
               onChange={(v) => update("operatingAuthorityStatus", v)}
               options={AUTHORITY_STATUS_OPTIONS}
               triggerIcon={BadgeCheck}
-              placeholder="Operating authority"
+              placeholder={t("Operating authority")}
             />
           </FieldShell>
         </div>
       </Card>
 
       <Card>
-        <SectionTitle title="Insurance coverage" hint="Liability amounts" icon={Shield} />
+        <SectionTitle title={t("Insurance coverage")} hint={t("Liability amounts")} icon={Shield} />
         <GridSection cols={3}>
-          <FieldShell label="Cargo Insurance">
+          <FieldShell label={t("Cargo Insurance")}>
             <MoneyInput
               value={draft.cargoInsuranceAmount}
               onChange={(v) => update("cargoInsuranceAmount", v)}
               placeholder="100,000"
             />
           </FieldShell>
-          <FieldShell label="Auto Liability">
+          <FieldShell label={t("Auto Liability")}>
             <MoneyInput
               value={draft.autoLiabilityAmount}
               onChange={(v) => update("autoLiabilityAmount", v)}
               placeholder="1,000,000"
             />
           </FieldShell>
-          <FieldShell label="Insurance Expires">
+          <FieldShell label={t("Insurance Expires")}>
             <Input
               type="date"
               value={draft.insuranceExpirationDate}
@@ -2228,7 +2391,7 @@ export function StepCompliance({
       </Card>
 
       <Card>
-        <SectionTitle title="Documents on file" hint="Tap to attach" icon={Paperclip} />
+        <SectionTitle title={t("Documents on file")} hint={t("Tap to attach")} icon={Paperclip} />
         <div className="grid gap-2 sm:grid-cols-2">
           {DOCUMENT_OPTIONS.map((d) => {
             const Icon = d.icon;
@@ -2277,31 +2440,31 @@ export function StepCompliance({
           <div className="flex items-center gap-3 text-sm">
             <Paperclip className="h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">
-              Drop files here or click to upload insurance certs, W-9, packets, photos.
+              {t("Drop files here or click to upload insurance certs, W-9, packets, photos.")}
             </span>
           </div>
           <Button size="sm" variant="outline" type="button">
-            Choose files
+            {t("Choose files")}
           </Button>
         </div>
       </Card>
 
       <Card>
-        <SectionTitle title="Notes" hint="Visibility per audience" icon={FileText} />
+        <SectionTitle title={t("Notes")} hint={t("Visibility per audience")} icon={FileText} />
         <div className="grid gap-4 sm:grid-cols-2">
-          <FieldShell label="Public Notes" hint="Brokers can see">
+          <FieldShell label={t("Public Notes")} hint={t("Brokers can see")}>
             <Textarea
               value={draft.publicNotes}
               onChange={(e) => update("publicNotes", e.target.value)}
-              placeholder="Driver prefers daytime pickups. No NYC."
+              placeholder={t("Driver prefers daytime pickups. No NYC.")}
               className="min-h-[90px]"
             />
           </FieldShell>
-          <FieldShell label="Internal Notes" hint="Ops team only">
+          <FieldShell label={t("Internal Notes")} hint={t("Ops team only")}>
             <Textarea
               value={draft.internalNotes}
               onChange={(e) => update("internalNotes", e.target.value)}
-              placeholder="Driver new to fleet — keep on shorter lanes."
+              placeholder={t("Driver new to fleet — keep on shorter lanes.")}
               className="min-h-[90px]"
             />
           </FieldShell>
@@ -2369,7 +2532,7 @@ export function StepReview({
           </div>
           <div className="text-right">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Desired Rate
+              {t("Desired Rate")}
             </div>
             <div className="text-xl font-semibold tabular-nums text-foreground">
               {desired
@@ -2389,7 +2552,9 @@ export function StepReview({
         <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/8 p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="flex-1">
-            <div className="font-semibold text-destructive">Missing required information</div>
+            <div className="font-semibold text-destructive">
+              {t("Missing required information")}
+            </div>
             <div className="mt-0.5 text-xs text-destructive/90">
               {variant === "edit"
                 ? "The following sections still need required fields before you can save."
@@ -2413,19 +2578,19 @@ export function StepReview({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <SectionTitle title="Availability" icon={Calendar} />
+          <SectionTitle title={t("Availability")} icon={Calendar} />
           <div className="divide-y divide-border/70">
-            <ReviewRow label="Truck Board ID" value={draft.truckBoardId} />
+            <ReviewRow label={t("Truck Board ID")} value={draft.truckBoardId} />
             <ReviewRow
-              label="Posting Status"
+              label={t("Posting Status")}
               value={lookup(POSTING_STATUS_OPTIONS, draft.postingStatus)}
             />
             <ReviewRow
-              label="Capacity"
+              label={t("Capacity")}
               value={lookup(CAPACITY_STATUS_OPTIONS, draft.capacityStatus)}
             />
             <ReviewRow
-              label="Available"
+              label={t("Available")}
               value={
                 draft.availableNow
                   ? "Right now"
@@ -2435,43 +2600,50 @@ export function StepReview({
               }
             />
             <ReviewRow
-              label="HOS Remaining"
-              value={
-                draft.remainingDriveHours && `${draft.remainingDriveHours}h drive`
-              }
+              label={t("HOS Remaining")}
+              value={draft.remainingDriveHours && `${draft.remainingDriveHours}h drive`}
             />
           </div>
         </Card>
 
         <Card>
-          <SectionTitle title="Location & lanes" icon={MapPin} />
+          <SectionTitle title={t("Location & lanes")} icon={MapPin} />
           <div className="divide-y divide-border/70">
-            <ReviewRow label="Origin" value={origin} />
-            <ReviewRow label="Radius" value={draft.locationRadius && `${draft.locationRadius} mi`} />
-            <ReviewRow label="Destination" value={destination} />
+            <ReviewRow label={t("Origin")} value={origin} />
             <ReviewRow
-              label="Region"
+              label={t("Radius")}
+              value={draft.locationRadius && `${draft.locationRadius} mi`}
+            />
+            <ReviewRow label={t("Destination")} value={destination} />
+            <ReviewRow
+              label={t("Region")}
               value={lookup(REGION_OPTIONS, draft.preferredDestinationRegion)}
             />
             <ReviewRow
-              label="Deadhead OK"
+              label={t("Deadhead OK")}
               value={draft.willingDeadheadMiles && `${draft.willingDeadheadMiles} mi`}
             />
           </div>
         </Card>
 
         <Card>
-          <SectionTitle title="Equipment" icon={Truck} />
+          <SectionTitle title={t("Equipment")} icon={Truck} />
           <div className="divide-y divide-border/70">
-            <ReviewRow label="Equipment" value={lookup(EQUIPMENT_OPTIONS, draft.equipmentType)} />
-            <ReviewRow label="Trailer" value={lookup(TRAILER_OPTIONS, draft.trailerType)} />
-            <ReviewRow label="Truck Type" value={lookup(TRUCK_TYPE_OPTIONS, draft.truckType)} />
             <ReviewRow
-              label="Capacity"
+              label={t("Equipment")}
+              value={lookup(EQUIPMENT_OPTIONS, draft.equipmentType)}
+            />
+            <ReviewRow label={t("Trailer")} value={lookup(TRAILER_OPTIONS, draft.trailerType)} />
+            <ReviewRow
+              label={t("Truck Type")}
+              value={lookup(TRUCK_TYPE_OPTIONS, draft.truckType)}
+            />
+            <ReviewRow
+              label={t("Capacity")}
               value={draft.maxWeightCapacity && `${draft.maxWeightCapacity} lbs`}
             />
             <ReviewRow
-              label="Dimensions"
+              label={t("Dimensions")}
               value={
                 draft.equipmentLength &&
                 `${draft.equipmentLength}' × ${draft.equipmentWidth || "?"}' × ${
@@ -2480,7 +2652,7 @@ export function StepReview({
               }
             />
             <ReviewRow
-              label="Features"
+              label={t("Features")}
               value={
                 [
                   draft.teamDriverAvailable && "Team",
@@ -2498,37 +2670,40 @@ export function StepReview({
         </Card>
 
         <Card>
-          <SectionTitle title="Carrier & contact" icon={Users} />
+          <SectionTitle title={t("Carrier & contact")} icon={Users} />
           <div className="divide-y divide-border/70">
-            <ReviewRow label="Carrier" value={draft.carrierName} />
+            <ReviewRow label={t("Carrier")} value={draft.carrierName} />
             <ReviewRow
-              label="Authority"
+              label={t("Authority")}
               value={
-                [draft.carrierMcNumber && `MC ${draft.carrierMcNumber}`, draft.carrierDotNumber && `DOT ${draft.carrierDotNumber}`]
+                [
+                  draft.carrierMcNumber && `MC ${draft.carrierMcNumber}`,
+                  draft.carrierDotNumber && `DOT ${draft.carrierDotNumber}`,
+                ]
                   .filter(Boolean)
                   .join(" · ") || ""
               }
             />
-            <ReviewRow label="Contact" value={draft.contactName} />
-            <ReviewRow label="Phone" value={draft.contactPhone} />
-            <ReviewRow label="Driver" value={draft.driverName} />
-            <ReviewRow label="Dispatcher" value={draft.dispatcherName} />
+            <ReviewRow label={t("Contact")} value={draft.contactName} />
+            <ReviewRow label={t("Phone")} value={draft.contactPhone} />
+            <ReviewRow label={t("Driver")} value={draft.driverName} />
+            <ReviewRow label={t("Dispatcher")} value={draft.dispatcherName} />
           </div>
         </Card>
 
         <Card>
-          <SectionTitle title="Rate" icon={DollarSign} />
+          <SectionTitle title={t("Rate")} icon={DollarSign} />
           <div className="divide-y divide-border/70">
-            <ReviewRow label="Rate Type" value={lookup(RATE_TYPE_OPTIONS, draft.rateType)} />
+            <ReviewRow label={t("Rate Type")} value={lookup(RATE_TYPE_OPTIONS, draft.rateType)} />
             <ReviewRow
-              label="Desired"
+              label={t("Desired")}
               value={
                 draft.desiredRate &&
                 `$${desired.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
               }
             />
             <ReviewRow
-              label="Minimum"
+              label={t("Minimum")}
               value={
                 draft.minimumRate &&
                 `$${min.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
@@ -2537,56 +2712,68 @@ export function StepReview({
             <ReviewRow
               label="$/Mile"
               value={
-                draft.desiredRatePerMile && `$${draft.desiredRatePerMile} (min $${draft.minimumRatePerMile || "—"})`
+                draft.desiredRatePerMile &&
+                `$${draft.desiredRatePerMile} (min $${draft.minimumRatePerMile || "—"})`
               }
             />
             <ReviewRow
-              label="Fuel Surcharge"
+              label={t("Fuel Surcharge")}
               value={lookup(FUEL_SURCHARGE_OPTIONS, draft.fuelSurchargePreference)}
             />
             <ReviewRow
-              label="Payment Terms"
+              label={t("Payment Terms")}
               value={lookup(PAYMENT_TERMS_OPTIONS, draft.paymentTerms)}
             />
           </div>
         </Card>
 
         <Card>
-          <SectionTitle title="Compliance" icon={ShieldCheck} />
+          <SectionTitle title={t("Compliance")} icon={ShieldCheck} />
           <div className="divide-y divide-border/70">
             <ReviewRow
-              label="Insurance"
+              label={t("Insurance")}
               value={draft.insuranceVerified ? "Verified" : "Not verified"}
             />
             <ReviewRow
-              label="Authority"
+              label={t("Authority")}
               value={draft.authorityVerified ? "Verified" : "Not verified"}
             />
             <ReviewRow
-              label="Safety"
+              label={t("Safety")}
               value={lookup(SAFETY_RATING_OPTIONS, draft.safetyRating)}
             />
             <ReviewRow
-              label="Cargo Ins."
+              label={t("Cargo Ins.")}
               value={
                 draft.cargoInsuranceAmount &&
                 `$${toNumber(draft.cargoInsuranceAmount).toLocaleString()}`
               }
             />
             <ReviewRow
-              label="Auto Liab."
+              label={t("Auto Liab.")}
               value={
                 draft.autoLiabilityAmount &&
                 `$${toNumber(draft.autoLiabilityAmount).toLocaleString()}`
               }
             />
             <ReviewRow
-              label="Documents"
+              label={t("Documents")}
               value={draft.documents.length ? `${draft.documents.length} attached` : ""}
             />
           </div>
         </Card>
       </div>
+
+      <DatSuggestionsCard
+        lane={{
+          originCity: draft.currentCity,
+          originState: draft.currentState,
+          destinationCity: draft.preferredDestinationCity,
+          destinationState: draft.preferredDestinationState,
+          equipmentType: lookup(EQUIPMENT_OPTIONS, draft.equipmentType) || draft.equipmentType,
+          offeredRate: desired,
+        }}
+      />
     </div>
   );
 }

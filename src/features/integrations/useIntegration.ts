@@ -11,12 +11,14 @@ import { isWorkspaceSettingsConfigured } from "@/lib/dynamodb";
 import {
   INTEGRATIONS_CONFIG_CHANGED,
   readAiConnectionStatus,
+  readResendConnectionStatus,
   getStoredGeocodeApiKey,
   loadIntegrationsConfig,
   recordAiTestResult,
   recordGoogleMapsTestResult,
   testAiIntegration,
   testGoogleMapsIntegration,
+  ensureAiConnectionStatus,
 } from "@/lib/integrations-config";
 
 import { resolveIntegrationState } from "./resolveIntegration";
@@ -31,6 +33,8 @@ import {
 /** Subset of DEFAULT_SETTINGS keys needed to resolve connection status. */
 const INTEGRATION_SETTINGS_DEFAULTS: Record<string, AppSettingValue> = {
   dat_api_key: "",
+  enable_dat_capacity_data: true,
+  enable_dat_rate_data: true,
   twilio_sms_enabled: false,
   sendgrid_email_enabled: false,
   quickbooks_integration_enabled: false,
@@ -71,6 +75,7 @@ export function useIntegrations(settingsOverride?: Record<string, AppSettingValu
     void Promise.all([
       loadAppSettingsFromDynamo(INTEGRATION_SETTINGS_DEFAULTS),
       loadIntegrationsConfig(),
+      ensureAiConnectionStatus(),
     ])
       .then(([loaded]) => {
         if (!cancelled) setSettingsValues(loaded.settings);
@@ -130,6 +135,17 @@ export function useIntegrations(settingsOverride?: Record<string, AppSettingValu
           refresh();
           return result;
         }
+        if (id === "resend") {
+          const response = await fetch("/api/settings/integrations/resend/test", {
+            method: "POST",
+          });
+          const body = (await response.json().catch(() => null)) as { error?: string } | null;
+          refresh();
+          if (!response.ok) {
+            return { ok: false, message: body?.error ?? "Could not send a test email." };
+          }
+          return { ok: true, message: "Test email sent to the Automations recipients." };
+        }
         const label = INTEGRATION_PROVIDERS.find((p) => p.id === id)?.label ?? id;
         return { ok: false, message: `Test for ${label} is not wired yet.` };
       } finally {
@@ -143,6 +159,7 @@ export function useIntegrations(settingsOverride?: Record<string, AppSettingValu
     const id = toCanonicalIntegrationId(rawId);
     if (id === "google_maps") return Boolean(getStoredGeocodeApiKey());
     if (id === "ai") return Boolean(readAiConnectionStatus()?.connected);
+    if (id === "resend") return Boolean(readResendConnectionStatus()?.connected);
     return true;
   }, []);
 
